@@ -998,7 +998,9 @@ function renderBoardPanel() {
     };
   $('boardOutputs').onchange = () => {
     boardSendOutputs = $('boardOutputs').checked;
-    if (!boardSendOutputs) sendBoardOutputs({});
+    // Turning sending off leaves the real pins off, not stuck at the last command.
+    if (!boardSendOutputs && boardLink.port) boardLink.send(outputLine({}, project().devices));
+    else sendBoardOutputs();
   };
 }
 // Dashboard: MQTT traffic from the running program, and controls that publish back to it.
@@ -1061,9 +1063,16 @@ function updateDashboard() {
 // Day log: the student's program run through a simulated day, kept until the quest changes.
 let dayLog = null;
 function renderDayLog() {
-  const key = state.activeLocation + '|' + activeKey() + '|' + state.language;
+  const devices = project().devices,
+    key =
+      state.activeLocation +
+      '|' +
+      activeKey() +
+      '|' +
+      state.language +
+      '|' +
+      devices.map((d) => d.id + ':' + d.pin).join(',');
   if (dayLog?.key !== key) dayLog = null;
-  const devices = project().devices;
   $('benchContent').innerHTML = dayLogHTML(dayLog, devices);
   $('runDay').onclick = () => {
     const scenario = $('dayScenario').value,
@@ -2067,8 +2076,10 @@ function setDayNight(night) {
   lab.startHour = ((((night ? 22 : 12) - hoursRun) % 24) + 24) % 24;
   state.env = { ...state.env, light: night ? 4 : 85, isDay: !night };
   situationAlert = null;
+  situationAlertQuiet = true;
   renderEnvironment();
   updateReadings();
+  situationAlertQuiet = false;
   renderEffects();
   updateClockLabel();
   save();
@@ -2084,7 +2095,10 @@ $('dayNightToggle').onclick = () => setDayNight(!isNight());
 let situationKey = null,
   situationIndices = null,
   situationLocation = null,
-  situationAlert = null;
+  situationAlert = null,
+  // Set while needs are not shown (a fault or free build), and while a caller toasts the alert.
+  situationPaused = false,
+  situationAlertQuiet = false;
 function currentNeeds() {
   if (free || activeFault) return [];
   return neededNow(activeMissions(), state.env, (i) => !!currentCompletions()[missionKey(i)]);
@@ -2094,9 +2108,11 @@ function checkSituation() {
     key = state.activeLocation + '|' + needs.map((n) => n.index + n.reason.text).join('|');
   if (key === situationKey) return;
   // The first check after arriving somewhere sets the scene quietly; later changes are announced.
-  const arrived = situationLocation !== state.activeLocation,
+  // Coming back from a fault or free build is like arriving: nothing changed outside.
+  const arrived = situationLocation !== state.activeLocation || situationPaused,
     fresh = !arrived && situationIndices && needs.filter((n) => !situationIndices.has(n.index));
   situationLocation = state.activeLocation;
+  situationPaused = !!(free || activeFault);
   situationKey = key;
   situationIndices = new Set(needs.map((n) => n.index));
   renderSituation(needs);
@@ -2111,7 +2127,7 @@ function checkSituation() {
       '”' +
       (fresh.length > 1 ? ' (and ' + (fresh.length - 1) + ' more).' : '.')
     : null;
-  if (situationAlert) toast(situationAlert);
+  if (situationAlert && !situationAlertQuiet) toast(situationAlert);
 }
 function renderSituation(needs = currentNeeds()) {
   $('neededNow').hidden = !needs.length;

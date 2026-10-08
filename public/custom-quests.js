@@ -2,6 +2,7 @@ import { components } from './missions.js';
 import { readingRange } from './diagnostics.js';
 import { OPERATORS } from './code-coach.js';
 import { ADC_SIGNALS, ADC_SCALE } from './signals.js';
+import { compare } from './situation.js';
 // Teacher quests: a teacher describes a one-sensor, one-output rule in teacher.html and shares a
 // small quest file; students import it and play it like a built-in quest (Guide, tests at the
 // exact threshold, progress reports). The file stores only the teacher's choices; every import
@@ -31,8 +32,6 @@ function questId(fields) {
   for (const c of JSON.stringify(fields)) h = ((h * 33) ^ c.charCodeAt(0)) >>> 0;
   return 'teacher-' + h.toString(36);
 }
-const truth = (op, v, t) =>
-  op === '<' ? v < t : op === '<=' ? v <= t : op === '>' ? v > t : op === '>=' ? v >= t : v === t;
 
 // Builds a playable quest from the teacher's choices, or throws a QuestError explaining what to fix.
 export function buildCustomQuest(input) {
@@ -90,7 +89,7 @@ export function buildCustomQuest(input) {
       ];
   const scenarios = readings
     .filter(([, v], i, all) => v >= lo && v <= hi && all.findIndex(([, w]) => w === v) === i)
-    .map(([name, v]) => [name, env(v), [truth(operator, v, threshold) ? 1 : 0]]);
+    .map(([name, v]) => [name, env(v), [compare(v, operator, threshold) ? 1 : 0]]);
   const when =
     sensor.name.toLowerCase() +
     (!binary(sensor)

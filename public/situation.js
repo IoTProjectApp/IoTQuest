@@ -1,5 +1,5 @@
 import { baseEnv } from './missions.js';
-import { ADC_SIGNALS, ADC_SCALE } from './signals.js';
+import { ADC_SIGNALS, programReading } from './signals.js';
 // Quests that matter right now. A quest is needed when its own rule gives a different answer in
 // the current conditions than on a calm, ordinary day: at sunset "light < 1800" turns the path
 // lights on, so Light the Path becomes urgent; in a gale "wind < 40" closes the gate. This works
@@ -23,12 +23,9 @@ const MARGIN = { temp: 1, outdoorTemp: 1, humidity: 3, wind: 3, cloud: 5, distan
 const margin = (signal) => (ADC_SIGNALS.includes(signal) ? 100 : (MARGIN[signal] ?? 0));
 
 // What the program would read: ADC sensors as 0–4095, everything else as stored.
-const reading = (signal, env) =>
-  ADC_SIGNALS.includes(signal)
-    ? Math.round(Number(env[signal] ?? 0) * ADC_SCALE)
-    : Number(env[signal] ?? 0);
+const reading = (signal, env) => programReading(signal, Number(env[signal] ?? 0));
 const ATOM = /^\(?\s*(\w+)\s*(<=|>=|==|!=|<|>)\s*(-?\d+(?:\.\d+)?)\s*\)?$/;
-const compare = (a, op, b) =>
+export const compare = (a, op, b) =>
   op === '<'
     ? a < b
     : op === '<='
@@ -41,16 +38,35 @@ const compare = (a, op, b) =>
             ? a === b
             : a !== b;
 
-// Evaluates a quest condition such as "soil < 2400 && tank > 400" (&& binds tighter than ||).
+// Evaluates a quest condition such as "(motion == 1 || door == 1) && armed == 1", like C and
+// Python do: brackets first, then &&, then ||. Anything it cannot read counts as false.
+const TOKEN = /\s*(\(|\)|&&|\|\||(\w+)\s*(<=|>=|==|!=|<|>)\s*(-?\d+(?:\.\d+)?))/y;
 export function evaluateCondition(condition, env) {
-  return String(condition)
-    .split('||')
-    .some((all) =>
-      all.split('&&').every((part) => {
-        const m = part.trim().match(ATOM);
-        return !!m && compare(reading(m[1], env), m[2], Number(m[3]));
-      }),
-    );
+  const source = String(condition),
+    tokens = [];
+  TOKEN.lastIndex = 0;
+  for (let m; TOKEN.lastIndex < source.trim().length && (m = TOKEN.exec(source));)
+    tokens.push(m[2] ? compare(reading(m[2], env), m[3], Number(m[4])) : m[1]);
+  if (source.slice(TOKEN.lastIndex).trim()) return false;
+  let at = 0;
+  const or = () => {
+    let value = and();
+    while (tokens[at] === '||') (at++, (value = and() || value));
+    return value;
+  };
+  const and = () => {
+    let value = atom();
+    while (tokens[at] === '&&') (at++, (value = atom() && value));
+    return value;
+  };
+  const atom = () => {
+    const token = tokens[at++];
+    if (token !== '(') return token === true;
+    const value = or();
+    return tokens[at++] === ')' && value;
+  };
+  const value = or();
+  return at === tokens.length && value;
 }
 // The comparisons in a condition, e.g. [['temp', '>', 30], ...].
 const atomsIn = (condition) =>

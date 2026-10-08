@@ -10,7 +10,7 @@ import {
 } from './custom-quests.js';
 import { OPERATORS } from './code-coach.js';
 import { readingRange } from './diagnostics.js';
-import { ADC_SIGNALS, ADC_SCALE } from './signals.js';
+import { ADC_SIGNALS, programReading } from './signals.js';
 // Create a quest (teacher.html): the teacher picks a sensor, an output and a rule; the preview
 // shows the goal and the exact tests students will face; the quest downloads as a small file.
 
@@ -25,10 +25,7 @@ const fields = () => ({
   threshold: $('qThreshold').value === '' ? NaN : Number($('qThreshold').value),
 });
 // What the program reads in a test scenario (ADC sensors as 0–4095).
-const shown = (sensor, env) => {
-  const v = env[sensor.signal];
-  return ADC_SIGNALS.includes(sensor.signal) ? Math.round(v * ADC_SCALE) : v;
-};
+const shown = (sensor, env) => programReading(sensor.signal, env[sensor.signal]);
 
 // The rule controls depend on the sensor: comparisons and a range for analogue sensors,
 // HIGH/LOW for digital ones.

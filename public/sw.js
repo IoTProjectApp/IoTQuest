@@ -43,8 +43,10 @@ self.addEventListener('fetch', (event) => {
   if (sameOrigin && url.pathname.includes('/api/')) return;
   event.respondWith(
     caches.open(CACHE).then(async (cache) => {
-      // Navigations ("/", "/?x") use the stored game page.
-      const key = request.mode === 'navigate' ? new URL('./', self.location).href : request;
+      // Navigations to the game ("/", "/?x") use the stored game page; other pages (teacher.html)
+      // keep their own entry, so one page never replaces another in the cache.
+      const root = new URL('./', self.location).href,
+        key = request.mode === 'navigate' && url.origin + url.pathname === root ? root : request;
       const cached = await cache.match(key, { ignoreSearch: request.mode === 'navigate' });
       const fresh = fetch(request)
         .then((response) => {

@@ -210,6 +210,11 @@ test('the built game installs for offline use and still opens with no network', 
     await page.locator('#worldCanvas').waitFor();
     assert.equal(await page.locator('#offlineBadge').isVisible(), true);
     assert.match(await page.textContent('#missionTitle'), /\S/);
+    // Each page keeps its own cached copy: the teacher page is not served the game, or vice versa.
+    await page.goto(url + '/teacher.html');
+    assert.match(await page.title(), /Class Progress/);
+    await page.goto(url + '/');
+    assert.match(await page.title(), /IoT Quest: Connected World/);
   } finally {
     await context.close();
     built.kill();

@@ -3,3 +3,6 @@
 export const ADC_SIGNALS = ['light', 'soil', 'tank', 'rain', 'pot', 'pond'];
 // Converts a 0–100 simulated level to a 0–4095 ADC reading.
 export const ADC_SCALE = 40.95;
+// What a program reads from a signal stored as `value`: ADC sensors as 0–4095, others as stored.
+export const programReading = (signal, value) =>
+  ADC_SIGNALS.includes(signal) ? Math.round(value * ADC_SCALE) : value;

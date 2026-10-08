@@ -109,8 +109,8 @@ export function boardProgram(devices, board) {
       int pin = line.substring(at, eq).toInt(), value = line.substring(eq + 1, end).toInt();
       // Only this circuit's output pins can be set.
       if (${outputs.map((d) => 'pin == ' + d.pin).join(' || ')}) {
-        if (value == 0 || value == 1) digitalWrite(pin, value);
-        else analogWrite(pin, value);
+        // analogWrite for every value: 0 also switches off a pin that is driving PWM.
+        analogWrite(pin, value == 1 ? 255 : value);
       }
       at = end + 1;
     }
@@ -165,11 +165,12 @@ export function boardProgram(devices, board) {
             (d) =>
               '                if pin == "' +
               d.pin +
+              // init() takes the pin back from PWM, so 0 really turns a dimmed output off.
               '":\n                    if value in (0, 1):\n                        out_' +
               d.pin +
-              '.value(value)\n                    else:\n                        PWM(Pin(' +
+              '.init(Pin.OUT, value=value)\n                    else:\n                        PWM(Pin(' +
               d.pin +
-              ')).duty_u16(value * 257)\n',
+              ')).duty_u16(min(value, 255) * 257)\n',
           )
           .join('')
       : '') +
@@ -193,6 +194,8 @@ export class BoardLink {
     port ??= await navigator.serial.requestPort();
     await port.open({ baudRate: BAUD });
     this.port = port;
+    // A newly opened board starts with its outputs off: send the next output line in full.
+    this.lastSent = '';
     this.onStatus('connected');
     this.reading = this.readLoop();
     return true;
@@ -224,22 +227,41 @@ export class BoardLink {
     } finally {
       this.reader?.releaseLock();
       this.reader = null;
-      if (this.port) this.onStatus('disconnected');
+      // Unplugged (not a requested disconnect): forget the port so the game can connect again.
+      if (this.port) {
+        const port = this.port;
+        this.port = null;
+        await this.writing;
+        await port.close().catch(() => {});
+        this.onStatus('disconnected');
+      }
     }
   }
-  async send(text) {
-    if (!this.port?.writable || !text || text === this.lastSent) return;
+  // Writes one at a time (a stream allows a single writer), so no line is lost or rejected.
+  send(text) {
+    if (!this.port?.writable || !text || text === this.lastSent) return this.writing;
     this.lastSent = text;
-    const writer = this.port.writable.getWriter();
-    try {
-      await writer.write(new TextEncoder().encode(text));
-    } finally {
-      writer.releaseLock();
-    }
+    const port = this.port;
+    this.writing = Promise.resolve(this.writing)
+      .then(async () => {
+        if (!port.writable) return;
+        const writer = port.writable.getWriter();
+        try {
+          await writer.write(new TextEncoder().encode(text));
+        } finally {
+          writer.releaseLock();
+        }
+      })
+      .catch(() => {
+        // The board went away mid-write: send the next line again in full.
+        this.lastSent = '';
+      });
+    return this.writing;
   }
   async disconnect() {
     const port = this.port;
     this.port = null;
+    await this.writing;
     await this.reader?.cancel().catch(() => {});
     await this.reading;
     await port?.close().catch(() => {});

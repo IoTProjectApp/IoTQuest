@@ -93,3 +93,13 @@ test('a reading hovering at a limit is not called a change', () => {
   assert.deepEqual(titles({ temp: 24.3 }), [], 'just past Comfort Zone’s 24 °C limit');
   assert.ok(titles({ temp: 26 }).includes('Comfort Zone'));
 });
+
+test('brackets group like C and Python, and malformed conditions count as false', () => {
+  const env = { motion: 0, door: 1, armed: 0 };
+  assert.equal(evaluateCondition('(motion == 1 || door == 1) && armed == 1', env), false);
+  assert.equal(evaluateCondition('(motion == 1 || door == 1) && armed == 0', env), true);
+  assert.equal(evaluateCondition('door == 1 && armed == 0 || motion == 1', env), true);
+  assert.equal(evaluateCondition('((door == 1))', env), true);
+  for (const broken of ['door == 1 &&', 'door == 1 ) (', '(door == 1', 'bogus'])
+    assert.equal(evaluateCondition(broken, env), false, broken);
+});

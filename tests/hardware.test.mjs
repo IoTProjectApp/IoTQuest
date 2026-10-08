@@ -67,7 +67,8 @@ test('the Pico board program is valid Python that scales readings to 0–4095', 
 });
 
 // A stand-in for a Web Serial port: delivers `chunks` then ends, and records what is written.
-function fakePort(chunks) {
+// `stayOpen` keeps the readable stream open after the chunks, like a board still plugged in.
+function fakePort(chunks, { stayOpen = false } = {}) {
   const written = [];
   return {
     written,
@@ -82,7 +83,7 @@ function fakePort(chunks) {
     readable: new ReadableStream({
       start(controller) {
         for (const c of chunks) controller.enqueue(new TextEncoder().encode(c));
-        controller.close();
+        if (!stayOpen) controller.close();
       },
     }),
     writable: new WritableStream({
@@ -112,11 +113,14 @@ test('the link rebuilds lines split across USB packets and reports each reading'
   assert.deepEqual(seen, [{ light: 100 }, { light: 200, motion: 1 }]);
   assert.equal(link.lastLine, 'IOTQ light=200 motion=1');
   assert.deepEqual(statuses, ['connected', 'disconnected']);
+  // The stream ended on its own (unplugged): the port is released so the game can reconnect.
+  assert.equal(link.port, null);
+  assert.equal(port.closed, true);
 });
 
 test('outputs are only sent when they change, and disconnecting closes the port', async () => {
   const link = new BoardLink(),
-    port = fakePort([]);
+    port = fakePort([], { stayOpen: true });
   await link.connect(port);
   await link.send('OUT 26=1\n');
   await link.send('OUT 26=1\n');
@@ -125,4 +129,10 @@ test('outputs are only sent when they change, and disconnecting closes the port'
   await link.disconnect();
   assert.equal(port.closed, true);
   assert.equal(link.port, null);
+});
+
+test('the ESP32 board program drives outputs with analogWrite, so 0 also stops a PWM fan', () => {
+  const source = boardProgram(defaults(['ldr', 'fan'], 'ESP32'), 'ESP32');
+  assert.match(source, /analogWrite\(pin, value == 1 \? 255 : value\)/);
+  assert.doesNotMatch(source, /digitalWrite\(pin/);
 });

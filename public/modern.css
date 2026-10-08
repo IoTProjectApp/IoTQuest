@@ -25,6 +25,45 @@
 .weather-quest-note p {
   margin: 6px 0;
 }
+.predict-check {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+}
+.predict-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 6px 0;
+}
+.predict-row span {
+  flex: 1;
+}
+.predict-row button {
+  padding: 3px 12px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+}
+.predict-row button[aria-pressed='true'] {
+  border-color: var(--green);
+  background: var(--green);
+  color: #fff;
+}
+.predict-check .primary {
+  margin-top: 6px;
+  border-radius: 999px;
+}
+.predict-result {
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.predict-result .correct {
+  color: #2f7a4f;
+}
+.predict-result .wrong {
+  color: #b5533c;
+}
 body {
   background: radial-gradient(ellipse at 65% 0%, #e9edff 0, transparent 42%), #f3f6fb;
   color: var(--ink);
@@ -731,6 +770,17 @@ h1 > span {
   color: #8594aa;
   font-size: 10px;
   border-color: #e8edf4;
+}
+.world-talk {
+  margin-left: auto;
+  margin-right: 10px;
+  padding: 3px 10px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--sage);
+  color: var(--green);
+  font-size: 11px;
+  white-space: nowrap;
 }
 kbd {
   color: #6c7f9a;

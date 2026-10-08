@@ -273,6 +273,8 @@ function renderDetail(grid) {
         q.attempts +
         '</dd><dt>Hints used</dt><dd>' +
         q.hints +
+        '</dd><dt>Resident chats</dt><dd>' +
+        q.chats +
         '</dd><dt>Understanding</dt><dd>' +
         (q.status !== 'passed' || !q.understandTotal
           ? '–'

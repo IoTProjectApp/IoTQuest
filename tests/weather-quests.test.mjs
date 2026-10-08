@@ -4,6 +4,7 @@ import { missions, defaults, validate, program, baseEnv } from '../public/missio
 import { adaptMissions, locations, progressForLocation } from '../public/locations.js';
 import { Runtime } from '../public/runtime.js';
 import { advanceEnvironment, fallbackWeather } from '../public/weather.js';
+import { checkPredictions } from '../public/weather-quests.js';
 import { understandingQuestions } from '../public/understanding.js';
 
 test('five appended weather quests work at both levels on both boards in both languages', () => {
@@ -83,4 +84,17 @@ test('calibrated weather readings retain decimals in Arduino and their teaching 
     if (title === 'Cloudy-Day Grow Lights')
       assert.match(q.choices[q.answer].text, /cloud cover.*percentage/);
   }
+});
+
+test('predictions are compared with the running program, output by output', () => {
+  const devices = [
+    { name: 'Buzzer', pin: 26, output: true },
+    { name: 'Rain sensor', pin: 34, signal: 'rain', analog: true },
+  ];
+  assert.deepEqual(checkPredictions({ 26: true }, devices, { 26: 1 }), [
+    { name: 'Buzzer', predicted: true, actual: true, correct: true },
+  ]);
+  assert.equal(checkPredictions({ 26: true }, devices, { 26: 0 })[0].correct, false);
+  // PWM levels above zero count as on.
+  assert.equal(checkPredictions({ 26: true }, devices, { 26: 128 })[0].actual, true);
 });

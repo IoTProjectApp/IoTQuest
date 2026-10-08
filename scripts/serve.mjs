@@ -47,4 +47,7 @@ const server = http.createServer(async (req, res) => {
     res.end('Not found');
   }
 });
-server.listen(port, '127.0.0.1', () => console.log('IoT Quest · Local: http://127.0.0.1:' + port));
+// Port 0 picks a free port; print the real one (the browser tests read it from this line).
+server.listen(port, '127.0.0.1', () =>
+  console.log('IoT Quest · Local: http://127.0.0.1:' + server.address().port),
+);

@@ -116,6 +116,7 @@ html[data-theme='dark'] header {
 html[data-theme='dark'] .brand {
   color: #e3eafb;
 }
+html[data-theme='dark'] .world-talk,
 html[data-theme='dark'] .chat-topic,
 html[data-theme='dark'] .chat-avatar,
 html[data-theme='dark'] .chat-bubble strong,
@@ -127,6 +128,12 @@ html[data-theme='dark'] .from-technician .chat-avatar {
 }
 html[data-theme='dark'] .from-technician .chat-bubble strong {
   color: #ffffffcc;
+}
+html[data-theme='dark'] .predict-result .correct {
+  color: #7fd6a2;
+}
+html[data-theme='dark'] .predict-result .wrong {
+  color: #f0a08c;
 }
 html[data-theme='dark'] .brand-quest {
   color: #9da8ff;

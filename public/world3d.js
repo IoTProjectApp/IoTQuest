@@ -784,13 +784,15 @@ export class World3D {
       this.target = [p[0], 0.65, p[2]];
     }
     const smooth = s.reduced ? 1 : 1 - Math.exp(-dt * 7);
-    for (let i = 0; i < 3; i++)
-      this.currentTarget[i] += (this.target[i] - this.currentTarget[i]) * smooth;
+    // Exponential easing never quite arrives: snap once within a millimetre, so the camera (and
+    // every label projected through it) comes to rest instead of creeping every frame.
+    const ease = (from, to) => (Math.abs(to - from) < 1e-3 ? to : from + (to - from) * smooth);
+    for (let i = 0; i < 3; i++) this.currentTarget[i] = ease(this.currentTarget[i], this.target[i]);
     const fittedDistance = Math.min(
       this.landscapeView ? 180 : 95,
       this.distance * (this.overview ? Math.max(1, 1.6 / (width / height)) : 1),
     );
-    this.currentDistance += (fittedDistance - this.currentDistance) * smooth;
+    this.currentDistance = ease(this.currentDistance, fittedDistance);
     // Mirrored homes are drawn through a left-right flip after the view transform: the camera
     // orbits the flipped scene as usual while the model, animations and game logic stay as built.
     const r = this.currentDistance,

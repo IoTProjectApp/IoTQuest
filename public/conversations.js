@@ -29,29 +29,41 @@ export function createConversation({
   quests,
   currentIndex = 0,
   completed = {},
+  thanked = {},
   area = null,
 }) {
   const requests = quests
     .map((mission, index) => ({ mission, index, complete: !!completed[index] }))
     .filter((r) => (area ? r.mission.area === area : r.mission.resident === resident));
+  // Requests passed since the last chat: the resident thanks the technician for each, once.
+  const thanks = requests.filter((r) => r.complete && !thanked[r.index]);
   const selected =
-    requests.find((r) => r.index === currentIndex) ||
+    requests.find((r) => r.index === currentIndex && !thanks.includes(r)) ||
     requests.find((r) => !r.complete) ||
+    requests.find((r) => r.index === currentIndex) ||
     requests[0];
+  const hello = selected
+    ? `${quote(selected.mission.quote)} Ask me about ${selected.mission.title}, or pick another request below.`
+    : 'I have no requests here right now. You can explore the house and garden.';
   return {
     key,
     resident,
     requests,
+    thanked: thanks.map((r) => r.index),
     selectedIndex: selected?.index ?? null,
     messages: [
       {
         speaker: 'resident',
-        text: selected
-          ? `Hello! ${quote(selected.mission.quote)} Ask me about ${selected.mission.title}, or pick another request below.`
-          : 'Hello! I have no requests here right now. You can explore the house and garden.',
+        text: thanks.length
+          ? `${thanks.map(thankYou).join(' ')} ${selected?.complete ? '' : 'Next, ' + hello}`.trim()
+          : 'Hello! ' + hello,
       },
     ],
   };
+}
+function thankYou({ mission: m }) {
+  const action = (m.ids || []).map((id) => ANIMATIONS[id]).find(Boolean);
+  return `Thank you! ${m.title} works${action ? ': ' + action : ''}.`;
 }
 
 export function selectedRequest(chat) {

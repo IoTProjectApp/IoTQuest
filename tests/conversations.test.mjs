@@ -101,3 +101,42 @@ test('residents behind a wall are out of reach', () => {
   assert.equal(nearestCharacter({ x: 0, z: 0 }, resident, 2.2, wall), null);
   assert.equal(nearestCharacter({ x: 0, z: 0 }, resident, 2.2, []).key, 'A');
 });
+
+test('a resident thanks the technician once for each request passed since the last chat', () => {
+  const quests = adaptMissions(missions, locations[0], 'beginner'),
+    area = quests[0].area,
+    own = quests.map((m, i) => i).filter((i) => quests[i].area === area);
+  const first = createConversation({
+    key: 'k',
+    resident: 'R',
+    quests,
+    area,
+    completed: { [own[0]]: true },
+  });
+  assert.deepEqual(first.thanked, [own[0]]);
+  assert.match(first.messages[0].text, new RegExp('^Thank you! ' + quests[own[0]].title));
+  assert.notEqual(first.selectedIndex, own.length > 1 ? own[0] : null);
+  const later = createConversation({
+    key: 'k',
+    resident: 'R',
+    quests,
+    area,
+    completed: { [own[0]]: true },
+    thanked: { [own[0]]: true },
+  });
+  assert.deepEqual(later.thanked, []);
+  assert.match(later.messages[0].text, /^Hello!/);
+});
+
+test('chat markup escapes names and uses its own bubble classes, not the map sprite ones', async () => {
+  const { conversationHTML } = await import('../public/conversation-view.js');
+  const quests = adaptMissions(missions, locations[0], 'beginner');
+  const chat = createConversation({ key: 'k', resident: '<Nina>', quests, area: quests[0].area });
+  sendConversationMessage(chat, 'What do you want?');
+  const html = conversationHTML(chat, 'Ana & Co');
+  assert.match(html, /&lt;Nina&gt;/);
+  assert.match(html, /Ana &amp; Co/);
+  assert.match(html, /class="chat-message from-resident"/);
+  assert.match(html, /class="chat-message from-technician"/);
+  assert.doesNotMatch(html, /class="chat-message (resident|technician)"/);
+});

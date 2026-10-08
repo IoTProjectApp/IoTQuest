@@ -215,7 +215,7 @@ test('understanding results reach the report, the grid and the CSV', () => {
     csv.split('\r\n')[0],
     /"Understanding right first time","Understanding questions answered","Understanding questions"/,
   );
-  assert.match(csv.split('\r\n')[1], /"passed","2","1","5","5","","1","3","3"/);
+  assert.match(csv.split('\r\n')[1], /"passed","2","1","0","5","5","","1","3","3"/);
   // Half or more right first time is fine.
   assert.equal(needsReview({ ...q, understood: 2 }), false);
   assert.equal(needsReview({ ...q, understandAnswered: 2 }), false, 'not finished yet');
@@ -252,4 +252,13 @@ test('regressions: names in any script, Pico pins, normalised dates and bounded 
   assert.equal(newer.createdAt, '2026-10-09T10:00:00.000Z');
   assert.equal(latestReports([newer, older])[0], newer);
   assert.equal(mk('2026-10-08', [{ index: 999999 }]).quests[0].index, 99);
+});
+
+test('resident chats are counted per quest and reach the report and the CSV', () => {
+  const report = parseProgressReport(
+    JSON.stringify(buildProgressReport({ name: 'Ana', chats: { 0: 2 }, completed: {} })),
+  );
+  assert.equal(report.quests[0].chats, 2);
+  assert.equal(report.quests[1].chats, 0);
+  assert.match(progressCSV([report]).split('\r\n')[0], /"Hints used","Resident chats"/);
 });

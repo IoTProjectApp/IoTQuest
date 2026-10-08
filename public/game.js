@@ -1,10 +1,8 @@
 import { residentsForSections, createGreetingTracker } from './section-residents.js';
 import {
   createConversation,
-  selectedRequest,
   chooseRequest,
   sendConversationMessage,
-  conversationQuestions,
   nearestCharacter,
 } from './conversations.js';
 import { components, missions, baseEnv, defaults, validate, program } from './missions.js';
@@ -42,7 +40,11 @@ import { createBugHunt, scoreBugHunt } from './bug-hunt.js';
 import { explainCode, removeExplanations, hasExplanations } from './code-explain.js';
 import { readProject, ImportError, IMPORT_LIMITS, PROJECT_FORMAT } from './project-import.js';
 import { formatCode as formatSource, FormatError, INDENT } from './code-format.js';
-import { coachSteps } from './code-coach.js';
+import { coachSteps, readingText } from './code-coach.js';
+import { checkPredictions } from './weather-quests.js';
+import { conversationHTML } from './conversation-view.js';
+import { predictionHTML } from './prediction-view.js';
+import { declutterLabels } from './world-labels.js';
 import { buildProgressReport, progressFileName } from './progress-report.js';
 import { understandingQuestions, answerQuestion, understandingScore } from './understanding.js';
 const $ = (id) => document.getElementById(id);
@@ -401,6 +403,37 @@ function relevantSignals() {
     ]),
   ];
 }
+// Predict, then check: in a live-weather quest, the student says whether each output will be on
+// with today's readings, then compares that with their running program.
+let prediction = { key: null, readings: '', picks: {}, result: null };
+function renderPrediction(show) {
+  const devices = project().devices,
+    outputDevices = devices.filter((d) => d.output),
+    readings = readingText(state.env, devices),
+    key = state.activeLocation + '|' + activeKey();
+  $('predictCheck').hidden = !show || !outputDevices.length;
+  if ($('predictCheck').hidden) return;
+  if (prediction.key !== key) prediction = { key, readings, picks: {}, result: null };
+  // New live readings make an old comparison misleading.
+  if (prediction.readings !== readings) Object.assign(prediction, { readings, result: null });
+  $('predictCheck').innerHTML = predictionHTML(prediction, outputDevices, readings);
+  document.querySelectorAll('[data-predict-pin]').forEach(
+    (b) =>
+      (b.onclick = () => {
+        prediction.picks[b.dataset.predictPin] = b.dataset.predictOn === 'true';
+        prediction.result = null;
+        renderPrediction(true);
+      }),
+  );
+  $('checkPrediction').onclick = () => {
+    if (!running) {
+      toast('Run your program first, then check your prediction.');
+      return;
+    }
+    prediction.result = checkPredictions(prediction.picks, devices, outputs);
+    renderPrediction(true);
+  };
+}
 function renderEnvironment() {
   const weatherQuest = !free && !activeFault && mission().weatherQuest;
   $('weatherQuestNote').hidden = !weatherQuest;
@@ -415,6 +448,7 @@ function renderEnvironment() {
     : 'Choose a destination';
   $('useLiveQuestWeather').onclick = () =>
     currentLocation() ? setWeatherMode('live') : returnToGlobe();
+  renderPrediction(weatherQuest && !!currentLocation() && state.weatherMode === 'live');
   const signals = relevantSignals(),
     scope = free || allConditions ? '' : 'Showing what this quest’s sensors read. ';
   $('conditionsNote').textContent =
@@ -710,6 +744,10 @@ document.addEventListener('keydown', (e) => {
     e.preventDefault();
     interact();
   }
+  if (e.key.toLowerCase() === 't' && !$('modal').open) {
+    e.preventDefault();
+    talk();
+  }
 });
 document.addEventListener('keyup', (e) => keys.delete(directions[e.key]));
 window.addEventListener('blur', () => keys.clear());
@@ -737,9 +775,8 @@ function nearestArea() {
   const area = areas.reduce((best, a) => (distance(a) < distance(best) ? a : best), areas[0]);
   return { area, distance: distance(area) };
 }
-// The resident E would talk to, or null when installing takes priority or nobody is in reach.
-function talkTarget(engine = world3d) {
-  if (nearestArea().distance <= INSTALL_RADIUS) return null;
+// The nearest resident within talking range and not behind a wall.
+function nearbyResident(engine = world3d) {
   const p = toWorld(state.player);
   return nearestCharacter(
     { x: p[0], z: p[2] },
@@ -748,6 +785,18 @@ function talkTarget(engine = world3d) {
     engine?.model.colliders || [],
   );
 }
+// The resident E would talk to, or null when installing takes priority or nobody is in reach.
+function talkTarget(engine = world3d) {
+  return nearestArea().distance <= INSTALL_RADIUS ? null : nearbyResident(engine);
+}
+// T always talks, even at an install point where E installs instead.
+function talk() {
+  if ($('modal').open || view === 'sky') return;
+  const character = nearbyResident();
+  if (character) openConversation(character.key);
+  else toast('Walk up to a resident to talk.');
+}
+$('worldTalk').onclick = talk;
 function interact() {
   if ($('modal').open || view === 'sky') return;
   const character = talkTarget();
@@ -2961,7 +3010,7 @@ function renderSectionResidents() {
     .map((c) => {
       const point = fromWorld(c.x, c.z);
       return (
-        '<button class="resident npc section-resident" data-section-npc="' +
+        '<button class="map-resident npc section-resident" data-section-npc="' +
         esc(c.key) +
         '" id="resident-' +
         esc(c.key) +
@@ -3004,90 +3053,31 @@ function openConversation(key) {
   greetingTracker.acknowledge({ x: player[0], z: player[2] }, characterPositions());
   const resident = character?.name || currentLocation()?.names[key] || key,
     quests = activeMissions();
-  const completed = Object.fromEntries(
-    quests.map((m, i) => [i, !!currentCompletions()[missionKey(i)]]),
-  );
+  const done = (i) => currentCompletions()[missionKey(i)];
   activeConversation = createConversation({
     key,
     resident,
     quests,
     currentIndex: state.mission,
-    completed,
+    completed: Object.fromEntries(quests.map((m, i) => [i, !!done(i)])),
+    thanked: Object.fromEntries(quests.map((m, i) => [i, !!done(i)?.thanked])),
     area: character?.area,
   });
   activeConversation.section = character?.section;
+  // Thanks are said once; chats count towards each of this resident's quests in progress reports.
+  for (const i of activeConversation.thanked) done(i).thanked = true;
+  const chats = (locationProfile().chats ??= {});
+  for (const r of activeConversation.requests)
+    chats[missionKey(r.index)] = (chats[missionKey(r.index)] || 0) + 1;
+  save();
   renderConversation();
 }
 function renderConversation() {
   const chat = activeConversation;
   if (!chat) return;
-  const request = selectedRequest(chat),
-    wasOpen = $('modal').open;
+  const wasOpen = $('modal').open;
   $('modalTitle').textContent = 'A chat with ' + chat.resident;
-  $('modalBody').innerHTML =
-    '<section class="character-chat">' +
-    '<p class="chat-topic">' +
-    esc(
-      (chat.section ? chat.section + ' · ' : '') +
-        (request ? 'Discussing: ' + request.mission.title : 'Talk with your neighbour'),
-    ) +
-    '</p>' +
-    '<div class="chat-messages" id="chatMessages" role="log" aria-live="polite" aria-relevant="additions text" aria-label="Conversation">' +
-    chat.messages
-      .map((m) => {
-        // "from-" prefix: bare .resident/.technician are the absolutely positioned map sprites.
-        const name = m.speaker === 'resident' ? chat.resident : state.name || 'You';
-        return (
-          '<div class="chat-message from-' +
-          m.speaker +
-          '"><span class="chat-avatar" aria-hidden="true">' +
-          esc(name.trim().charAt(0).toUpperCase()) +
-          '</span><div class="chat-bubble"><strong>' +
-          esc(name) +
-          '</strong><p>' +
-          esc(m.text) +
-          '</p></div></div>'
-        );
-      })
-      .join('') +
-    '</div>' +
-    '<div class="chat-questions" aria-label="Suggested questions">' +
-    conversationQuestions
-      .map(
-        (q) =>
-          '<button class="text-btn" data-chat-question="' + esc(q) + '">' + esc(q) + '</button>',
-      )
-      .join('') +
-    '</div>' +
-    '<form id="chatForm" class="chat-form"><label class="sr-only" for="chatInput">Ask ' +
-    esc(chat.resident) +
-    ' about their request</label><input id="chatInput" type="text" maxlength="240" autocomplete="off" placeholder="Ask about the request, components or animation…"/><button class="primary" type="submit">Send</button></form>' +
-    '<details class="chat-requests"><summary>Other requests from ' +
-    esc(chat.resident) +
-    '</summary>' +
-    chat.requests
-      .map(
-        (r) =>
-          '<button class="quest-option ' +
-          (r.index === chat.selectedIndex ? 'selected' : '') +
-          '" data-chat-request="' +
-          r.index +
-          '"><span>⚑</span><div><strong>' +
-          esc(r.mission.title) +
-          '</strong><small>' +
-          esc(r.mission.area) +
-          ' · ' +
-          (r.complete ? 'Passed' : r.mission.xp + ' XP') +
-          '</small></div></button>',
-      )
-      .join('') +
-    '</details>' +
-    (request
-      ? '<button class="primary chat-start" id="startChatQuest">' +
-        (request.complete ? 'Review this request' : 'Start this request') +
-        '</button>'
-      : '') +
-    '</section>';
+  $('modalBody').innerHTML = conversationHTML(chat, state.name || 'You');
   if (!wasOpen) $('modal').showModal();
   const log = $('chatMessages');
   log.scrollTop = log.scrollHeight;
@@ -3606,6 +3596,13 @@ function projectWorldLabels(engine) {
           : 'Drag to orbit · scroll to zoom';
     // Runs every frame: only touch the DOM when the tip actually changes.
     if ($('worldTip').textContent !== tip) $('worldTip').textContent = tip;
+    // At an install point E installs, so offer talking to the resident standing there as well.
+    const resident = near ? null : nearbyResident(engine),
+      talkLabel = resident ? 'Talk to ' + resident.name + ' (T)' : '';
+    if ($('worldTalk').textContent !== talkLabel) {
+      $('worldTalk').textContent = talkLabel;
+      $('worldTalk').hidden = !resident;
+    }
   }
   const sky = engine.model.sky;
   if (sky?.ephemeris) {
@@ -3697,34 +3694,6 @@ function projectWorldLabels(engine) {
     );
   }
   declutterLabels(labels);
-}
-// Label sizes only change when the markup is re-rendered, so measure each element once.
-const labelSizes = new WeakMap();
-function labelBox({ el, x, y }, lift = 0) {
-  if (!labelSizes.has(el)) labelSizes.set(el, [el.offsetWidth, el.offsetHeight]);
-  const [w, h] = labelSizes.get(el),
-    // Matches the CSS anchors: area markers translate(-50%, -50%), characters (-50%, -70%).
-    top = y - lift - h * (el.classList.contains('area-marker') ? 0.5 : 0.7);
-  return { left: x - w / 2 - 2, right: x + w / 2 + 2, top: top - 2, bottom: top + h + 2, h };
-}
-const overlaps = (a, b) =>
-  a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
-// Room markers and "You" are placed first and never move. A resident's tag that would cover one
-// of them is lifted until it clears (so every room stays clickable), or hidden if it cannot.
-function declutterLabels(labels) {
-  const shown = [];
-  for (const label of labels.sort((a, b) => a.priority - b.priority)) {
-    let box = label.visible ? labelBox(label) : null,
-      lift = 0;
-    if (box && label.priority > 1)
-      while (box && shown.some((o) => overlaps(box, o)))
-        box = (lift += box.h / 2) <= box.h * 3 ? labelBox(label, lift) : null;
-    if (box) shown.push(box);
-    const visibility = box ? 'visible' : 'hidden',
-      top = label.y - lift + 'px';
-    if (label.el.style.visibility !== visibility) label.el.style.visibility = visibility;
-    if (lift) label.el.style.top = top;
-  }
 }
 if (typeof $('worldCanvas')?.getContext === 'function') {
   try {

@@ -38,6 +38,21 @@ jobs:
         with:
           path: dist/client
 
+  # Drives the real game in headless Chromium (software WebGL) to catch layout, theme and
+  # accessibility regressions. Kept out of the deploy gate until it has proven stable on CI.
+  browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - name: Run browser tests
+        run: npm run test:browser
+
   deploy:
     needs: test
     if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'

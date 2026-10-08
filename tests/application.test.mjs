@@ -9,6 +9,10 @@ import {
 import { residentsForSections, createGreetingTracker } from '../public/section-residents.js';
 import { toWorld, fromWorld } from '../public/world-math.js';
 import { ADC_SIGNALS, ADC_SCALE } from '../public/signals.js';
+import { checkPredictions } from '../public/weather-quests.js';
+import { conversationHTML } from '../public/conversation-view.js';
+import { predictionHTML } from '../public/prediction-view.js';
+import { declutterLabels } from '../public/world-labels.js';
 import test from 'node:test';
 import { localSkyDate, DEFAULT_OBSERVER } from '../public/astronomy.js';
 import assert from 'node:assert/strict';
@@ -56,7 +60,7 @@ import {
   PROJECT_FORMAT,
 } from '../public/project-import.js';
 import { formatCode as formatSource, FormatError, INDENT } from '../public/code-format.js';
-import { coachSteps } from '../public/code-coach.js';
+import { coachSteps, readingText } from '../public/code-coach.js';
 import { buildProgressReport, progressFileName } from '../public/progress-report.js';
 import {
   understandingQuestions,
@@ -323,6 +327,7 @@ function harness(
     FormatError,
     INDENT,
     coachSteps,
+    readingText,
     buildProgressReport,
     progressFileName,
     understandingQuestions,
@@ -330,6 +335,10 @@ function harness(
     understandingScore,
     ADC_SIGNALS,
     ADC_SCALE,
+    checkPredictions,
+    conversationHTML,
+    predictionHTML,
+    declutterLabels,
     structuredClone,
     Blob,
     URL,
@@ -663,6 +672,29 @@ test('weather quests show a live weather action, calibrated sensors and practice
   );
   h.api.selectMission(0);
   assert.equal(h.document.getElementById('weatherQuestNote').hidden, true);
+});
+test('a live weather quest asks for a prediction and checks it against the running program', async () => {
+  const h = harness();
+  await h.api.enterLocation('kyoto', fallbackWeather(locations[0]));
+  h.api.selectMission(8);
+  installAndWire(h, 8);
+  h.api.setWeatherMode('live');
+  const panel = h.document.getElementById('predictCheck');
+  assert.equal(panel.hidden, false);
+  assert.match(panel.innerHTML, /Predict, then check/);
+  const check = () => h.document.getElementById('checkPrediction');
+  assert.match(panel.innerHTML, /id="checkPrediction" disabled/);
+  for (const b of h.document.querySelectorAll('[data-predict-on]'))
+    if (b.dataset.predictOn === 'false') b.click();
+  assert.doesNotMatch(panel.innerHTML, /id="checkPrediction" disabled/);
+  h.api.switchTab('code');
+  h.api.loadExample();
+  h.api.run();
+  h.api.tick();
+  check().click();
+  assert.match(panel.innerHTML, /you predicted off, your program turned it (on|off)/);
+  h.api.setWeatherMode('practice');
+  assert.equal(panel.hidden, true);
 });
 test('regional rain-aware watering keeps installation, wiring, student code and deterministic tests', async () => {
   const h = harness();
@@ -1076,6 +1108,15 @@ test('pressing E at a room installs devices even with its resident beside the la
   // Arriving next to the resident is already acknowledged, so the first step does not greet.
   h.api.move('left', 0.55);
   assert.equal(h.api.getConversation(), null);
+});
+test('T talks to the resident at an install point, where E installs instead', () => {
+  const h = harness();
+  h.api.state.travelScreen = false;
+  h.api.enterArea('Bedroom');
+  const key = (k) =>
+    h.document.listeners.keydown({ key: k, target: { tagName: 'DIV' }, preventDefault() {} });
+  key('t');
+  assert.equal(h.api.getConversation()?.key, 'section:Bedroom');
 });
 test('resident name tags lift clear of room buttons, or hide, so rooms stay clickable', () => {
   const h = harness();

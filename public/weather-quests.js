@@ -184,3 +184,14 @@ export const weatherQuests = [
     },
   },
 ];
+
+// "Predict, then check": compares a student's on/off prediction for each output with what their
+// running program actually does under today's live readings.
+export function checkPredictions(picks, devices, outputs) {
+  return devices
+    .filter((d) => d.output && d.pin in picks)
+    .map((d) => {
+      const actual = (outputs[d.pin] || 0) > 0;
+      return { name: d.name, predicted: picks[d.pin], actual, correct: picks[d.pin] === actual };
+    });
+}

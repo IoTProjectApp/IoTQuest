@@ -152,6 +152,19 @@ html[data-theme='dark'] .dash-tile.alert {
 html[data-theme='dark'] .dash-tile.alert strong {
   color: #f0a08c;
 }
+html[data-theme='dark'] .needed-now {
+  border-color: #6b5226;
+  background: #2c2416;
+}
+html[data-theme='dark'] .needed-tag,
+html[data-theme='dark'] .needed-now > strong,
+html[data-theme='dark'] .needed-request small,
+html[data-theme='dark'] .situation-line {
+  color: #f2c784;
+}
+html[data-theme='dark'] .needed-request {
+  border-color: #5a4626;
+}
 html[data-theme='dark'] .brand-quest {
   color: #9da8ff;
 }

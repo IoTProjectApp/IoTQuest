@@ -1,6 +1,7 @@
 import { sectionQuests } from './section-quests.js';
 import { weatherQuests } from './weather-quests.js';
 import { componentQuests } from './component-quests.js';
+import { logicQuests } from './logic-quests.js';
 import { guidedStarter } from './code-coach.js';
 import { ADC_SIGNALS } from './signals.js';
 export { ADC_SIGNALS };
@@ -405,6 +406,7 @@ export const missions = [
   ...weatherQuests,
   ...sectionQuests,
   ...componentQuests,
+  ...logicQuests,
 ];
 // Energy and water allowed across a quest's tests; a quest can set its own (the AC draws 800 W).
 export const missionBudget = (m) =>

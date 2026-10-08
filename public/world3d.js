@@ -15,6 +15,7 @@ import {
   resolveMove,
   findFree,
   deviceState,
+  deviceSpots,
 } from './world-math.js';
 import { createWorldModel } from './world-model.js';
 import { createRegionalModel } from './regions.js';
@@ -393,13 +394,9 @@ export class World3D {
     const kept = this.model.objects.filter((o) => !o.device);
     this.model.objects.splice(0, this.model.objects.length, ...kept);
     this.deviceObjects = [];
+    const spots = deviceSpots(state.devices, state.areas, this.model.colliders, this.model.rooms);
     for (const d of state.devices) {
-      const a = state.areas.find((a) => a[0] === d.area) || state.areas[9],
-        p = toWorld({ x: a[1], y: a[2] }),
-        peers = state.devices.filter((v) => v.area === d.area),
-        index = peers.indexOf(d),
-        x = p[0] + 0.7 + (index % 3) * 0.48,
-        z = p[2] + 0.8 + Math.floor(index / 3) * 0.4,
+      const { x, z } = spots.get(d),
         h = this.model.floorHeight?.(x, z) || 0;
       const extra = { device: d.id, devicePin: d.pin };
       const holder = this.model.box(

@@ -132,6 +132,81 @@ export function findFree(player, colliders) {
     }
   return { x: 48, y: 77 };
 }
+// Each installed device gets its own spot in its room: clear of walls and furniture, inside the
+// room's floor (`rooms` are the model's [name, x, z] room centres; a straight line can slip through
+// a doorway, so reachability alone is not enough), away from where the resident and the technician
+// stand, and at least DEVICE_GAP from every other device. Outdoors, or where an installation point
+// is outside every room, spots stay within reach of the point without crossing a wall. Spots are
+// given in install order, so adding a device never moves the others.
+export const DEVICE_GAP = 1;
+const DEVICE_RADIUS = 0.3,
+  ROOM_HALF = [4.58 / 2, 4.8 / 2],
+  WALL_MARGIN = 0.25;
+export function deviceSpots(devices, areas, colliders = [], rooms = []) {
+  const spots = new Map(),
+    taken = [],
+    floors = new Map();
+  // Every valid floor point for an area, nearest the resident's spot first (computed once per area).
+  const floorOf = (a) => {
+    if (floors.has(a)) return floors.get(a);
+    // Installation points often sit on furniture: search from the nearest free spot (where the
+    // room's resident stands), and keep clear of the technician's landing spot too.
+    const [cx, , cz] = toWorld(findFree({ x: a[1], y: a[2] }, colliders)),
+      [lx, , lz] = toWorld(findFree({ x: a[1], y: a[2] + 5 }, colliders)),
+      room = rooms.find(
+        ([, rx, rz]) => Math.abs(cx - rx) <= ROOM_HALF[0] && Math.abs(cz - rz) <= ROOM_HALF[1],
+      ),
+      [x0, x1, z0, z1] = room
+        ? [
+            room[1] - ROOM_HALF[0] + WALL_MARGIN,
+            room[1] + ROOM_HALF[0] - WALL_MARGIN,
+            room[2] - ROOM_HALF[1] + WALL_MARGIN,
+            room[2] + ROOM_HALF[1] - WALL_MARGIN,
+          ]
+        : [cx - 2.5, cx + 2.5, cz - 2.5, cz + 2.5],
+      points = [];
+    for (let x = x0; x <= x1 + 1e-9; x += 0.2)
+      for (let z = z0; z <= z1 + 1e-9; z += 0.2) {
+        const distance = Math.hypot(x - cx, z - cz);
+        if (
+          (room || distance <= 2.5) &&
+          distance >= 0.8 &&
+          x > -13.3 &&
+          x < 14 &&
+          z > -10.3 &&
+          z < 10.8 &&
+          Math.hypot(x - lx, z - lz) >= 0.6 &&
+          !collides(x, z, colliders, DEVICE_RADIUS) &&
+          clearPath({ x: cx, z: cz }, { x, z }, colliders)
+        )
+          points.push({ x, z, distance });
+      }
+    points.sort((p, q) => p.distance - q.distance || p.x - q.x || p.z - q.z);
+    const floor = { cx, cz, points };
+    floors.set(a, floor);
+    return floor;
+  };
+  for (const d of devices) {
+    const floor = floorOf(areas.find((a) => a[0] === d.area) || areas[9]);
+    let spot = null;
+    // Prefer a full metre apart. A crowded room packs devices closer (a device body is 0.28 m
+    // wide); only a room with no space left at all lets a device share a spot, still in the room.
+    for (const gap of [DEVICE_GAP, 0.75, 0.55, 0.35, 0]) {
+      spot = floor.points.find((p) => taken.every((t) => Math.hypot(t.x - p.x, t.z - p.z) >= gap));
+      if (spot) break;
+    }
+    // Only if the room has no free floor at all: a row beside the point.
+    spot = spot
+      ? { x: spot.x, z: spot.z }
+      : {
+          x: floor.cx + 0.7 + (taken.length % 3) * 0.48,
+          z: floor.cz + 0.8 + Math.floor(taken.length / 3) * 0.4,
+        };
+    taken.push(spot);
+    spots.set(d, spot);
+  }
+  return spots;
+}
 export function deviceState(device, outputs, env) {
   const raw = Number(outputs[device.pin] || 0),
     on = raw > 0;

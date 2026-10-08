@@ -30,6 +30,7 @@ export function createConversation({
   currentIndex = 0,
   completed = {},
   thanked = {},
+  urgent = {},
   area = null,
 }) {
   const requests = quests
@@ -37,13 +38,16 @@ export function createConversation({
     .filter((r) => (area ? r.mission.area === area : r.mission.resident === resident));
   // Requests passed since the last chat: the resident thanks the technician for each, once.
   const thanks = requests.filter((r) => r.complete && !thanked[r.index]);
+  // An unfinished request the current conditions make urgent comes first (at sunset, the lights).
   const selected =
+    requests.find((r) => urgent[r.index] && !r.complete) ||
     requests.find((r) => r.index === currentIndex && !thanks.includes(r)) ||
     requests.find((r) => !r.complete) ||
     requests.find((r) => r.index === currentIndex) ||
     requests[0];
   const hello = selected
-    ? `${quote(selected.mission.quote)} Ask me about ${selected.mission.title}, or pick another request below.`
+    ? (urgent[selected.index] ? `${urgent[selected.index]}, so I need this now. ` : '') +
+      `${quote(selected.mission.quote)} Ask me about ${selected.mission.title}, or pick another request below.`
     : 'I have no requests here right now. You can explore the house and garden.';
   return {
     key,

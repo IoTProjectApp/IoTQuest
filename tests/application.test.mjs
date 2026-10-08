@@ -10,6 +10,7 @@ import { residentsForSections, createGreetingTracker } from '../public/section-r
 import { toWorld, fromWorld } from '../public/world-math.js';
 import { ADC_SIGNALS, ADC_SCALE } from '../public/signals.js';
 import { checkPredictions } from '../public/weather-quests.js';
+import { neededNow, situationReason } from '../public/situation.js';
 import { conversationHTML } from '../public/conversation-view.js';
 import { predictionHTML } from '../public/prediction-view.js';
 import { declutterLabels } from '../public/world-labels.js';
@@ -365,6 +366,8 @@ function harness(
     ADC_SCALE,
     missionBudget,
     checkPredictions,
+    neededNow,
+    situationReason,
     conversationHTML,
     predictionHTML,
     declutterLabels,
@@ -848,6 +851,41 @@ test('a real board’s readings replace the simulated sensor while the program r
   assert.ok(h.api.getOutputs()[lamp.pin] > 0, 'the program sees darkness and lights the path');
   h.api.switchTab('circuit');
   assert.ok(h.document.getElementById('boardPanel'));
+});
+test('when the sun sets, residents ask for their lights and the quest panel says why', () => {
+  const h = harness();
+  h.api.state.travelScreen = false;
+  h.api.selectMission(3);
+  assert.equal(h.document.getElementById('neededNow').hidden, true, 'nothing urgent by day');
+  h.document.getElementById('dayNightToggle').click();
+  const note = h.document.getElementById('neededNow');
+  assert.equal(note.hidden, false);
+  assert.match(note.innerHTML, /It is getting dark/);
+  assert.match(note.innerHTML, /Light the Path/);
+  assert.match(
+    h.document.getElementById('toast').textContent,
+    /It is getting dark: Maya needs “Light the Path”/,
+  );
+  h.document
+    .querySelectorAll('[data-needed-quest]')
+    .find((b) => b.dataset.neededQuest === '0')
+    .click();
+  assert.equal(h.api.state.mission, 0);
+  assert.match(
+    h.document.getElementById('situationLine').textContent,
+    /It is getting dark, so Maya needs this now/,
+  );
+});
+test('letting the simulated day run into evening brings the sunset requests without any switch', () => {
+  const h = harness();
+  h.api.state.travelScreen = false;
+  h.api.selectMission(3);
+  h.api.setClockSpeed(360);
+  const note = h.document.getElementById('neededNow');
+  // Dusk deepens: the Reading Lamp (below 2000) is needed before the path lights (below 1800).
+  for (let i = 0; i < 400 && !/Light the Path/.test(note.innerHTML); i++) h.api.advanceWorld();
+  assert.match(note.innerHTML, /It is getting dark/);
+  assert.match(note.innerHTML, /Light the Path/);
 });
 test('regional rain-aware watering keeps installation, wiring, student code and deterministic tests', async () => {
   const h = harness();

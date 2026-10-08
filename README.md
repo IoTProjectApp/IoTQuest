@@ -30,7 +30,7 @@ Every push and pull request runs the formatting check, tests and build on Node 2
 
 ## Explore, install, wire, program, test
 
-Choose a country and city using the rotating, zoomable globe or accessible 2D map. View regional inspiration, sources, weather and progress before travelling. WASD, arrows and on-screen controls move the technician; E interacts (at a room or garden installation point it installs devices) and T talks to the nearest resident. Select rooms or garden areas for detailed views. Device labels select their live circuit entries and related code.
+Choose a country and city using the rotating, zoomable globe or accessible 2D map. View regional inspiration, sources, weather and progress before travelling. WASD, arrows and on-screen controls move the technician; E interacts (at a room or garden installation point it installs devices) and T talks to the nearest resident. Select rooms or garden areas for detailed views. Device labels select their live circuit entries and related code. Every installed device gets its own spot in its room: on that room's floor (never through a doorway into the next), clear of furniture, away from where the resident and the technician stand, and about a metre from other devices (closer only in the smallest rooms). Adding a device never moves the others, and crowded labels fan out so each stays readable.
 
 Install components, connect signal/power/ground and required resistors, then edit the starter program. Run, change conditions and watch outputs affect lights, fans, gates, irrigation, tanks and plants. Test checks normal conditions, thresholds and safety failures. Students write every line of code themselves, helped by the **Guide** beside the editor:
 
@@ -71,7 +71,7 @@ Every destination has its own architectural style, garden combination and interi
 
 Five additional quests use the destination's live local weather: **Storm Watch**, **Garden Frost Alert**, **Heat & Humidity Response**, **Rain-Smart Sprinklers**, and **Cloudy-Day Grow Lights**. Each destination has beginner and advanced versions. Wind reads km/h and cloud cover reads 0–100%; outdoor temperature and humidity retain their calibrated units. The rain sensor uses the existing simulated 0–4095 scale, derived from the weather service's precipitation data.
 
-Choose **Use live weather** in a weather quest to run your program against local readings, or use Practice Weather to explore conditions. With live weather, **Predict, then check** asks whether each output will be on with today's readings; while the program runs, **Check with my running program** compares each prediction with what the program actually did. The existing weather panel identifies cached or fallback data. Assessment always uses fixed scenarios with boundaries, interlocks and changing weather, so students never need to wait for a storm or cold night. The original eight quest indices and saved progress remain intact; with the component quests below there are now 25 quests in the original home and 50 across both levels at each destination.
+Choose **Use live weather** in a weather quest to run your program against local readings, or use Practice Weather to explore conditions. With live weather, **Predict, then check** asks whether each output will be on with today's readings; while the program runs, **Check with my running program** compares each prediction with what the program actually did. The existing weather panel identifies cached or fallback data. Assessment always uses fixed scenarios with boundaries, interlocks and changing weather, so students never need to wait for a storm or cold night. The original eight quest indices and saved progress remain intact; with the component and logic quests below there are now 33 quests in the original home and 66 across both levels at each destination.
 
 ### Component quests
 
@@ -89,6 +89,32 @@ Eight more quests (18–25) together use all 26 components, including seven that
 | Night Watch                    | Garage       | Porch light on motion; buzzer when the door opens while armed                |
 
 Each is offered by the resident of its area and installs there. Tests check the exact boundaries, and every worked example passes on ESP32 and Pico in both languages. The air-conditioning quest has its own energy budget: the AC draws 800 W, so cooling an empty home fails the budget as well as the test. Temperatures such as 26.5 °C are tested, which is why the Guide stores calibrated readings in a `float`.
+
+### Logic quests
+
+Eight quests (26–33) teach logic patterns the earlier quests do not. Each is offered by the resident of its area.
+
+| Quest                 | Area        | Pattern                            | Rule                                                        |
+| --------------------- | ----------- | ---------------------------------- | ----------------------------------------------------------- |
+| Comfort Zone          | Living room | Range, both ends included          | Light on from 18 °C to 24 °C                                |
+| Welcome Either Way    | Entrance    | OR, two digital inputs             | Porch light on for motion or the door                       |
+| Kitchen Fume Fan      | Kitchen     | OR, calibrated units               | Fan on above 60 % humidity or above 30 °C                   |
+| Bathroom Night Path   | Bathroom    | AND, digital + analogue            | Light on for motion only when it is dark                    |
+| Pond Overflow Warning | Water tank  | Escalating thresholds              | Drain valve above 3500, buzzer above 3900                   |
+| Frost or Flood        | Plant beds  | OR, negative and inclusive bounds  | Buzzer at 0 °C or below, or rain of 3000 or more            |
+| Safe Garage Door      | Garage      | Safety interlock, checking for LOW | Door opens for a car under 40 cm only when the alarm is off |
+| Reading Lamp          | Bedroom     | Two analogue inputs                | Lamp on when the dial is up and the room is dim             |
+
+The tests sit on every boundary, so typical mistakes fail the quest that teaches them: AND instead of OR, leaving out a range's end points, ignoring the alarm, or swapping the two pond thresholds.
+
+### Quests that follow the situation
+
+Residents react to what is happening. A quest is **needed now** when its own rule gives a different answer in the current conditions than on a calm, ordinary day (21 °C, daylight, dry, calm, nobody moving). At sunset the path, bedroom and reading lights are needed; in a storm, the storm and rain quests; in a heatwave, the cooling quests. This is worked out from each quest's conditions, so teacher quests react too. A reading must be clearly past a limit (for example 1 °C, or 100 on the 0–4095 scale) before it counts, so a reading hovering at a limit does not make a quest flicker.
+
+- The quest panel shows **Needed now** with each resident's request and the reason (for example "🌇 It is getting dark: Maya, Light the Path"), and **All quests** tags them.
+- A short alert announces each new need, including from the Day/Night switch and from the simulated day reaching evening. Arriving at a destination sets the scene quietly.
+- Talking to a resident opens with their urgent request and says why.
+- Choosing a needed quest keeps the current conditions (the path is still dark); other quests start from fresh practice conditions. Finished quests are not asked for again, and nothing switches the student's quest for them.
 
 ### Check your understanding
 

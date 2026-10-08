@@ -50,6 +50,7 @@ import { readProject, ImportError, IMPORT_LIMITS, PROJECT_FORMAT } from './proje
 import { formatCode as formatSource, FormatError, INDENT } from './code-format.js';
 import { coachSteps, readingText } from './code-coach.js';
 import { checkPredictions } from './weather-quests.js';
+import { neededNow, situationReason } from './situation.js';
 import { conversationHTML } from './conversation-view.js';
 import { predictionHTML } from './prediction-view.js';
 import { declutterLabels } from './world-labels.js';
@@ -364,6 +365,7 @@ function renderMission() {
   $('residentAvatar').textContent =
     m.resident === 'Maya' ? '👩🏽‍🌾' : m.resident === 'Alex' ? '🧑🏻' : '🧑🏾‍🍳';
   $('request').textContent = m.quote;
+  renderSituation();
   $('hint').textContent = m.hint;
   $('hint').hidden = true;
   $('xp').textContent = state.xp;
@@ -2064,15 +2066,90 @@ function setDayNight(night) {
     hoursRun = lab.elapsedMs / 3600000;
   lab.startHour = ((((night ? 22 : 12) - hoursRun) % 24) + 24) % 24;
   state.env = { ...state.env, light: night ? 4 : 85, isDay: !night };
+  situationAlert = null;
   renderEnvironment();
   updateReadings();
   renderEffects();
   updateClockLabel();
   save();
-  toast(night ? '☾ Night: it is dark outside. Do your lights come on?' : '☀ Day: the sun is up.');
+  // Say who now needs what, if the switch made a request urgent.
+  toast(
+    (night ? '☾ Night: it is dark outside. ' : '☀ Day: the sun is up. ') +
+      (situationAlert || (night ? 'Do your lights come on?' : '')),
+  );
 }
 $('dayNightToggle').onclick = () => setDayNight(!isNight());
+// Needed now: residents' requests that the current conditions make urgent (see situation.js).
+// Rechecked with every reading; the note and the alert only change when the situation does.
+let situationKey = null,
+  situationIndices = null,
+  situationLocation = null,
+  situationAlert = null;
+function currentNeeds() {
+  if (free || activeFault) return [];
+  return neededNow(activeMissions(), state.env, (i) => !!currentCompletions()[missionKey(i)]);
+}
+function checkSituation() {
+  const needs = currentNeeds(),
+    key = state.activeLocation + '|' + needs.map((n) => n.index + n.reason.text).join('|');
+  if (key === situationKey) return;
+  // The first check after arriving somewhere sets the scene quietly; later changes are announced.
+  const arrived = situationLocation !== state.activeLocation,
+    fresh = !arrived && situationIndices && needs.filter((n) => !situationIndices.has(n.index));
+  situationLocation = state.activeLocation;
+  situationKey = key;
+  situationIndices = new Set(needs.map((n) => n.index));
+  renderSituation(needs);
+  situationAlert = fresh?.length
+    ? fresh[0].reason.icon +
+      ' ' +
+      fresh[0].reason.text +
+      ': ' +
+      fresh[0].quest.resident +
+      ' needs “' +
+      fresh[0].quest.title +
+      '”' +
+      (fresh.length > 1 ? ' (and ' + (fresh.length - 1) + ' more).' : '.')
+    : null;
+  if (situationAlert) toast(situationAlert);
+}
+function renderSituation(needs = currentNeeds()) {
+  $('neededNow').hidden = !needs.length;
+  $('neededNow').innerHTML = needs.length
+    ? '<strong>Needed now</strong>' +
+      needs
+        .slice(0, 4)
+        .map(
+          (n) =>
+            '<button class="needed-request' +
+            (n.index === state.mission ? ' current' : '') +
+            '" data-needed-quest="' +
+            n.index +
+            '"><span aria-hidden="true">' +
+            esc(n.reason.icon) +
+            '</span><span><small>' +
+            esc(n.reason.text) +
+            '</small>' +
+            esc(n.quest.resident) +
+            ': ' +
+            esc(n.quest.title) +
+            (n.index === state.mission ? ' · your quest' : '') +
+            '</span></button>',
+        )
+        .join('') +
+      (needs.length > 4 ? '<small>and ' + (needs.length - 4) + ' more in All quests</small>' : '')
+    : '';
+  document
+    .querySelectorAll('[data-needed-quest]')
+    .forEach((b) => (b.onclick = () => selectMission(Number(b.dataset.neededQuest))));
+  const reason = free || activeFault ? null : situationReason(mission(), state.env);
+  $('situationLine').hidden = !reason;
+  $('situationLine').textContent = reason
+    ? reason.icon + ' ' + reason.text + ', so ' + mission().resident + ' needs this now.'
+    : '';
+}
 function updateReadings() {
+  checkSituation();
   const dark = isNight();
   $('dayLabel').textContent = dark ? 'Nighttime' : 'Daytime';
   $('dayIcon').textContent = dark ? '☾' : '☀';
@@ -2591,12 +2668,15 @@ function selectMission(index) {
   $('travelScreen').hidden = true;
   $('adventureScreen').hidden = false;
   free = false;
+  // A quest chosen because the situation needs it keeps that situation (at sunset the path is
+  // still dark); any other quest starts from fresh practice conditions.
+  const needed = !!situationReason(activeMissions()[index], state.env);
   state.mission = index;
   currentPassed = false;
   testResults = [];
   edited = false;
   outputs = {};
-  state.env = { ...baseEnv, ...(currentLocation()?.practice || {}), temp: 24 };
+  if (!needed) state.env = { ...baseEnv, ...(currentLocation()?.practice || {}), temp: 24 };
   $('modal').close();
   changeView('world');
   save();
@@ -2604,6 +2684,7 @@ function selectMission(index) {
   toast('New quest: ' + mission().title + '. Start by installing the highlighted components.');
 }
 function questList() {
+  const needed = new Map(currentNeeds().map((n) => [n.index, n.reason]));
   modal(
     'Your neighborhood quests',
     activeMissions()
@@ -2621,6 +2702,11 @@ function questList() {
           esc(m.area) +
           ' · ' +
           esc(m.learn.join(' · ')) +
+          (needed.has(i)
+            ? '<b class="needed-tag">' +
+              esc(needed.get(i).icon + ' Needed now: ' + needed.get(i).text.toLowerCase()) +
+              '</b>'
+            : '') +
           '</small></div><em>' +
           (currentCompletions()[missionKey(i)] ? '✓ Complete' : m.xp + ' XP') +
           '</em></button>',
@@ -3358,6 +3444,8 @@ function openConversation(key) {
     currentIndex: state.mission,
     completed: Object.fromEntries(quests.map((m, i) => [i, !!done(i)])),
     thanked: Object.fromEntries(quests.map((m, i) => [i, !!done(i)?.thanked])),
+    // A resident opens with whatever the current conditions make urgent.
+    urgent: Object.fromEntries(currentNeeds().map((n) => [n.index, n.reason.text])),
     area: character?.area,
   });
   activeConversation.section = character?.section;

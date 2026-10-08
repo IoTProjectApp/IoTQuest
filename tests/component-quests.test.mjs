@@ -14,7 +14,8 @@ import { createLabState, updateResources } from '../public/lab.js';
 import { sectionResidents } from '../public/section-residents.js';
 import { componentQuests } from '../public/component-quests.js';
 
-const first = missions.length - componentQuests.length;
+// Quests 18–25 (indices 17–24), after the original 17 and before the logic quests.
+const first = 17;
 
 test('the component quests together use every component', () => {
   const used = new Set(componentQuests.flatMap((q) => q.ids));
@@ -24,11 +25,10 @@ test('the component quests together use every component', () => {
   );
 });
 
-test('component quests come last, so saved quest numbers do not move', () => {
-  assert.deepEqual(missions.slice(first), componentQuests);
+test('component quests keep their numbers (18–25) so saved progress does not move', () => {
+  assert.deepEqual(missions.slice(first, first + componentQuests.length), componentQuests);
   assert.equal(missions[16].title, 'Utility Room Safety Alert');
 });
-
 test('each component quest belongs to a section with a resident and has one condition per output', () => {
   for (const q of componentQuests) {
     const resident = sectionResidents.find(([area]) => area === q.area);

@@ -492,9 +492,7 @@ export function program(mission, language, devices, worked = false) {
         .map(
           (d) =>
             '  ' +
-            (d.analog && !ADC_SIGNALS.includes(d.signal)
-              ? 'float '
-              : 'int ') +
+            (d.analog && !ADC_SIGNALS.includes(d.signal) ? 'float ' : 'int ') +
             d.signal +
             ' = ' +
             (d.analog ? 'analogRead' : 'digitalRead') +

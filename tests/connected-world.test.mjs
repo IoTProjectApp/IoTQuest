@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
-import { locations, adaptMissions } from '../public/locations.js';
+import { locations, adaptMissions, isLocationUnlocked } from '../public/locations.js';
 import { missions, defaults, baseEnv, program, validate } from '../public/missions.js';
 import { Runtime } from '../public/runtime.js';
 import { weatherHTML } from '../public/travel.js';
@@ -14,6 +14,7 @@ import {
   advanceEnvironment,
 } from '../public/weather.js';
 import { createRegionalModel } from '../public/regions.js';
+import { createWorldModel } from '../public/world-model.js';
 import { latLonPoint, pointLatLon, countryAt, globePick } from '../public/geography.js';
 import { findFree, toWorld, collides } from '../public/world-math.js';
 const features = JSON.parse(await readFile('public/data/countries.json', 'utf8')).features;
@@ -557,10 +558,15 @@ test('every animated regional mesh is part of the drawn scene and the outside ga
       28,
       location.id + ' back hedge',
     );
-    assert.ok(
-      m.objects.some((o) => o.shape === 'cylinder' && o.pos[0] === -7 && o.pos[2] === -12),
-      location.id + ' back tree',
-    );
+    // House styles never remove the garden's trees (trunks outside the house footprint).
+    const trunks = (model) =>
+      model.objects.filter(
+        (o) =>
+          o.shape === 'cylinder' &&
+          o.color === '#9f8966' &&
+          !(o.pos[0] > -13.3 && o.pos[0] < 1.6 && o.pos[2] < -1 && o.pos[2] > -11.3),
+      ).length;
+    assert.equal(trunks(m), trunks(createWorldModel(m.variant)), location.id + ' garden trees');
   }
 });
 test('Worker passes asset requests through unchanged so html_handling cannot loop', async () => {
@@ -620,4 +626,159 @@ test('without a weather proxy (static hosting) the service goes direct after one
       'https://api.open-meteo.com/v1/forecast',
     ],
   );
+});
+test('live weather calls fetch the way browsers require (not as a method of the service)', async () => {
+  const live = {
+    current: {
+      temperature_2m: 18,
+      relative_humidity_2m: 60,
+      precipitation: 0,
+      weather_code: 2,
+      cloud_cover: 40,
+      wind_speed_10m: 8,
+      wind_direction_10m: 200,
+      is_day: 1,
+      time: 1760000000,
+    },
+  };
+  // Mimics window.fetch: throws "Illegal invocation" when called with another `this`.
+  function browserFetch(url) {
+    if (this !== undefined && this !== globalThis)
+      throw new TypeError("Failed to execute 'fetch' on 'Window': Illegal invocation");
+    return Promise.resolve(
+      String(url).startsWith('api/weather')
+        ? { ok: false, status: 404, headers: new Headers(), json: async () => ({}) }
+        : { ok: true, status: 200, headers: new Headers(), json: async () => live },
+    );
+  }
+  for (const useProxy of [true, false]) {
+    const service = new WeatherService({
+      useProxy,
+      proxyURL: 'api/weather',
+      fetchImpl: browserFetch,
+      storage: null,
+    });
+    const weather = await service.get(locations[0]);
+    assert.equal(weather.status, 'live', 'useProxy ' + useProxy);
+    assert.equal(weather.temperature, 18);
+  }
+});
+test('the live weather code reaches the simulated environment and Practice clears it', () => {
+  const kyoto = locations[0],
+    weather = normalizeWeather(
+      {
+        current: {
+          temperature_2m: 0,
+          relative_humidity_2m: 90,
+          precipitation: 2,
+          weather_code: 73,
+          cloud_cover: 100,
+          wind_speed_10m: 12,
+          wind_direction_10m: 10,
+          is_day: 1,
+          time: 1760000000,
+        },
+      },
+      kyoto,
+    );
+  assert.equal(weather.code, 73);
+  const live = advanceEnvironment({ ...baseEnv }, [], {}, 1, {
+    mode: 'live',
+    weather,
+    location: kyoto,
+  });
+  assert.equal(live.weatherCode, 73);
+  const practice = advanceEnvironment(live, [], {}, 1, { mode: 'practice', location: kyoto });
+  assert.equal(practice.weatherCode, null);
+});
+test('Melbourne has eight playable suburbs with real coordinates, open from the start', async () => {
+  const { melbourneSuburbs, MELBOURNE, MELBOURNE_MAP } = await import('../public/melbourne.js');
+  assert.deepEqual(
+    melbourneSuburbs.map((l) => l.city),
+    [
+      'Fitzroy',
+      'Brunswick',
+      'Footscray',
+      'Richmond',
+      'Box Hill',
+      'St Kilda',
+      'Broadmeadows',
+      'Frankston',
+    ],
+  );
+  const { west, east, north, south } = MELBOURNE_MAP.bounds;
+  for (const l of [...melbourneSuburbs, MELBOURNE]) {
+    assert.ok(
+      l.longitude > west && l.longitude < east && l.latitude < north && l.latitude > south,
+      l.city,
+    );
+    // Every suburb is within 50 km of the CBD.
+    const km = Math.hypot(
+      (l.latitude - MELBOURNE.latitude) * 111,
+      (l.longitude - MELBOURNE.longitude) * 111 * Math.cos((MELBOURNE.latitude * Math.PI) / 180),
+    );
+    assert.ok(km < 50, l.city + ' is ' + km.toFixed(0) + ' km from the CBD');
+  }
+  for (const l of melbourneSuburbs) {
+    assert.equal(l.timezone, 'Australia/Melbourne');
+    assert.equal(l.iso, 'AUS');
+    assert.equal(l.metro, 'Melbourne');
+    assert.equal(l.unlockAfter, 0);
+    assert.ok(locations.includes(l));
+    assert.ok(isLocationUnlocked({}, l));
+  }
+  assert.equal(new Set(locations.map((l) => l.id)).size, locations.length, 'ids are unique');
+  // Each suburb gets its own house style and weather coordinates for the proxy.
+  assert.equal(new Set(melbourneSuburbs.map((l) => l.style)).size, 8);
+  const styles = melbourneSuburbs.map((l) => createRegionalModel(l.id).architecture);
+  assert.deepEqual(
+    styles,
+    melbourneSuburbs.map((l) => l.style),
+  );
+});
+test('downloaded Melbourne street maps are well-formed and credit OpenStreetMap', async () => {
+  const { melbourneSuburbs } = await import('../public/melbourne.js');
+  const { readdir } = await import('node:fs/promises');
+  const files = (await readdir('public/data/melbourne')).filter((f) => f.endsWith('.json'));
+  assert.ok(files.length >= 1, 'at least one street map is bundled');
+  for (const file of files) {
+    const data = JSON.parse(await readFile('public/data/melbourne/' + file, 'utf8')),
+      suburb = melbourneSuburbs.find((l) => l.id === data.id);
+    assert.ok(suburb, file + ' belongs to a suburb');
+    assert.equal(file, suburb.id + '.json');
+    assert.match(data.attribution, /OpenStreetMap contributors/);
+    assert.deepEqual(data.centre, [suburb.latitude, suburb.longitude]);
+    assert.ok(
+      data.roads.length > 50 && data.buildings.length > 200,
+      file + ' has streets and houses',
+    );
+    for (const road of data.roads) {
+      assert.ok([0, 1, 2, 3].includes(road[0]) && typeof road[1] === 'string');
+      assert.ok(road.length >= 6 && road.length % 2 === 0);
+    }
+    for (const building of data.buildings)
+      assert.ok(building.length >= 6 && building.length % 2 === 0);
+    // Most geometry lies within the requested radius (ways may run a little beyond it).
+    const points = data.buildings.flatMap((b) =>
+        b.filter((_, i) => i % 2 === 0).map((x, i) => [x, b[i * 2 + 1]]),
+      ),
+      inside = points.filter(([x, y]) => Math.hypot(x, y) < data.radius * 1.2).length;
+    assert.ok(inside / points.length > 0.95);
+  }
+});
+test('Melbourne scenes have a street and neighbouring houses; other homes do not', () => {
+  const fitzroy = createRegionalModel('fitzroy'),
+    kyoto = createRegionalModel('kyoto'),
+    asphalt = (m) => m.objects.filter((o) => o.color === '#4b5157');
+  assert.equal(asphalt(fitzroy).length, 1);
+  assert.equal(asphalt(kyoto).length, 0);
+  assert.ok(fitzroy.objects.some((o) => o.streetLight));
+  // Neighbours' windows glow at night like the property's.
+  assert.ok(fitzroy.windows.length > kyoto.windows.length + 5);
+  assert.equal(fitzroy.skyDistance, 16);
+  // Neighbours stay outside the property.
+  const neighbourWalls = fitzroy.objects.filter((o) => o.neighbour);
+  assert.ok(neighbourWalls.length >= 8);
+  for (const wall of neighbourWalls)
+    assert.ok(Math.abs(wall.pos[0]) > 16.9 || wall.pos[2] > 13.75, 'neighbour inside the property');
 });

@@ -1,6 +1,17 @@
 import { toWorld } from './world-math.js';
 // Meshes are actual scene geometry, measured in metres. y is height, x/z the ground.
-export function createWorldModel() {
+// Garden variations that make each destination's property unique. The empty variant builds the
+// original Willowbrook home. Mission areas (beds, tank, greenhouse, paths) keep their places.
+const VARIANT_COLOURS = {
+  path: { gravel: null, brick: '#c48c6c', slate: '#a3aaa8', sandstone: '#e2c99c' },
+  beds: { timber: '#b39166', stone: '#a9a598', corten: '#9b5b38' },
+  tank: {
+    poly: ['#7fa9b8', '#658e9d', '#9fc1c8'],
+    steel: ['#b8bfc2', '#949c9f', '#cfd5d7'],
+    timber: ['#8d6a4a', '#73563b', '#a4825f'],
+  },
+};
+export function createWorldModel(variant = {}) {
   const objects = [],
     colliders = [],
     plants = [],
@@ -117,11 +128,12 @@ export function createWorldModel() {
   // A raised island, grass and a gravel walkway through the property.
   box(0, -0.53, 0, 33.8, 1, 27.5, '#b0bc83');
   box(0, -0.035, 0, 33.6, 0.1, 27.3, '#abc68b');
-  box(0, 0.035, 5, 2.1, 0.1, 15.5, '#dfd4b1');
-  box(-4.6, 0.035, 0.2, 9.2, 0.1, 1.9, '#dfd4b1');
-  box(7, 0.035, -0.2, 14, 0.1, 1.6, '#ded2ae');
-  box(8.1, 0.045, 3.5, 1.15, 0.1, 7.2, '#ddd0ac');
-  box(9.8, 0.035, -5.1, 1.4, 0.1, 7.5, '#dfd4b1');
+  const pathColour = VARIANT_COLOURS.path[variant.path] || null;
+  box(0, 0.035, 5, 2.1, 0.1, 15.5, pathColour || '#dfd4b1');
+  box(-4.6, 0.035, 0.2, 9.2, 0.1, 1.9, pathColour || '#dfd4b1');
+  box(7, 0.035, -0.2, 14, 0.1, 1.6, pathColour || '#ded2ae');
+  box(8.1, 0.045, 3.5, 1.15, 0.1, 7.2, pathColour || '#ddd0ac');
+  box(9.8, 0.035, -5.1, 1.4, 0.1, 7.5, pathColour || '#dfd4b1');
   for (let i = 0; i < 11; i++) {
     box(0.15 * Math.sin(i), 0.1, 10 - i * 1.12, 1.18, 0.1, 0.66, i % 2 ? '#ece4cd' : '#e3d8be', {
       rotation: [0, ((i % 3) - 1) * 0.13, 0],
@@ -232,26 +244,44 @@ export function createWorldModel() {
   solid(0.75, 0.78, -4.8, 0.8, 0.9, 1.9, '#b4916d');
   box(0.7, 1.26, -4.8, 0.96, 0.12, 2, '#d0ad81');
   dynamic.garageDoor = box(-1.1, 0.38, -1, 3.1, 0.2, 0.16, '#a7b3ab');
-  // Greenhouse has glass side panels, metal framing and a pitched glass roof.
+  // Greenhouse: a framed glasshouse (default), a polytunnel or a lean-to against a brick wall.
   const gx = 9.9,
     gz = -7.1;
   box(gx, 0.12, gz, 4.5, 0.18, 4.8, '#e6d7b6');
-  for (const x of [gx - 2.15, gx + 2.15])
-    for (const z of [gz - 2.3, gz, gz + 2.3]) box(x, 1.35, z, 0.1, 2.6, 0.1, '#d1ae7c');
-  for (const z of [gz - 2.3, gz + 2.3]) {
-    box(gx, 2.66, z, 4.5, 0.12, 0.12, '#c3a273');
-    beam([gx - 2.2, 2.68, z], [gx, 3.8, z], 0.13, '#c3a273');
-    beam([gx, 3.8, z], [gx + 2.2, 2.68, z], 0.13, '#c3a273');
+  if (variant.outbuilding === 'polytunnel') {
+    // Hoops along the length with a translucent plastic cover.
+    for (let i = 0; i < 5; i++)
+      cylinder(gx, 0.2, gz - 2.2 + i * 1.1, 2.2, 0.08, '#d5ddd9', {
+        rotation: [Math.PI / 2, 0, 0],
+      });
+    mesh('sphere', [gx, 0.2, gz], [4.4, 5.2, 4.9], '#e9f2ee', { opacity: 0.32 });
+    box(gx, 0.95, gz + 2.4, 1.1, 1.6, 0.05, '#cfd7d3', { opacity: 0.5 });
+  } else if (variant.outbuilding === 'leanto') {
+    // A brick back wall with a single sloping glass roof.
+    box(gx, 1.4, gz - 2.3, 4.6, 2.7, 0.3, '#a8664a');
+    for (const x of [gx - 2.15, gx + 2.15]) box(x, 1.1, gz + 2.2, 0.1, 2.0, 0.1, '#e8e8e2');
+    for (const x of [gx - 2.15, gx + 2.15])
+      box(x, 1.3, gz, 0.06, 2.0, 4.4, '#badad3', { opacity: 0.2 });
+    box(gx, 1.15, gz + 2.3, 4.3, 1.9, 0.06, '#bdded4', { opacity: 0.2 });
+    box(gx, 2.4, gz, 4.7, 0.05, 4.9, '#c7e4db', { opacity: 0.24, rotation: [-0.24, 0, 0] });
+  } else {
+    for (const x of [gx - 2.15, gx + 2.15])
+      for (const z of [gz - 2.3, gz, gz + 2.3]) box(x, 1.35, z, 0.1, 2.6, 0.1, '#d1ae7c');
+    for (const z of [gz - 2.3, gz + 2.3]) {
+      box(gx, 2.66, z, 4.5, 0.12, 0.12, '#c3a273');
+      beam([gx - 2.2, 2.68, z], [gx, 3.8, z], 0.13, '#c3a273');
+      beam([gx, 3.8, z], [gx + 2.2, 2.68, z], 0.13, '#c3a273');
+    }
+    box(gx, 3.8, gz, 0.12, 0.12, 4.8, '#c3a273');
+    for (const x of [gx - 2.15, gx + 2.15])
+      box(x, 1.55, gz, 0.06, 2.15, 4.5, '#badad3', { opacity: 0.18 });
+    box(gx, 1.55, gz - 2.3, 4.25, 2.1, 0.06, '#bdded4', { opacity: 0.18 });
+    for (const sign of [-1, 1])
+      box(gx + sign * 1.1, 3.25, gz, 2.55, 0.035, 4.6, '#c7e4db', {
+        opacity: 0.2,
+        rotation: [0, 0, sign * -0.47],
+      });
   }
-  box(gx, 3.8, gz, 0.12, 0.12, 4.8, '#c3a273');
-  for (const x of [gx - 2.15, gx + 2.15])
-    box(x, 1.55, gz, 0.06, 2.15, 4.5, '#badad3', { opacity: 0.18 });
-  box(gx, 1.55, gz - 2.3, 4.25, 2.1, 0.06, '#bdded4', { opacity: 0.18 });
-  for (const sign of [-1, 1])
-    box(gx + sign * 1.1, 3.25, gz, 2.55, 0.035, 4.6, '#c7e4db', {
-      opacity: 0.2,
-      rotation: [0, 0, sign * -0.47],
-    });
   // Plants in raised garden beds and in the greenhouse.
   function plant(x, z, scale = 1) {
     const stem = cylinder(x, 0.65 * scale + 0.2, z, 0.047, 1.15 * scale, '#6c8e48');
@@ -276,10 +306,11 @@ export function createWorldModel() {
     plants.push({ stem, leaves, fruit, base: scale });
   }
   for (const x of [6.0, 9.25, 12.5]) {
-    solid(x, 0.22, 4.6, 2.35, 0.35, 5.5, '#b39166');
+    solid(x, 0.22, 4.6, 2.35, 0.35, 5.5, VARIANT_COLOURS.beds[variant.beds] || '#b39166');
     box(x, 0.43, 4.6, 2.08, 0.08, 5.22, '#746a47');
     for (let i = 0; i < 4; i++) plant(x + (i % 2 ? -0.4 : 0.35), 2.5 + i * 1.37, 0.8 + i * 0.07);
-    for (const z of [1.9, 7.3]) box(x, 0.5, z, 2.45, 0.2, 0.15, '#c3a073');
+    for (const z of [1.9, 7.3])
+      box(x, 0.5, z, 2.45, 0.2, 0.15, VARIANT_COLOURS.beds[variant.beds] ? '#8f8a7e' : '#c3a073');
   }
   for (const x of [8.7, 11]) {
     box(x, 0.38, -7.2, 1.45, 0.42, 3.4, '#b99468');
@@ -290,9 +321,15 @@ export function createWorldModel() {
     tz = -1.9;
   colliders.push({ x: tx, z: tz, w: 2.12, d: 2.12 });
   shadow(tx, tz, 2.4, 2);
-  cylinder(tx, 1.09, tz, 1.06, 2.05, '#7fa9b8');
-  for (const y of [0.37, 0.82, 1.28, 1.76]) cylinder(tx, y, tz, 1.083, 0.065, '#658e9d');
-  cylinder(tx, 2.13, tz, 1.1, 0.15, '#9fc1c8');
+  const [tankBody, tankRib, tankLid] =
+    VARIANT_COLOURS.tank[variant.tank] || VARIANT_COLOURS.tank.poly;
+  cylinder(tx, 1.09, tz, 1.06, 2.05, tankBody);
+  // Corrugated steel tanks have many fine ribs; others have four bands.
+  for (const y of variant.tank === 'steel'
+    ? Array.from({ length: 9 }, (_, i) => 0.2 + i * 0.22)
+    : [0.37, 0.82, 1.28, 1.76])
+    cylinder(tx, y, tz, 1.083, 0.065, tankRib);
+  cylinder(tx, 2.13, tz, 1.1, 0.15, tankLid);
   dynamic.tankWater = cylinder(tx, 1.1, tz, 1.08, 1.76, '#3f93b1', { opacity: 0.55 });
   box(tx, 1.05, tz + 1.09, 0.22, 1.7, 0.035, '#e9f3ed');
   dynamic.tankGauge = box(tx, 0.78, tz + 1.12, 0.15, 1.2, 0.04, '#5dabbf');
@@ -314,17 +351,52 @@ export function createWorldModel() {
     mesh('cone', [x, 1.51, z], [0.46, 0.2, 0.46], '#57694f');
     shadow(x, z, 0.55, 0.55);
   }
-  // Fence and entrance gate (openable through student output).
+  // Fence (post-and-rail, white pickets, a stone wall, a hedge or farm wire) and the entrance gate
+  // (openable through student output).
+  const fencePost = (x, z, alongX) => {
+    const run = alongX ? [1.45, 0.12] : [0.12, 1.45];
+    switch (variant.fence) {
+      case 'picket':
+        for (let k = -2; k <= 2; k++)
+          box(
+            x + (alongX ? k * 0.29 : 0),
+            0.55,
+            z + (alongX ? 0 : k * 0.29),
+            0.1,
+            1.0,
+            0.1,
+            '#f4f1e8',
+          );
+        box(x, 0.6, z, run[0], 0.08, run[1], '#ece8dc');
+        break;
+      case 'stone':
+        box(
+          x,
+          0.42,
+          z,
+          alongX ? 1.5 : 0.45,
+          0.84,
+          alongX ? 0.45 : 1.5,
+          (x + z) % 3 > 1.4 ? '#a9a291' : '#b8b09d',
+        );
+        break;
+      case 'hedge':
+        sphere(x, 0.65, z, 0.85, (x * 7 + z) % 2 > 1 ? '#6f9a5a' : '#78a262');
+        break;
+      case 'wire':
+        box(x, 0.6, z, 0.11, 1.2, 0.11, '#8c7458');
+        for (const y of [0.4, 0.7, 1.0]) box(x, y, z, run[0], 0.02, run[1], '#9aa0a2');
+        break;
+      default:
+        box(x, 0.62, z, 0.13, 1.3, 0.13, '#b59970');
+        for (const y of [0.35, 0.91]) box(x, y, z, run[0], 0.13, run[1], '#c7a97b');
+    }
+  };
   for (let i = -15; i <= 15; i += 1.5) {
     if (Math.abs(i) < 1.6) continue;
-    box(i, 0.62, 11.55, 0.13, 1.3, 0.13, '#b59970');
-    for (const y of [0.35, 0.91]) box(i, y, 11.55, 1.45, 0.13, 0.12, '#c7a97b');
+    fencePost(i, 11.55, true);
   }
-  for (const x of [-15.5, 15.5])
-    for (let z = -11.7; z < 12; z += 1.5) {
-      box(x, 0.62, z, 0.13, 1.3, 0.13, '#b59970');
-      for (const y of [0.35, 0.91]) box(x, y, z, 0.12, 0.13, 1.45, '#c7a97b');
-    }
+  for (const x of [-15.5, 15.5]) for (let z = -11.7; z < 12; z += 1.5) fencePost(x, z, false);
   dynamic.gate = box(-0.75, 0.68, 11.55, 1.45, 1.12, 0.12, '#b7996d');
   dynamic.gate.anchor = [-1.5, 0, 11.55];
   dynamic.gate.local = [0.75, 0.68, 0];
@@ -349,11 +421,11 @@ export function createWorldModel() {
         dy * s,
         z + dz * s,
         r * s,
-        ['#7b9f64', '#85a971', '#93ad75'][Math.floor((x + z + 50) % 3)],
+        (variant.foliage || ['#7b9f64', '#85a971', '#93ad75'])[Math.floor((x + z + 50) % 3)],
       );
     colliders.push({ x, z, w: 0.5 * s, d: 0.5 * s });
   }
-  for (const [x, z, s] of [
+  const treeSpots = [
     [-14, -10, 1.1],
     [-14.3, -5, 1],
     [-14, 1, 1.2],
@@ -366,8 +438,68 @@ export function createWorldModel() {
     [4, -11.6, 0.85],
     [8, -12, 0.9],
     [-7, -12, 0.9],
-  ])
-    tree(x, z, s);
+  ];
+  if (variant.treeSeed === undefined) for (const [x, z, s] of treeSpots) tree(x, z, s);
+  else {
+    // A seeded selection of tree spots, sizes and small shifts gives each garden its own trees.
+    let seed = variant.treeSeed * 9301 + 49297;
+    const rand = () => ((seed = (seed * 16807) % 2147483647) - 1) / 2147483646;
+    for (const [x, z, s] of [
+      ...treeSpots,
+      [-14.2, -2.5, 1],
+      [-11, 10.5, 0.9],
+      [9, 10.5, 1],
+      [0.5, -12.2, 0.8],
+      [-3, -12.3, 0.85],
+      [14.6, -5.5, 0.95],
+    ])
+      if (rand() < 0.7)
+        tree(x + (rand() - 0.5) * 0.8, z + (rand() - 0.5) * 0.6, s * (0.75 + rand() * 0.5));
+  }
+  // An optional garden feature in the open lawn left of the front path.
+  const [fx, fz] = [-9.6, 5.6];
+  if (variant.feature === 'birdbath') {
+    cylinder(fx, 0.45, fz, 0.12, 0.9, '#c9c4b8');
+    cylinder(fx, 0.95, fz, 0.5, 0.12, '#d6d1c5');
+    cylinder(fx, 1.0, fz, 0.42, 0.05, '#7fb3c4');
+    colliders.push({ x: fx, z: fz, w: 1, d: 1 });
+  } else if (variant.feature === 'swing') {
+    for (const dx of [-1.1, 1.1])
+      for (const dz of [-0.5, 0.5])
+        beam([fx + dx, 0, fz + dz * 1.6], [fx + dx, 2.1, fz], 0.08, '#c0563f');
+    box(fx, 2.1, fz, 2.4, 0.09, 0.09, '#c0563f');
+    for (const dx of [-0.45, 0.45]) {
+      box(fx + dx, 1.35, fz, 0.02, 1.5, 0.02, '#8a8f91');
+      box(fx + dx, 0.6, fz, 0.6, 0.05, 0.3, '#e0c060');
+    }
+    colliders.push({ x: fx, z: fz, w: 2.4, d: 1.6 });
+  } else if (variant.feature === 'firepit') {
+    cylinder(fx, 0.12, fz, 0.7, 0.24, '#8d877d');
+    cylinder(fx, 0.2, fz, 0.5, 0.1, '#3d3a36');
+    for (let i = 0; i < 4; i++)
+      box(
+        fx + Math.cos(i * 1.57) * 1.6,
+        0.25,
+        fz + Math.sin(i * 1.57) * 1.6,
+        1.2,
+        0.12,
+        0.4,
+        '#9a7552',
+        {
+          rotation: [0, i * 1.57 + Math.PI / 2, 0],
+        },
+      );
+    colliders.push({ x: fx, z: fz, w: 1.4, d: 1.4 });
+  } else if (variant.feature === 'bench') {
+    box(fx, 0.45, fz, 1.8, 0.08, 0.5, '#a07a54');
+    box(fx, 0.75, fz - 0.22, 1.8, 0.45, 0.06, '#a07a54');
+    for (const dx of [-0.75, 0.75]) box(fx + dx, 0.22, fz, 0.08, 0.44, 0.45, '#5f5a55');
+    colliders.push({ x: fx, z: fz, w: 1.9, d: 0.6 });
+  } else if (variant.feature === 'sculpture') {
+    cylinder(fx, 0.3, fz, 0.35, 0.6, '#d8d3c6');
+    sphere(fx, 1.0, fz, 0.42, '#b98b5b');
+    colliders.push({ x: fx, z: fz, w: 0.8, d: 0.8 });
+  }
   for (let i = 0; i < 28; i++) {
     const x = -14.6 + i * 1.05,
       z = -12.3;
@@ -439,6 +571,9 @@ export function createWorldModel() {
       ),
     );
   return {
+    // Rendered as a left-right mirror image (see World3D) for variety; logic stays unmirrored.
+    mirrored: !!variant.mirror,
+    variant,
     objects,
     colliders,
     plants,
@@ -452,6 +587,7 @@ export function createWorldModel() {
     pitchedRoof,
     flatRoof,
     mesh,
+    beam,
     box,
     sphere,
     cylinder,

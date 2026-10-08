@@ -2854,7 +2854,7 @@ function setWeatherMode(mode) {
   weatherLoading = false;
   if (mode === 'practice') {
     const p = currentLocation()?.practice || {};
-    state.env = { ...state.env, ...p, isDay: true, precipitation: 0 };
+    state.env = { ...state.env, ...p, isDay: true, precipitation: 0, weatherCode: null };
   } else refreshWeather();
   renderEnvironment();
   renderRegionalWeather();
@@ -2876,6 +2876,8 @@ function showLocation() {
   $('adventureScreen').hidden = false;
   const location = currentLocation();
   world3d?.setRegion(state.activeLocation);
+  // The minimap matches mirrored homes.
+  $('minimap')?.classList.toggle('mirrored', !!world3d?.model.mirrored);
   for (let i = 0; i < areas.length; i++) {
     const base = baseAreas[i],
       override = world3d?.model.areaOverrides?.[base[0]] || location?.areaOverrides?.[base[0]];

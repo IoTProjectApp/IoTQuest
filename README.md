@@ -33,32 +33,44 @@ Each destination has eight mission families with beginner and advanced versions,
 
 These are regional teaching adaptations with contemporary utility spaces, not historic reconstructions or representations of every house in a country. The location panels provide educational descriptions and researched reference links. Reusable procedural geometry supplies different roofs, courtyards, materials, planting and layouts.
 
-| Country        | Weather location | Architectural inspiration                     |
-| -------------- | ---------------- | --------------------------------------------- |
-| Japan          | Kyoto            | Kyoto machiya-inspired timber home            |
-| Morocco        | Marrakech        | Marrakech riad-inspired courtyard home        |
-| Australia      | Brisbane         | Brisbane Queenslander-inspired veranda home   |
-| Kenya          | Lamu             | Swahili coastal courtyard house               |
-| Ghana          | Bolgatanga       | Northern Ghana compound-inspired home         |
-| South Africa   | Stellenbosch     | Cape Dutch-inspired kitchen-garden home       |
-| Ethiopia       | Hawassa          | Sidama-region tukul-inspired circular home    |
-| Egypt          | Aswan            | Nubian-inspired shaded courtyard home         |
-| India          | Chendamangalam   | Kerala nalukettu-inspired courtyard home      |
-| India          | Mandawa          | Shekhawati haveli-inspired shaded home        |
-| India          | Shimla           | Kath-kuni-inspired timber-and-stone home      |
-| China          | Beijing          | Siheyuan-inspired courtyard home              |
-| Indonesia      | Yogyakarta       | Javanese joglo-inspired timber home           |
-| Vietnam        | Hue              | Thuy Bieu garden-house-inspired rural home    |
-| Türkiye        | Safranbolu       | Ottoman-inspired timber-frame home            |
-| Saudi Arabia   | Diriyah          | Najdi-inspired earthen courtyard home         |
-| Italy          | Pontremoli       | Lunigiana stone-farmhouse-inspired home       |
-| Spain          | Córdoba          | Andalusian patio-inspired courtyard home      |
-| United Kingdom | Falmouth         | Cornish cottage-inspired garden home          |
-| Peru           | Cusco            | Andean adobe-inspired terraced-garden home    |
-| Mexico         | Mérida           | Yucatecan courtyard-inspired garden home      |
-| Brazil         | Paraty           | Paraty coastal-house-inspired tropical home   |
-| New Zealand    | Auckland         | Auckland timber-cottage-inspired mixed garden |
-| Norway         | Bergen           | Bergen timber-house-inspired seasonal garden  |
+| Country        | Weather location         | Architectural inspiration                     |
+| -------------- | ------------------------ | --------------------------------------------- |
+| Japan          | Kyoto                    | Kyoto machiya-inspired timber home            |
+| Morocco        | Marrakech                | Marrakech riad-inspired courtyard home        |
+| Australia      | Brisbane                 | Brisbane Queenslander-inspired veranda home   |
+| Kenya          | Lamu                     | Swahili coastal courtyard house               |
+| Ghana          | Bolgatanga               | Northern Ghana compound-inspired home         |
+| South Africa   | Stellenbosch             | Cape Dutch-inspired kitchen-garden home       |
+| Ethiopia       | Hawassa                  | Sidama-region tukul-inspired circular home    |
+| Egypt          | Aswan                    | Nubian-inspired shaded courtyard home         |
+| India          | Chendamangalam           | Kerala nalukettu-inspired courtyard home      |
+| India          | Mandawa                  | Shekhawati haveli-inspired shaded home        |
+| India          | Shimla                   | Kath-kuni-inspired timber-and-stone home      |
+| China          | Beijing                  | Siheyuan-inspired courtyard home              |
+| Indonesia      | Yogyakarta               | Javanese joglo-inspired timber home           |
+| Vietnam        | Hue                      | Thuy Bieu garden-house-inspired rural home    |
+| Türkiye        | Safranbolu               | Ottoman-inspired timber-frame home            |
+| Saudi Arabia   | Diriyah                  | Najdi-inspired earthen courtyard home         |
+| Italy          | Pontremoli               | Lunigiana stone-farmhouse-inspired home       |
+| Spain          | Córdoba                  | Andalusian patio-inspired courtyard home      |
+| United Kingdom | Falmouth                 | Cornish cottage-inspired garden home          |
+| Peru           | Cusco                    | Andean adobe-inspired terraced-garden home    |
+| Mexico         | Mérida                   | Yucatecan courtyard-inspired garden home      |
+| Brazil         | Paraty                   | Paraty coastal-house-inspired tropical home   |
+| New Zealand    | Auckland                 | Auckland timber-cottage-inspired mixed garden |
+| Norway         | Bergen                   | Bergen timber-house-inspired seasonal garden  |
+| Australia      | Melbourne · Fitzroy      | Victorian terrace with cast-iron lace veranda |
+| Australia      | Melbourne · Brunswick    | Federation red-brick villa                    |
+| Australia      | Melbourne · Footscray    | Weatherboard workers' cottage                 |
+| Australia      | Melbourne · Richmond     | Contemporary infill townhouse                 |
+| Australia      | Melbourne · Box Hill     | Post-war cream-brick home                     |
+| Australia      | Melbourne · St Kilda     | Interwar Art Deco home                        |
+| Australia      | Melbourne · Broadmeadows | Post-war weatherboard family home             |
+| Australia      | Melbourne · Frankston    | Bayside weatherboard beach house              |
+
+The eight Melbourne suburbs share one "Melbourne · 8 suburbs" marker on the globe and appear under Australia as a Melbourne suburbs group. Choosing one opens a schematic map of Melbourne over the globe (Port Phillip Bay, the Yarra and Maribyrnong rivers, the CBD and a pin per suburb at its real coordinates); pins can be chosen by mouse or keyboard, and "World globe" returns to the globe. Each suburb has its own live weather and is open from the start. Choosing a suburb opens its street view: the real streets (main roads named), every building footprint and the IoT home at the centre, about 500 m in each direction; the Melbourne / streets switch moves between the city map and the suburb. Street and building data © OpenStreetMap contributors (ODbL), bundled in `public/data/melbourne/` by `node scripts/fetch-osm.mjs`, so the game never contacts OpenStreetMap while playing.
+
+In the 3D world, each Melbourne suburb sits on a real street: a footpath, nature strip and kerb along the front, an asphalt road with a centre line, street trees and street lights that switch on at night, and neighbouring houses in the suburb's own style across the road and on either side (attached rows in Fitzroy and Richmond). Neighbours' windows glow at night, and the sky sits further out so clouds never sit among the houses.
 
 ## Weather and simulation clock
 
@@ -66,7 +78,7 @@ Live Weather retrieves Open-Meteo modelled current conditions for the selected c
 
 The Node server and built Worker provide a fixed-location, keyless weather proxy with a 15-minute cache, request coalescing and failure cooldown. Static previews can call the public Open-Meteo endpoint directly. Browser responses are cached too. Retrieval failure shows a labelled simulated fallback and connection explanation. Retry live weather is available on the globe and in the location panel. Recovery checks run every minute; successful responses remain cached for 15 minutes. Direct API recovery uses its own timeout and never bypasses explicit access/rate-limit responses. Provider Retry-After limits are respected. No API secrets are embedded.
 
-Rain, sunlight, wind and temperature gradually affect the environment. Practice Weather offers editable conditions and repeatable heatwave, storm, drought, frost and heavy-rain scenarios. Pause and 1×, 4×, 60× and 360× speeds use the same simulated clock for code, environment, routines and consumption. At 360× a full day takes about four minutes. High-speed day scenarios are explicitly Practice Weather, never a prediction of future live weather. The simulation uses fixed 200 ms substeps with worker backpressure.
+Rain, sunlight, wind and temperature gradually affect the environment. The 3D world shows the weather too: live cloud cover sets how many clouds are in the sky, day/night follows the city's real sun, precipitation sets how many raindrops fall and wind slants them, and the live weather type adds lightning for thunderstorms, haze for fog, and drifting snowflakes with a light ground covering for snow (snow also falls when it rains at or below 1 °C). Practice Weather has no weather type, so it uses the same rain, wind and temperature rules without those extras. Practice Weather offers editable conditions and repeatable heatwave, storm, drought, frost and heavy-rain scenarios. Pause and 1×, 4×, 60× and 360× speeds use the same simulated clock for code, environment, routines and consumption. At 360× a full day takes about four minutes. High-speed day scenarios are explicitly Practice Weather, never a prediction of future live weather. The simulation uses fixed 200 ms substeps with worker backpressure.
 
 ## Learning tools
 
@@ -115,6 +127,12 @@ Project export downloads a ZIP containing the selected source, SVG wiring diagra
 Import project… (Settings, or the Export tab) opens an exported ZIP, including one re-compressed or placed in a folder by an operating system. Exports now include a machine-readable `project.json`; older exports are recovered from their source, `components.json`, pin table and mission results (the mission is matched by title and opens at beginner difficulty). A preview shows the technician, mission, destination, controller, components, exported test results, and any wiring problems before anything changes.
 
 Every field is validated: components are rebuilt from the built-in catalogue (only pins and wiring state come from the file), code is limited to 30,000 characters, ZIPs to 4 MB and 64 files, checksums must match, and encrypted or ZIP64 archives are refused. Importing never grants badges or XP. Existing work on the same mission is kept as a backup in the Teacher dashboard, the import is recorded in the project's evidence, and a pass achieved with unedited imported code is shown as "Passed · imported code".
+
+## Unique homes and Victorian farms
+
+Every destination has its own property: a seeded combination of mirrored layout, greenhouse (glasshouse, polytunnel or lean-to), bed edging (timber, stone or corten), water tank (poly, corrugated steel or timber), fence (post-and-rail, picket, stone wall or hedge), path (gravel, brick, slate or sandstone), garden feature (birdbath, swing, fire pit, bench or sculpture), tree layout and climate foliage. No two destinations share a combination (checked by the tests), and the original Willowbrook home keeps its original look. Mission areas stay in the same places, so quests work everywhere. Mirrored homes are drawn through a left-right flip after the view transform, with movement keys and the minimap matching the screen.
+
+Four Victorian farms are grouped under Australia and on the globe: a Gippsland dairy farm (Warragul) with cows, a milking shed, a windmill and a dam; a Western District sheep farm (Hamilton) with a flock, a kelpie, a shearing shed and a windmill trough; a Yarra Valley orchard (Healesville) with apple rows, a hen house, chickens and ducks on the dam; and a Macedon Ranges horse property (Woodend) with horses, goats, stables and a round yard. Each farm has post-and-wire paddocks around the property, its own homestead, farm-themed quests and live weather. Animals wander, graze and stay inside their paddocks; windmills turn with the wind; both hold still with reduced motion.
 
 ## Day and night
 

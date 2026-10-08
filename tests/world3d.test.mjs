@@ -466,3 +466,35 @@ test('weather dims the night sky and storms flash with lightning', async () => {
   ).length;
   assert.ok(lit > 0 && lit < 30);
 });
+test('live weather types drive rain, snow, fog and lightning in the 3D world', async () => {
+  const { weatherEffects } = await import('../public/weather.js');
+  assert.deepEqual(weatherEffects({ weatherCode: 95 }), { thunder: true, fog: false, snow: false });
+  assert.deepEqual(weatherEffects({ weatherCode: 45 }), { thunder: false, fog: true, snow: false });
+  assert.equal(weatherEffects({ weatherCode: 73 }).snow, true);
+  assert.equal(weatherEffects({ rain: 20, outdoorTemp: -1 }).snow, true);
+  assert.equal(weatherEffects({ rain: 20, outdoorTemp: 8 }).snow, false);
+  const { world, state } = renderer(),
+    shown = () => world.model.rain.filter((d) => d.opacity > 0).length;
+  state.env = { ...state.env, rain: 5, wind: 0, outdoorTemp: 15, weatherCode: null };
+  world.render(1, 0.016);
+  const drizzle = shown();
+  state.env.rain = 90;
+  world.render(2, 0.016);
+  assert.ok(drizzle > 0 && shown() > drizzle, 'heavier rain shows more drops');
+  assert.equal(Math.abs(world.model.rain[0].rotation[2]), 0, 'no wind, no slant');
+  state.env.wind = 60;
+  world.render(3, 0.016);
+  assert.ok(world.model.rain[0].rotation[2] < 0, 'wind slants the rain');
+  state.env.outdoorTemp = -3;
+  world.render(4, 0.016);
+  const flake = world.model.rain.find((d) => d.opacity > 0);
+  assert.equal(flake.color, '#f4f7fb');
+  assert.equal(flake.size[1], flake.size[0]);
+  assert.equal(world.model.wetSurface.color, '#f1f5f8');
+  state.env = { ...state.env, rain: 0, outdoorTemp: 10, weatherCode: 45 };
+  world.render(5, 0.016);
+  assert.equal(world.haze, 1);
+  state.env = { ...state.env, rain: 30, wind: 5, cloud: 60, weatherCode: 95 };
+  world.render(0.05, 0.016);
+  assert.equal(world.flash, 1, 'a thunderstorm code brings lightning');
+});

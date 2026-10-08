@@ -73,7 +73,7 @@ export function addClouds(model) {
 }
 
 // `yaw` is the camera's orbit angle; the layout is rotated so "away" points away from it.
-export function updateClouds(clouds, env, t, reduced, yaw = 0.32, daylight = 1) {
+export function updateClouds(clouds, env, t, reduced, yaw = 0.32, daylight = 1, extra = 0) {
   const cos = Math.cos(yaw),
     sin = Math.sin(yaw),
     place = (across, away) => [across * cos + away * sin, -across * sin + away * cos];
@@ -91,7 +91,7 @@ export function updateClouds(clouds, env, t, reduced, yaw = 0.32, daylight = 1) 
         ? cloud.x
         : ((((cloud.x + t * cloud.drift * wind + 34) % 68) + 68) % 68) - 34;
     for (const { mesh, offset, size, tone } of cloud.puffs) {
-      const [x, z] = place(across + offset[0] * grow, cloud.z + offset[2] * grow);
+      const [x, z] = place(across + offset[0] * grow, cloud.z - extra + offset[2] * grow);
       mesh.pos[0] = x;
       mesh.pos[1] = cloud.y + offset[1] * grow;
       mesh.pos[2] = z;

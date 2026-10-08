@@ -65,6 +65,7 @@ export function normalizeWeather(data, location, now = Date.now()) {
     cloud: c.cloud_cover,
     isDay: !!c.is_day,
     condition: conditionName(c.weather_code),
+    code: c.weather_code,
     latitude: location.latitude,
     longitude: location.longitude,
   };
@@ -87,6 +88,7 @@ export function fallbackWeather(location, now = Date.now(), errorReason = null, 
     cloud: p.cloud,
     isDay: true,
     condition: 'Simulated fair weather',
+    code: null,
     latitude: location.latitude,
     longitude: location.longitude,
     errorReason,
@@ -115,7 +117,9 @@ export class WeatherService {
     Object.assign(this, {
       useProxy,
       proxyURL,
-      fetchImpl,
+      // Browsers reject window.fetch called as a method of another object ("Illegal
+      // invocation"), so always call it as a plain function.
+      fetchImpl: (...args) => fetchImpl(...args),
       storage,
       now,
       proxyTimeoutMs,
@@ -272,6 +276,19 @@ export function weatherTargets(weather) {
     light: weather.isDay ? clamp(95 - weather.cloud * 0.65, 18, 95) : 3,
     isDay: weather.isDay,
     precipitation: weather.precipitation,
+    weatherCode: Number.isFinite(weather.code) ? weather.code : null,
+  };
+}
+// What the 3D world should show: thunderstorms, fog and snow come from the WMO weather code
+// when live weather supplies one; snow also falls when it rains at freezing temperatures.
+export function weatherEffects({ weatherCode = null, rain = 0, outdoorTemp = 20 } = {}) {
+  const code = Number.isFinite(weatherCode) ? weatherCode : null;
+  return {
+    thunder: code !== null && code >= 95,
+    fog: code === 45 || code === 48,
+    snow:
+      (code !== null && ((code >= 71 && code <= 77) || code === 85 || code === 86)) ||
+      (rain > 0 && Number.isFinite(outdoorTemp) && outdoorTemp <= 1),
   };
 }
 export function advanceEnvironment(
@@ -310,7 +327,10 @@ export function advanceEnvironment(
     }
     next.isDay = target.isDay;
     next.precipitation = target.precipitation;
+    next.weatherCode = target.weatherCode;
   } else {
+    // Practice conditions have no reported weather type.
+    next.weatherCode = null;
     next.outdoorTemp = Number.isFinite(next.outdoorTemp) ? next.outdoorTemp : next.temp;
     next.wind = Number(next.wind || 0);
     next.cloud = Number(next.cloud || 0);

@@ -137,7 +137,8 @@
           </div>
           <div class="travel-summary" aria-label="Adventure highlights">
             <span
-              ><i class="summary-dot" aria-hidden="true"></i><strong>24</strong> destinations</span
+              ><i class="summary-dot" aria-hidden="true"></i
+              ><strong id="destinationCount">24</strong> destinations</span
             ><span><strong>2</strong> coding languages</span><span>Weather-powered worlds</span>
           </div>
           <div class="travel-layout">
@@ -159,8 +160,10 @@
                   hidden
                 ></canvas>
                 <div id="globeMarkers"></div>
+                <div class="metro-map" id="metroMap" hidden></div>
                 <div class="globe-caption">
-                  <span class="network-pulse"></span> 24 HOMES. ONE CONNECTED PLANET.
+                  <span class="network-pulse"></span> <span id="homeCount">24</span> HOMES. ONE
+                  CONNECTED PLANET.
                 </div>
                 <div class="globe-controls" id="globe-controls">
                   <button id="globeLeft" aria-label="Rotate globe left">←</button

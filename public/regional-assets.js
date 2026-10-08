@@ -1,13 +1,17 @@
 import { extraLocations } from './destination-catalog.js';
+import { melbourneSuburbs } from './melbourne.js';
+import { victorianFarms } from './farms.js';
+import { buildFarm } from './farm-assets.js';
 import { createWorldModel } from './world-model.js';
 import { addClouds } from './clouds.js';
 import { addSky } from './sky.js';
+import { homeVariant } from './home-variants.js';
 // Reusable geometry builders: courts, round enclosures, roof forms and planting.
 // Each destination has an explicit layout/material/style configuration.
 export function buildDestinationModel(id) {
-  const l = extraLocations.find((l) => l.id === id);
+  const l = [...extraLocations, ...melbourneSuburbs, ...victorianFarms].find((l) => l.id === id);
   if (!l) return null;
-  const m = createWorldModel(),
+  const m = createWorldModel(homeVariant(l)),
     { box, cylinder, sphere, mesh, roof, flatRoof } = m;
   m.region = id;
   m.architecture = l.style;
@@ -327,6 +331,17 @@ export function buildDestinationModel(id) {
       } else mesh('sphere', [x, 0.4, 8.7], [0.28, 0.14, 0.5], i % 2 ? '#6f9a52' : '#88ad5e');
     }
   }
+  buildMelbourneStyle(l, m);
+  if (l.farm) {
+    buildFarm(l, m);
+    // Paddocks reach well beyond the property, so the sky sits further out.
+    m.skyDistance = 24;
+  }
+  if (l.metro === 'Melbourne') {
+    addMelbourneStreet(l, m);
+    // The neighbourhood widens the scene, so the sky sits further out.
+    m.skyDistance = 16;
+  }
   if (l.planting === 'pond') {
     cylinder(3.5, 0.12, 6.8, 1.5, 0.2, '#a9bba5');
     m.pondWater = cylinder(3.5, 0.25, 6.8, 1.3, 0.04, '#7eb6bd');
@@ -340,4 +355,264 @@ export function buildDestinationModel(id) {
   m.sky = addSky(m);
   m.wetSurface = box(0, 0.025, 3, 29, 0.005, 18, '#6c9296', { opacity: 0 });
   return m;
+}
+
+// Melbourne suburb house styles. The base house spans x -13.1..1.4 and z -11..-1, with its
+// front wall at z -1 facing the garden. Roof parts use `roof`, so the Roof toggle applies.
+function buildMelbourneStyle(l, m) {
+  const { box, cylinder, roof, flatRoof, pitchedRoof } = m,
+    front = -1,
+    across = (from, to, step, draw) => {
+      for (let x = from; x <= to + 1e-9; x += step) draw(x);
+    },
+    weatherboards = (color, top = 1.45) => {
+      for (let y = 0.35; y <= top; y += 0.18) box(-5.85, y, front + 0.06, 14.5, 0.05, 0.06, color);
+    },
+    veranda = (depth, height, roofColor, postColor, spacing = 2.4, slope = 0.12) => {
+      roof('box', [-5.85, height, front + depth / 2], [14.8, 0.08, depth + 0.2], roofColor, [
+        slope,
+        0,
+        0,
+      ]);
+      across(-12.8, 1.2, spacing, (x) =>
+        cylinder(x, height / 2, front + depth, 0.06, height, postColor),
+      );
+    };
+  switch (l.style) {
+    case 'terrace':
+      // Slate roof, firewalls at each side, decorated parapet and a cast-iron lace veranda.
+      pitchedRoof('#4f5a63', { pitch: 0.5, ridge: '#3d464d' });
+      for (const x of [-13.25, 1.55]) box(x, 1.25, -6, 0.3, 2.3, 10.4, l.wall);
+      roof('box', [-5.85, 2.05, front - 0.05], [14.8, 0.55, 0.2], l.wall);
+      across(-12.4, 0.8, 1.6, (x) =>
+        roof('sphere', [x, 2.38, front - 0.05], [0.28, 0.28, 0.28], l.wall),
+      );
+      veranda(1.5, 1.6, '#76828a', '#2f3a40', 2.4, 0.08);
+      across(-12.8, 1.2, 0.3, (x) => box(x, 1.45, front + 1.5, 0.05, 0.18, 0.05, '#2f3a40'));
+      box(-5.85, 1.53, front + 1.5, 14.6, 0.04, 0.05, '#2f3a40');
+      break;
+    case 'federation':
+      // Terracotta hipped roof, projecting front gable, roughcast band and fretwork veranda.
+      pitchedRoof(l.accent, { pitch: 0.55, ridge: '#8c4a30' });
+      for (const side of [-1, 1])
+        roof('box', [-10.55 + side * 1.2, 2.25, front + 0.5], [2.8, 0.1, 1.6], l.accent, [
+          0,
+          0,
+          side * -0.6,
+        ]);
+      box(-10.55, 1.5, front + 0.04, 4.6, 0.3, 0.06, '#e6d8bd');
+      veranda(1.3, 1.5, '#a9573b', '#f1ece0', 2.2);
+      across(-8, 1.2, 0.45, (x) => box(x, 1.32, front + 1.3, 0.06, 0.22, 0.05, '#f1ece0'));
+      break;
+    case 'cottage-wb':
+      // Weatherboards, corrugated-iron gable, skillion veranda and a white picket fence.
+      weatherboards('#d6cfba');
+      pitchedRoof('#9aa4a8', { pitch: 0.5, ridge: '#7f898d' });
+      veranda(1.4, 1.45, '#a7b0b3', '#efece2', 3.2, 0.18);
+      across(-13, 1.3, 0.35, (x) => box(x, 0.32, 3.2, 0.08, 0.55, 0.05, '#f4f2ea'));
+      box(-5.85, 0.45, 3.2, 14.5, 0.06, 0.05, '#f4f2ea');
+      break;
+    case 'townhouse':
+      // Flat roof, a timber-battened upper storey and a glass balcony.
+      flatRoof('#3d4247', { y: 1.74 });
+      roof('box', [-3.5, 2.45, -6.2], [9.6, 1.3, 9.2], l.wall);
+      roof('box', [-3.5, 3.14, -6.2], [9.9, 0.1, 9.5], '#2f3438');
+      across(-8.1, 1.1, 0.35, (x) => roof('box', [x, 2.45, -1.55], [0.1, 1.2, 0.06], l.accent));
+      roof('box', [-3.5, 2.0, -0.95], [6.5, 0.55, 0.05], '#bfdbe6');
+      break;
+    case 'creambrick':
+      // Cream brick, a low hipped terracotta roof and a wrought-iron porch.
+      pitchedRoof(l.accent, { pitch: 0.32, overhang: 0.5, ridge: '#8b4a31' });
+      roof('box', [-1.1, 1.45, front + 0.8], [3.6, 0.08, 1.8], l.accent);
+      for (const x of [-2.7, 0.5]) cylinder(x, 0.72, front + 1.6, 0.05, 1.4, '#2e3134');
+      across(-2.6, 0.4, 0.3, (x) => box(x, 0.55, front + 1.6, 0.04, 0.5, 0.04, '#2e3134'));
+      break;
+    case 'artdeco':
+      // Flat roof with a stepped parapet, speed-line bands and a rounded front corner.
+      flatRoof(l.wall, { parapet: l.wall });
+      roof('box', [-5.85, 2.3, front - 0.05], [5, 0.5, 0.25], l.wall);
+      roof('box', [-5.85, 2.6, front - 0.05], [2.4, 0.3, 0.25], l.wall);
+      for (const y of [1.35, 1.5, 1.65]) box(-5.85, y, front + 0.06, 14.5, 0.05, 0.05, l.accent);
+      cylinder(1.4, 0.95, front, 0.55, 1.7, l.wall);
+      break;
+    case 'postwar-wb': {
+      // Weatherboards, a low corrugated gable, a small porch and a rotary clothesline.
+      weatherboards('#c4ccb1');
+      pitchedRoof('#868e90', { pitch: 0.36, ridge: '#6f7779' });
+      roof('box', [-5.8, 1.4, front + 0.7], [3, 0.07, 1.4], '#969ea0', [0.15, 0, 0]);
+      const [cx, cz] = [-9, 6];
+      cylinder(cx, 1.0, cz, 0.05, 2.0, '#9aa0a2');
+      for (const angle of [0, Math.PI / 2])
+        box(cx, 1.95, cz, 2.6, 0.04, 0.04, '#9aa0a2', { rotation: [0, angle, 0] });
+      for (const r of [0.5, 0.9, 1.25])
+        for (const angle of [0, Math.PI / 2, Math.PI, Math.PI * 1.5])
+          box(
+            cx + Math.cos(angle) * r,
+            1.93,
+            cz + Math.sin(angle) * r,
+            0.02,
+            0.02,
+            r * 1.4,
+            '#d8d8d0',
+            {
+              rotation: [0, angle, 0],
+            },
+          );
+      break;
+    }
+    case 'beachhouse':
+      // Weatherboards, a skillion roof and a raised timber deck with a balustrade.
+      weatherboards('#a7bcc6');
+      roof('box', [-5.85, 2.05, -6], [15.2, 0.12, 11], '#d9d6cc', [0.14, 0, 0]);
+      box(-5.85, 0.3, front + 1.5, 14.6, 0.12, 2.8, '#b28b62');
+      for (const x of [-13, -5.85, 1.3]) box(x, 0.15, front + 2.8, 0.15, 0.3, 0.15, '#8f6e4c');
+      across(-13, 1.3, 0.4, (x) => box(x, 0.65, front + 2.85, 0.05, 0.6, 0.05, l.accent));
+      box(-5.85, 0.97, front + 2.85, 14.6, 0.06, 0.08, l.accent);
+      break;
+  }
+}
+
+// A Melbourne street around the property: footpaths, nature strips, kerbs, a road with a centre
+// line, street trees and lights, and neighbouring houses in the suburb's style. Neighbours sit
+// across the road and on both sides, outside the playable property.
+const NEIGHBOUR_LOOK = {
+  terrace: {
+    attached: true,
+    roof: 'gable',
+    walls: ['#c9a98a', '#b9886a', '#d8c3a5', '#a77e66'],
+    roofs: ['#4f5a63'],
+  },
+  federation: {
+    roof: 'gable',
+    walls: ['#a6573f', '#b2644a', '#9a4f3a'],
+    roofs: ['#b5633f', '#a9573b'],
+  },
+  'cottage-wb': {
+    roof: 'gable',
+    walls: ['#e4ddc9', '#d8e0d4', '#e8d9c4', '#cfd9dd'],
+    roofs: ['#9aa4a8', '#8a9497'],
+  },
+  townhouse: {
+    attached: true,
+    roof: 'flat',
+    upper: true,
+    walls: ['#5d676f', '#7a6f66', '#4f5a60', '#8a8f91'],
+    roofs: ['#3d4247'],
+  },
+  creambrick: {
+    roof: 'hip',
+    walls: ['#e7d6a6', '#dccb98', '#efe0b6'],
+    roofs: ['#a85a3c', '#9c4f34'],
+  },
+  artdeco: {
+    roof: 'flat',
+    walls: ['#ead7c1', '#e3cfb6', '#d9e2dc', '#f0e2cf'],
+    roofs: ['#cbbba6'],
+  },
+  'postwar-wb': {
+    roof: 'gable',
+    walls: ['#d5dcc2', '#e2dcc8', '#c9d6d8', '#dfd3bd'],
+    roofs: ['#868e90', '#7d8789'],
+  },
+  beachhouse: {
+    roof: 'skillion',
+    walls: ['#b9cbd3', '#d6dcd5', '#c4d3c9', '#e1d6c3'],
+    roofs: ['#d9d6cc', '#c8ccc8'],
+  },
+};
+function addMelbourneStreet(l, m) {
+  const look = NEIGHBOUR_LOOK[l.style];
+  if (!look) return;
+  const { box, cylinder, sphere, windows } = m,
+    grass = '#a5bd87',
+    pick = (list, i) => list[i % list.length];
+  // Ground beyond the property: the road and the opposite side, and the lots either side.
+  box(0, -0.53, 23.6, 69, 1, 19.7, '#a9b585');
+  box(0, -0.035, 23.6, 68.8, 0.1, 19.5, grass);
+  for (const side of [-1, 1]) {
+    box(side * 25.65, -0.53, 0, 17.7, 1, 27.5, '#a9b585');
+    box(side * 25.65, -0.035, 0, 17.5, 0.1, 27.3, grass);
+  }
+  // Footpath and kerb on the property side; road with a dashed centre line; far side.
+  box(0, 0.025, 12.9, 33.6, 0.03, 1.2, '#d8d3c6');
+  box(0, 0.035, 13.75, 68.8, 0.09, 0.22, '#c9c8c2');
+  box(0, 0.02, 17.25, 68.8, 0.04, 6.8, '#4b5157');
+  for (let x = -32; x <= 32; x += 4) box(x, 0.045, 17.25, 2, 0.01, 0.14, '#f2f0e6');
+  box(0, 0.035, 20.75, 68.8, 0.09, 0.22, '#c9c8c2');
+  box(0, 0.025, 21.6, 68.8, 0.03, 1.2, '#d8d3c6');
+  box(0, 0.03, 12.9, 3, 0.04, 1.8, '#cfcabd'); // crossover at the front gate
+  // Street trees and lights along both nature strips.
+  for (const [z, offset] of [
+    [12.25, 0],
+    [22.75, 3.5],
+  ])
+    for (let x = -28 + offset; x <= 28; x += 8) {
+      if (z < 13 && Math.abs(x) > 16) continue;
+      if (Math.abs(x) < 2.5) continue;
+      cylinder(x, 0.9, z, 0.12, 1.8, '#7a6249');
+      sphere(x, 2.2, z, 1.1, '#6f9a5c');
+    }
+  for (const [x, z] of [
+    [-10, 13.4],
+    [10, 13.4],
+    [-24, 21.1],
+    [0, 21.1],
+    [24, 21.1],
+  ]) {
+    cylinder(x, 1.4, z, 0.06, 2.8, '#6c7377');
+    box(x, 2.85, z + (z < 17 ? 0.35 : -0.35), 0.25, 0.1, 0.7, '#6c7377');
+    box(x, 2.78, z + (z < 17 ? 0.6 : -0.6), 0.22, 0.06, 0.22, '#f3e7c3', { streetLight: true });
+  }
+  // Neighbouring houses: fronts face the street.
+  const house = (x, z, width, depth, facing, i) => {
+    const wall = pick(look.walls, i),
+      roofColor = pick(look.roofs, i),
+      height = 1.6,
+      frontZ = z + (facing * depth) / 2;
+    box(x, height / 2 + 0.05, z, width, height, depth, wall, { neighbour: true });
+    if (look.roof === 'flat') {
+      box(x, height + 0.12, z, width + 0.2, 0.16, depth + 0.2, roofColor);
+      if (look.upper) box(x - width * 0.15, height + 0.8, z, width * 0.7, 1.3, depth * 0.85, wall);
+    } else if (look.roof === 'skillion')
+      box(x, height + 0.35, z, width + 0.5, 0.12, depth + 0.6, roofColor, {
+        rotation: [facing * 0.14, 0, 0],
+      });
+    else {
+      const pitch = look.roof === 'hip' ? 0.32 : 0.5,
+        run = depth / 2 + 0.3,
+        rise = run * Math.tan(pitch);
+      for (const side of [-1, 1])
+        box(
+          x,
+          height + rise / 2,
+          z + (side * run) / 2,
+          width + 0.4,
+          0.1,
+          run / Math.cos(pitch),
+          roofColor,
+          {
+            rotation: [side * pitch, 0, 0],
+          },
+        );
+    }
+    // Front door and windows (windows glow at night like the property's).
+    box(x - width * 0.25, 0.6, frontZ + facing * 0.03, 0.55, 1.0, 0.05, '#5b4636');
+    windows.push(
+      box(x + width * 0.15, 1.0, frontZ + facing * 0.03, width * 0.35, 0.6, 0.05, '#8abec5', {
+        opacity: 0.68,
+      }),
+    );
+    if (!look.attached)
+      box(x, 0.3, frontZ + facing * 1.6, width + 1.6, 0.4, 0.08, i % 2 ? '#f1ede2' : '#8d7a63');
+  };
+  const across = look.attached ? 4.8 : 11,
+    width = look.attached ? 4.6 : 7.4;
+  let i = 0;
+  for (let x = -30 + across / 2; x <= 30; x += across) house(x, 27.2, width, 6.4, -1, i++);
+  for (const side of [-1, 1]) {
+    // Beside the property: houses facing the same street, set back from the footpath.
+    if (look.attached) {
+      for (let k = 0; k < 3; k++) house(side * (19.6 + k * across), -2.5, width, 9, 1, i++);
+    } else house(side * 25.5, -1.5, width + 1.5, 8.5, 1, i++);
+  }
 }

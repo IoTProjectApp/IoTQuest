@@ -1,4 +1,6 @@
 import { extraLocations } from './destination-catalog.js';
+import { melbourneSuburbs } from './melbourne.js';
+import { victorianFarms } from './farms.js';
 const initialLocations = [
   {
     id: 'kyoto',
@@ -132,6 +134,8 @@ export const locations = [
     unlockAfter: 0,
   })),
   ...extraLocations,
+  ...melbourneSuburbs,
+  ...victorianFarms,
 ];
 export function isLocationUnlocked(state, location) {
   return !!(
@@ -240,7 +244,8 @@ function regionalBaseMissions(base, location) {
         );
       }
     }
-    if (!['kyoto', 'marrakech', 'brisbane'].includes(location.id)) {
+    if (location.missionNames) m.title = location.missionNames[index];
+    else if (!['kyoto', 'marrakech', 'brisbane'].includes(location.id)) {
       m.title = [
         location.city + ' Path Lighting',
         'Welcome to ' + location.city,

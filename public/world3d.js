@@ -14,9 +14,13 @@ import {
 import { createWorldModel } from './world-model.js';
 import { createRegionalModel } from './regions.js';
 import { updateClouds } from './clouds.js';
+// Left-right flip used to draw mirrored homes.
+const MIRROR = new Float32Array([-1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]);
+import { weatherEffects } from './weather.js';
 import { updateSky, lightningFlash } from './sky.js';
+import { updateAnimals } from './animals.js';
 const VERTEX = `attribute vec3 aPosition; attribute vec3 aNormal; uniform mat4 uModel; uniform mat4 uViewProjection; uniform mat3 uNormal; varying vec3 vNormal; varying vec3 vWorld; void main(){vec4 world=uModel*vec4(aPosition,1.0);vWorld=world.xyz;vNormal=normalize(uNormal*aNormal);gl_Position=uViewProjection*world;}`;
-const FRAGMENT = `precision mediump float; varying vec3 vNormal; varying vec3 vWorld; uniform vec4 uColor; uniform float uDay; uniform float uEmission; uniform float uWet; uniform vec3 uEye; uniform vec3 uFog; uniform vec3 uLights[8]; uniform vec3 uLightColor[8]; void main(){vec3 n=normalize(vNormal);float sun=max(0.0,dot(n,normalize(vec3(-0.5,1.0,0.65))));float ambient=mix(0.19,0.68,uDay);vec3 lit=uColor.rgb*(ambient+sun*mix(0.12,0.37,uDay));for(int i=0;i<8;i++){float d=distance(vWorld,uLights[i]);float fall=max(0.0,1.0-d/4.0);lit+=uColor.rgb*uLightColor[i]*fall*fall*1.7;}lit=mix(lit,lit*0.83+vec3(0.03,0.07,0.09),uWet*max(0.0,n.y)*0.3);lit=mix(lit,uColor.rgb*1.15,clamp(uEmission,0.0,1.0));float fog=smoothstep(38.0,90.0,distance(vWorld,uEye));gl_FragColor=vec4(mix(lit,uFog,fog*.48),uColor.a);}`;
+const FRAGMENT = `precision mediump float; varying vec3 vNormal; varying vec3 vWorld; uniform vec4 uColor; uniform float uDay; uniform float uEmission; uniform float uWet; uniform vec3 uEye; uniform vec3 uFog; uniform float uHaze; uniform vec3 uLights[8]; uniform vec3 uLightColor[8]; void main(){vec3 n=normalize(vNormal);float sun=max(0.0,dot(n,normalize(vec3(-0.5,1.0,0.65))));float ambient=mix(0.19,0.68,uDay);vec3 lit=uColor.rgb*(ambient+sun*mix(0.12,0.37,uDay));for(int i=0;i<8;i++){float d=distance(vWorld,uLights[i]);float fall=max(0.0,1.0-d/4.0);lit+=uColor.rgb*uLightColor[i]*fall*fall*1.7;}lit=mix(lit,lit*0.83+vec3(0.03,0.07,0.09),uWet*max(0.0,n.y)*0.3);lit=mix(lit,uColor.rgb*1.15,clamp(uEmission,0.0,1.0));float fog=smoothstep(mix(38.0,12.0,uHaze),mix(90.0,52.0,uHaze),distance(vWorld,uEye));gl_FragColor=vec4(mix(lit,uFog,fog*mix(.48,.88,uHaze)),uColor.a);}`;
 // Parsed colours are cached (read-only) because objects are recoloured every frame.
 const colorCache = new Map();
 function color(hex) {
@@ -222,6 +226,7 @@ export class World3D {
       'uWet',
       'uEye',
       'uFog',
+      'uHaze',
       'uLights[0]',
       'uLightColor[0]',
     ])
@@ -326,12 +331,17 @@ export class World3D {
     this.upgradeSignature = null;
     this.lastSimClockMs = undefined;
     this.model = createRegionalModel(id);
+    this.streetLights = null;
     this.deviceSignature = '';
     this.deviceObjects = [];
     this.lastPlayer = null;
   }
   move(player, dir, amount) {
-    return resolveMove(player, dir, amount, this.yaw, this.model.colliders);
+    if (!this.model.mirrored)
+      return resolveMove(player, dir, amount, this.yaw, this.model.colliders);
+    // Screen left/right are swapped on a mirrored home, and the camera angle is mirrored.
+    const swapped = dir === 'left' ? 'right' : dir === 'right' ? 'left' : dir;
+    return resolveMove(player, swapped, amount, -this.yaw, this.model.colliders);
   }
   findFree(player) {
     return findFree(player, this.model.colliders);
@@ -610,27 +620,79 @@ export class World3D {
         (reduced ? 0 : Math.sin(t * 1.2 + item.base[2]) * 0.12 * Math.min(2, (env.wind || 0) / 20));
     }
     // Day and night: sun, moon and stars, clouds that darken, and windows that glow at night.
-    const daylight = clamp((env.light ?? 70) / 65, 0, 1);
-    this.flash = lightningFlash(env, this.realTime ?? t, reduced);
-    updateClouds(this.model.clouds || [], env, t, reduced, this.yaw, daylight);
+    const daylight = clamp((env.light ?? 70) / 65, 0, 1),
+      effects = weatherEffects(env),
+      rainLevel = clamp(env.rain || 0, 0, 100);
+    this.haze = effects.fog ? 1 : 0;
+    this.flash = lightningFlash({ ...env, thunder: effects.thunder }, this.realTime ?? t, reduced);
+    const skyDistance = this.model.skyDistance || 0;
+    const skyYaw = this.model.mirrored ? -this.yaw : this.yaw;
+    updateClouds(this.model.clouds || [], env, t, reduced, skyYaw, daylight, skyDistance);
     // Clouds light up from inside during a lightning flash.
     for (const cloud of this.model.clouds || [])
       for (const { mesh } of cloud.puffs) mesh.emission = this.flash * 0.7;
-    updateSky(this.model.sky, daylight, t, reduced, this.yaw, env);
+    updateSky(this.model.sky, daylight, t, reduced, skyYaw, env, skyDistance);
+    // Farm animals roam and graze in real time; windmills turn with the wind.
+    const realDt = Math.min(0.1, Math.max(0, dt || 0));
+    updateAnimals(this.model.animals, this.realTime ?? t, realDt, reduced || state.paused);
+    for (const mill of this.model.windmills || []) {
+      if (!reduced) mill.angle += realDt * (0.6 + Math.min(4, (env.wind || 0) / 12));
+      mill.blades.forEach((blade, i) => {
+        const a = mill.angle + (i / mill.blades.length) * Math.PI * 2;
+        blade.pos[0] = mill.hub[0] + Math.cos(a) * 0.65;
+        blade.pos[1] = mill.hub[1] + Math.sin(a) * 0.65;
+        blade.pos[2] = mill.hub[2];
+        blade.rotation[2] = a - Math.PI / 2;
+      });
+    }
+    // Street lights come on after dusk.
+    this.streetLights ??= this.model.objects.filter((o) => o.streetLight);
+    for (const light of this.streetLights) light.emission = daylight < 0.4 ? 1 : 0;
     for (const pane of this.model.windows || []) {
       const lit = daylight < 0.35;
       pane.color = lit ? '#ffd98a' : '#8abec5';
       pane.emission = lit ? 0.75 : 0;
       pane.opacity = lit ? 0.95 : 0.68;
     }
-    if (this.model.wetSurface) this.model.wetSurface.opacity = (env.wetness || 0) * 0.13;
+    if (this.model.wetSurface) {
+      // Snow lies as a light covering; otherwise wet ground darkens slightly.
+      this.model.wetSurface.color = effects.snow ? '#f1f5f8' : '#6c9296';
+      this.model.wetSurface.opacity = effects.snow
+        ? 0.3 + Math.min(0.2, rainLevel / 200)
+        : (env.wetness || 0) * 0.13;
+    }
+    // Rain and snow: heavier precipitation shows more drops, wind slants them, and at freezing
+    // temperatures (or a snow weather code) drops become slowly drifting flakes.
+    const shown =
+        rainLevel > 0 ? Math.ceil(this.model.rain.length * Math.min(1, 0.2 + rainLevel / 50)) : 0,
+      shear = Math.min(1.2, (env.wind || 0) / 40),
+      night = 1 - daylight;
     for (let i = 0; i < this.model.rain.length; i++) {
       const drop = this.model.rain[i];
-      // At night, rain catches the light so it stays visible against the dark sky.
-      drop.opacity = env.rain > 0 ? 0.25 + env.rain / 200 + (1 - daylight) * 0.2 : 0;
-      drop.color = daylight < 0.5 ? '#c9dcf2' : '#b9dbe5';
-      drop.emission = (1 - daylight) * 0.45 + (this.flash || 0) * 0.5;
-      drop.pos[1] = reduced ? 2.5 : 1 + ((((i * 0.47 - t * 6) % 5) + 5) % 5);
+      drop.base ??= [...drop.pos];
+      const falling = i < shown;
+      if (effects.snow) {
+        const fall = reduced ? 0.5 : ((((i * 0.47 - t * 0.9) % 5) + 5) % 5) / 5;
+        drop.size[0] = drop.size[1] = drop.size[2] = 0.15;
+        drop.color = '#f4f7fb';
+        drop.rotation[2] = 0;
+        drop.pos[1] = 1 + fall * 5;
+        drop.pos[0] =
+          drop.base[0] + (reduced ? 0 : Math.sin(t * 1.3 + i) * 0.25) + (1 - fall) * shear * 1.5;
+        drop.opacity = falling ? 0.9 : 0;
+        drop.emission = night * 0.5 + (this.flash || 0) * 0.5;
+      } else {
+        const fall = reduced ? 0.3 : ((((i * 0.47 - t * 6) % 5) + 5) % 5) / 5;
+        drop.size[0] = drop.size[2] = 0.04;
+        drop.size[1] = 0.55;
+        // Blue-grey streaks by day; at night rain catches the light against the dark sky.
+        drop.color = daylight < 0.5 ? '#c9dcf2' : '#6f93ad';
+        drop.rotation[2] = -shear * 0.5;
+        drop.pos[1] = 1 + fall * 5;
+        drop.pos[0] = drop.base[0] + (1 - fall) * shear * 1.2;
+        drop.opacity = falling ? 0.45 + rainLevel / 250 + night * 0.15 : 0;
+        drop.emission = night * 0.45 + (this.flash || 0) * 0.5;
+      }
     }
     const door = this.model.dynamic.gate;
     door.pos = [
@@ -678,14 +740,25 @@ export class World3D {
     const fittedDistance =
       this.distance * (this.overview ? Math.max(1, 1.6 / (width / height)) : 1);
     this.currentDistance += (fittedDistance - this.currentDistance) * smooth;
+    // Mirrored homes are drawn through a left-right flip after the view transform: the camera
+    // orbits the flipped scene as usual while the model, animations and game logic stay as built.
     const r = this.currentDistance,
-      eye = [
-        this.currentTarget[0] + Math.sin(this.yaw) * Math.cos(this.pitch) * r,
-        this.currentTarget[1] + Math.sin(this.pitch) * r,
-        this.currentTarget[2] + Math.cos(this.yaw) * Math.cos(this.pitch) * r,
-      ];
+      mirrored = !!this.model.mirrored,
+      flip = (p) => (mirrored ? [-p[0], p[1], p[2]] : p),
+      target = flip(this.currentTarget),
+      viewEye = [
+        target[0] + Math.sin(this.yaw) * Math.cos(this.pitch) * r,
+        target[1] + Math.sin(this.pitch) * r,
+        target[2] + Math.cos(this.yaw) * Math.cos(this.pitch) * r,
+      ],
+      // The camera position in model space, for fog and transparency sorting.
+      eye = flip(viewEye);
     this.eye = eye;
-    this.matrix = multiply(perspective(0.78, width / height), lookAt(eye, this.currentTarget));
+    const view = lookAt(viewEye, target);
+    this.matrix = multiply(
+      perspective(0.78, width / height),
+      mirrored ? multiply(view, MIRROR) : view,
+    );
     // Lightning briefly lights the whole scene, most visibly at night.
     const flash = this.flash || 0,
       day = Math.max(clamp(s.env.light / 65, 0.04, 1), flash * 0.85),
@@ -702,6 +775,7 @@ export class World3D {
     gl.uniform1f(this.uniforms.uWet, s.env.wetness || 0);
     gl.uniform3fv(this.uniforms.uEye, eye);
     gl.uniform3fv(this.uniforms.uFog, fog);
+    gl.uniform1f(this.uniforms.uHaze, this.haze || 0);
     const lights = [],
       lightColors = [];
     if (this.model.lamps.some((l) => l.emission))

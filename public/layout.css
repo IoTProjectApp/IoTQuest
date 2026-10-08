@@ -279,3 +279,7 @@
     display: none;
   }
 }
+/* Mirrored homes: flip the minimap so it matches the 3D view. */
+.minimap.mirrored {
+  transform: scaleX(-1);
+}

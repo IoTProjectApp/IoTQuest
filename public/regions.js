@@ -4,13 +4,16 @@ import { buildDestinationModel } from './regional-assets.js';
 import { createWorldModel } from './world-model.js';
 import { addClouds } from './clouds.js';
 import { addSky } from './sky.js';
+import { homeVariant } from './home-variants.js';
+import { locationById } from './locations.js';
 export function createRegionalModel(id) {
   const destination = buildDestinationModel(id);
   if (destination) return destination;
-  const m = createWorldModel();
+  const m = createWorldModel(id && id !== 'legacy' ? homeVariant(locationById(id)) : {});
   m.region = id || 'legacy';
   m.floorHeight = (x, z) => (x > -13.1 && x < 1.4 && z > -11 && z < -1 ? 0.23 : 0);
   if (!id || id === 'legacy') {
+    m.wetSurface = m.box(0, 0.025, 3, 29, 0.005, 18, '#6c9296', { opacity: 0 });
     m.clouds = addClouds(m);
     m.sky = addSky(m);
     m.pitchedRoof('#a8735a', { ridge: '#8b5d48' });

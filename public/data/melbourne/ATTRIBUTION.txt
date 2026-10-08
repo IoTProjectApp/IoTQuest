@@ -1,0 +1,3 @@
+Street and building data in this folder © OpenStreetMap contributors.
+Available under the Open Database License (ODbL): https://www.openstreetmap.org/copyright
+Extracted with the Overpass API by scripts/fetch-osm.mjs (500 m around each suburb centre).

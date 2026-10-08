@@ -2139,3 +2139,241 @@ dialog::backdrop {
 .day-toggle[aria-pressed='true'] #dayIcon {
   color: #e9dda8;
 }
+
+/* Melbourne suburb map, drawn over the globe in the atlas's own colours (both themes). */
+.metro-map {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  display: flex;
+  flex-direction: column;
+  padding: 12px 18px 14px;
+  background: radial-gradient(ellipse at 45% 38%, #173c50, #101f35 65%, #101b2d);
+}
+.metro-map[hidden] {
+  display: none;
+}
+.metro-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 12px;
+  color: #dbebe1;
+  font-size: 14px;
+}
+.metro-head span {
+  color: #8fb1bd;
+  font-size: 11px;
+}
+.metro-head .text-btn {
+  margin-left: auto;
+  color: #c0d1c9;
+  border: 1px solid #70979850;
+  border-radius: 6px;
+  padding: 5px 10px;
+  font-size: 11px;
+}
+.metro-canvas {
+  flex: 1;
+  min-height: 0;
+  margin-top: 8px;
+}
+.metro-canvas svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  font-family: 'DM Sans', sans-serif;
+}
+.metro-land {
+  fill: #1b3a46;
+}
+.metro-bay {
+  fill: #0d2232;
+  stroke: #3d7187;
+  stroke-width: 2;
+}
+.metro-river {
+  fill: none;
+  stroke: #4f93b0;
+  stroke-width: 3.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.metro-water-label,
+.metro-river-label {
+  fill: #6fa3b7;
+  font-size: 15px;
+  font-style: italic;
+}
+.metro-cbd {
+  fill: #e9d9a8;
+  stroke: #0f2534;
+  stroke-width: 2;
+}
+.metro-cbd-label {
+  fill: #e9d9a8;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 1px;
+}
+.metro-scale path,
+.metro-north path {
+  fill: none;
+  stroke: #8fb1bd;
+  stroke-width: 2;
+}
+.metro-north path {
+  fill: #8fb1bd;
+}
+.metro-scale text,
+.metro-north text {
+  fill: #8fb1bd;
+  font-size: 13px;
+  text-anchor: middle;
+}
+.metro-pin {
+  cursor: pointer;
+  outline: none;
+}
+.metro-pin-hit {
+  fill: transparent;
+}
+.metro-pin circle:not(.metro-pin-hit) {
+  fill: #79e2c0;
+  stroke: #0f2534;
+  stroke-width: 2.5;
+}
+.metro-pin text {
+  fill: #dbebe1;
+  font-size: 14px;
+  font-weight: 600;
+  paint-order: stroke;
+  stroke: #10202f;
+  stroke-width: 4px;
+}
+.metro-pin:hover circle:not(.metro-pin-hit),
+.metro-pin:focus-visible circle:not(.metro-pin-hit) {
+  fill: #b7f5e0;
+}
+.metro-pin:focus-visible .metro-pin-hit {
+  stroke: #b7f5e0;
+  stroke-width: 2;
+}
+.metro-pin.selected circle:not(.metro-pin-hit) {
+  fill: #ffd56b;
+  r: 7.5px;
+}
+.metro-pin.selected text {
+  fill: #ffe6a3;
+}
+.metro-group {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: 12px 0 6px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: #7380aa;
+}
+.location-choice.selected {
+  border-color: #6575dd;
+}
+.globe-city.metro {
+  border-color: #79e2c0;
+}
+.metro-tabs {
+  display: inline-flex;
+  margin-left: auto;
+  padding: 2px;
+  gap: 2px;
+  border: 1px solid #70979850;
+  border-radius: 7px;
+}
+.metro-tabs button {
+  padding: 4px 10px;
+  font: inherit;
+  font-size: 11px;
+  color: #a9c2ca;
+  background: none;
+  border: 0;
+  border-radius: 5px;
+  cursor: pointer;
+}
+.metro-tabs button[aria-pressed='true'] {
+  color: #10202f;
+  background: #79e2c0;
+  font-weight: 600;
+}
+.metro-head .metro-tabs + .text-btn {
+  margin-left: 0;
+}
+.metro-head a {
+  color: #8fd1bc;
+}
+.street-note {
+  margin: 40px auto;
+  max-width: 420px;
+  text-align: center;
+  color: #a9c2ca;
+  font-size: 13px;
+}
+.street-land {
+  fill: #16313c;
+}
+.street-buildings {
+  fill: #3e6574;
+  stroke: #27495a;
+  stroke-width: 0.6;
+}
+.street-road {
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.street-road-0 {
+  stroke: #e9d9a8;
+  stroke-width: 14;
+}
+.street-road-1 {
+  stroke: #c6d3d8;
+  stroke-width: 10;
+}
+.street-road-2 {
+  stroke: #8fb1bd;
+  stroke-width: 7;
+}
+.street-road-3 {
+  stroke: #5d8594;
+  stroke-width: 3.5;
+}
+.street-label {
+  fill: #eef5f1;
+  font-size: 22px;
+  font-weight: 600;
+  text-anchor: middle;
+  dominant-baseline: middle;
+  paint-order: stroke;
+  stroke: #10202f;
+  stroke-width: 4px;
+}
+.street-home {
+  fill: #ffd56b;
+  stroke: #10202f;
+  stroke-width: 3;
+}
+.street-home-ring {
+  fill: #ffd56b22;
+  stroke: #ffd56b;
+  stroke-width: 2;
+}
+.street-home-label {
+  fill: #ffe6a3;
+  font-size: 24px;
+  font-weight: 700;
+  text-anchor: middle;
+  paint-order: stroke;
+  stroke: #10202f;
+  stroke-width: 4px;
+}

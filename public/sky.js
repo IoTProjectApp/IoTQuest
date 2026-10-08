@@ -50,7 +50,8 @@ export function addSky(model) {
 
 // Storm lightning: a quick double flash every few seconds of real time (none with reduced motion).
 export function lightningFlash(env, seconds, reduced) {
-  const stormy = (env.rain || 0) >= 55 && ((env.wind || 0) >= 30 || (env.cloud || 0) >= 85);
+  const stormy =
+    env.thunder || ((env.rain || 0) >= 55 && ((env.wind || 0) >= 30 || (env.cloud || 0) >= 85));
   if (!stormy || reduced) return 0;
   const phase = (seconds % 6.7) / 6.7;
   return phase < 0.015 ? 1 : phase > 0.03 && phase < 0.045 ? 0.6 : 0;
@@ -58,11 +59,12 @@ export function lightningFlash(env, seconds, reduced) {
 
 // `daylight` is 0 at night and 1 in full day; `yaw` is the camera's orbit angle. Cloud cover
 // and rain hide the stars first, then dim the moon and sun.
-export function updateSky(sky, daylight, t, reduced, yaw = 0.32, env = {}) {
+export function updateSky(sky, daylight, t, reduced, yaw = 0.32, env = {}, extra = 0) {
   if (!sky) return;
   const cos = Math.cos(yaw),
     sin = Math.sin(yaw),
-    place = (mesh, [across, height, away]) => {
+    place = (mesh, [across, height, distance]) => {
+      const away = distance - extra;
       mesh.pos[0] = across * cos + away * sin;
       mesh.pos[1] = height;
       mesh.pos[2] = -across * sin + away * cos;

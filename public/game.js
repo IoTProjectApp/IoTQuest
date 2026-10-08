@@ -2885,6 +2885,7 @@ function settings() {
       (globalThis.iotQuestInstall?.available()
         ? '<div class="setting-row"><span>Install app<small>Add IoT Quest to this device so it opens in its own window and works offline.</small></span><button class="outline" id="installApp">Install</button></div>'
         : '') +
+      '<div class="setting-row"><span>Get the latest version<small>Forget the saved offline copy and load the newest IoT Quest. Your progress is kept.</small></span><button class="outline" id="freshStart">Reload latest</button></div>' +
       '<div class="guide"><p>Progress is stored in this browser. Export your project to keep a portable copy.</p></div><div class="bench-actions"><button class="outline" id="exportSettings">Export project</button><button class="outline" id="importSettings">Import project…</button></div><button class="outline" id="resetProgress">Reset local progress…</button>',
   );
   $('resetProgress').onclick = () => {
@@ -2900,6 +2901,10 @@ function settings() {
         toast('IoT Quest is installed on this device.');
       $('installApp').closest('.setting-row').remove();
     };
+  $('freshStart').onclick = () => {
+    save();
+    globalThis.iotQuestFreshStart?.() ?? location.reload();
+  };
   $('themeSetting').value = state.theme;
   $('themeSetting').onchange = () => setTheme($('themeSetting').value);
   $('reducedSetting').onchange = () => {

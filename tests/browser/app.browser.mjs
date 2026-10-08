@@ -369,3 +369,70 @@ test('a returning visitor switches to a new deploy whole, never a mix of two rel
     server.close();
   }
 });
+
+// Browsers that still run the offline code from before the update scheme (it mixed deploys and
+// has no reload bar) are taken over at once, even with another tab open.
+test('pages on the earlier offline code move to a new deploy on their next visit', async () => {
+  const { mkdtemp, cp, readFile, writeFile, appendFile } = await import('node:fs/promises');
+  const { tmpdir } = await import('node:os');
+  const { join, extname } = await import('node:path');
+  const http = await import('node:http');
+  execFileSync(process.execPath, ['scripts/build.mjs']);
+  const root = await mkdtemp(join(tmpdir(), 'iotquest-legacy-'));
+  await cp('dist/client', join(root, 'old'), { recursive: true });
+  await cp('dist/client', join(root, 'new'), { recursive: true });
+  // The old release runs the service worker as it was before the update scheme.
+  const built = await readFile(join(root, 'new', 'sw.js'), 'utf8'),
+    // tests/fixtures/legacy-sw.js is public/sw.js as deployed before the update scheme.
+    legacy = (await readFile('tests/fixtures/legacy-sw.js', 'utf8'))
+      .replace("const VERSION = 'dev';", 'const VERSION = "legacy";')
+      .replace('const PRECACHE = [];', built.match(/const PRECACHE = .*;/)[0]);
+  await writeFile(join(root, 'old', 'sw.js'), legacy);
+  await appendFile(join(root, 'new', 'game.js'), '\n// the new release\n');
+  let release = 'old';
+  const server = http.createServer(async (req, res) => {
+    let path = decodeURIComponent(new URL(req.url, 'http://x').pathname);
+    if (path.endsWith('/')) path += 'index.html';
+    try {
+      const body = await readFile(join(root, release, path));
+      res.writeHead(200, {
+        'Content-Type':
+          { '.js': 'text/javascript', '.html': 'text/html', '.css': 'text/css' }[extname(path)] ||
+          'application/octet-stream',
+        'Cache-Control': 'max-age=600',
+      });
+      res.end(body);
+    } catch {
+      res.writeHead(404).end();
+    }
+  });
+  await new Promise((r) => server.listen(0, '127.0.0.1', r));
+  const url = 'http://127.0.0.1:' + server.address().port + '/';
+  const context = await browser.newContext();
+  try {
+    await context.route(/^https?:\/\/(?!127\.0\.0\.1)/, (route) => route.abort());
+    const page = await context.newPage();
+    await page.goto(url);
+    await page.evaluate(() => navigator.serviceWorker.ready);
+    await page.goto(url);
+    const other = await context.newPage();
+    await other.goto(url);
+    release = 'new';
+    await page.goto('about:blank');
+    await page.goto(url);
+    await page.waitForFunction(
+      () =>
+        fetch('game.js')
+          .then((r) => r.text())
+          .then((t) => t.includes('the new release')),
+      null,
+      { timeout: 15000, polling: 500 },
+    );
+    assert.equal(await page.locator('#resumeLegacy').isVisible(), true);
+    const caches = await page.evaluate(() => caches.keys());
+    assert.equal(caches.filter((k) => k.startsWith('iotquest-')).length, 1, 'one whole copy left');
+  } finally {
+    await context.close();
+    server.close();
+  }
+});

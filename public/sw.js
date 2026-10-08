@@ -11,6 +11,17 @@
 const VERSION = 'dev';
 const PRECACHE = [];
 const CACHE = 'iotquest-' + VERSION;
+// Stored in every copy made by this update scheme. Copies without it come from the earlier offline
+// code, which mixed deploys and cannot offer a clean reload, so a new version replaces those at
+// once and reloads their pages (progress is saved in the browser, so nothing is lost).
+const MARKER = './__iotquest-update-scheme-2';
+const legacyCopies = async () => {
+  const names = (await caches.keys()).filter((k) => k.startsWith('iotquest-') && k !== CACHE);
+  const marked = await Promise.all(
+    names.map(async (k) => !!(await (await caches.open(k)).match(MARKER))),
+  );
+  return marked.some((m) => !m);
+};
 // Web fonts are optional, so a cached copy is fine and saves a round trip.
 const FONT_HOSTS = ['fonts.googleapis.com', 'fonts.gstatic.com'];
 
@@ -20,9 +31,12 @@ const DEV = VERSION === 'dev';
 self.addEventListener('install', (event) => {
   if (DEV) return self.skipWaiting();
   event.waitUntil(
-    caches
-      .open(CACHE)
-      .then((cache) => cache.addAll(PRECACHE.map((url) => new Request(url, { cache: 'reload' })))),
+    (async () => {
+      const cache = await caches.open(CACHE);
+      await cache.addAll(PRECACHE.map((url) => new Request(url, { cache: 'reload' })));
+      await cache.put(MARKER, new Response('2'));
+      if (await legacyCopies()) self.skipWaiting();
+    })(),
   );
 });
 
@@ -33,14 +47,16 @@ self.addEventListener('message', (event) => {
 
 self.addEventListener('activate', (event) => {
   event.waitUntil(
-    caches
-      .keys()
-      .then((keys) =>
-        Promise.all(
-          keys.filter((k) => k.startsWith('iotquest-') && k !== CACHE).map((k) => caches.delete(k)),
-        ),
-      )
-      .then(() => self.clients.claim()),
+    (async () => {
+      const takeover = !DEV && (await legacyCopies());
+      const old = (await caches.keys()).filter((k) => k.startsWith('iotquest-') && k !== CACHE);
+      await Promise.all(old.map((k) => caches.delete(k)));
+      await self.clients.claim();
+      // Pages still running the earlier offline code reload into this version in one step.
+      if (takeover)
+        for (const client of await self.clients.matchAll({ type: 'window' }))
+          client.navigate(client.url).catch(() => {});
+    })(),
   );
 });
 

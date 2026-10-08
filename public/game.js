@@ -87,6 +87,8 @@ let weatherRevision = 0,
   weatherLoading = false;
 const weatherService = new WeatherService({
   useProxy: true,
+  // Relative, so the same build works at a domain root or under a path such as /IoTQuest/.
+  proxyURL: 'api/weather',
   fetchImpl:
     typeof fetch === 'function'
       ? fetch
@@ -1248,7 +1250,7 @@ function run() {
   renderHighlight();
   logs = ['Controller connected. Program started.'];
   simTime = 0;
-  worker = new Worker('/sim-worker.js', { type: 'module' });
+  worker = new Worker('sim-worker.js', { type: 'module' });
   worker.onmessage = ({ data }) => {
     clearTimeout(watchdog);
     inFlight = false;

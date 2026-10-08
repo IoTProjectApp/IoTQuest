@@ -1119,3 +1119,15 @@ test('a rejected import explains why and leaves the project untouched', async ()
   assert.match(h.document.getElementById('modalBody').innerHTML, /not a ZIP/);
   assert.equal(JSON.stringify(h.api.project()), before);
 });
+
+test('pages load every asset by relative path so the site works under a sub-path', async () => {
+  const { readdir } = await import('node:fs/promises');
+  for (const file of (await readdir('public')).filter((f) => /\.(html|js|css)$/.test(f))) {
+    const text = await readFile('public/' + file, 'utf8');
+    assert.doesNotMatch(
+      text,
+      /(?:src|href)="\/(?!\/)|(?:fetch|Worker)\(\s*['"`]\/(?!\/)|url\(\s*['"]?\/(?!\/)/,
+      file + ' uses a root-absolute path',
+    );
+  }
+});

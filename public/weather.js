@@ -108,10 +108,19 @@ export class WeatherService {
     storage = globalThis.localStorage,
     now = () => Date.now(),
     useProxy = false,
+    proxyURL = '/api/weather',
     proxyTimeoutMs = 6500,
     requestTimeoutMs = 10000,
   } = {}) {
-    Object.assign(this, { useProxy, fetchImpl, storage, now, proxyTimeoutMs, requestTimeoutMs });
+    Object.assign(this, {
+      useProxy,
+      proxyURL,
+      fetchImpl,
+      storage,
+      now,
+      proxyTimeoutMs,
+      requestTimeoutMs,
+    });
     this.pending = new Map();
     this.cache = new Map();
     this.failedUntil = new Map();
@@ -199,7 +208,7 @@ export class WeatherService {
         if (this.useProxy) {
           try {
             weather = await this.request(
-              '/api/weather?location=' + encodeURIComponent(location.id),
+              this.proxyURL + '?location=' + encodeURIComponent(location.id),
               location,
               this.proxyTimeoutMs,
               refresh,
@@ -207,6 +216,8 @@ export class WeatherService {
           } catch (error) {
             // Keep each attempt's own timeout. Do not bypass explicit access/rate limits.
             if ([400, 401, 403, 429].includes(error.status)) throw error;
+            // Static hosting (e.g. GitHub Pages) has no proxy: go direct for the rest of the session.
+            if (error.status === 404 || error.status === 405) this.useProxy = false;
             weather = await this.request(
               weatherURL(location),
               location,

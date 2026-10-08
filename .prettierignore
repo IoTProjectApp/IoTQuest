@@ -1,2 +1,4 @@
 dist
 public/data
+.openai
+package-lock.json

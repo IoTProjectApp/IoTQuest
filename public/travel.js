@@ -322,7 +322,7 @@ export async function setupTravel({
     onSave();
   };
   try {
-    const response = await fetch('/data/countries.json');
+    const response = await fetch('data/countries.json');
     if (!response.ok) throw Error('Atlas data unavailable');
     features = (await response.json()).features;
     renderCountries();

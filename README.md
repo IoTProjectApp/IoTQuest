@@ -1,5 +1,7 @@
 # IoT Quest: Connected World
 
+**Play online:** https://iotprojectapp.github.io/IoTQuest/ · [![Test and deploy](https://github.com/IoTProjectApp/IoTQuest/actions/workflows/pages.yml/badge.svg)](https://github.com/IoTProjectApp/IoTQuest/actions/workflows/pages.yml)
+
 A dependency-free 3D educational RPG. Travel on a geographically mapped globe, explore regional houses and gardens, install and wire components, and use Arduino C++ or MicroPython to control simulated devices. Mission completion depends on executing the student's program against repeatable tests.
 
 ## Run and build
@@ -13,7 +15,9 @@ npm run build
 npm run format   # Prettier (fetched with npx; the app itself has no dependencies)
 ```
 
-Open http://127.0.0.1:5173. Use `npm run dev -- 5174` for another port. Restart an existing server after changes to `scripts/`.
+Open http://127.0.0.1:5173.
+
+Every push and pull request runs the formatting check, tests and build on Node 22 and 24 (`.github/workflows/pages.yml`). When `main` passes, `dist/client` is published to GitHub Pages. All asset paths are relative, so the same build works at a domain root or under `/IoTQuest/`. Pages has no weather proxy; after one 404 the game calls Open-Meteo directly for the rest of the session. Use `npm run dev -- 5174` for another port. Restart an existing server after changes to `scripts/`.
 
 `public/` contains the source. The build produces static assets in `dist/client/` and a Cloudflare-compatible asset/weather Worker in `dist/server/index.js`. Serve assets over HTTP; module workers do not work from a file URL.
 

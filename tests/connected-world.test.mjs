@@ -582,3 +582,42 @@ test('every home, including the original, has roof meshes driven by the Roof tog
     }
   }
 });
+test('without a weather proxy (static hosting) the service goes direct after one 404', async () => {
+  const calls = [];
+  const live = {
+    current: {
+      temperature_2m: 20,
+      relative_humidity_2m: 50,
+      precipitation: 0,
+      weather_code: 1,
+      cloud_cover: 10,
+      wind_speed_10m: 5,
+      wind_direction_10m: 90,
+      is_day: 1,
+      time: 1760000000,
+    },
+  };
+  const fetchImpl = async (url) => {
+    calls.push(String(url));
+    return String(url).startsWith('api/weather')
+      ? { ok: false, status: 404, headers: new Headers(), json: async () => ({}) }
+      : { ok: true, status: 200, headers: new Headers(), json: async () => live };
+  };
+  const service = new WeatherService({
+    useProxy: true,
+    proxyURL: 'api/weather',
+    fetchImpl,
+    storage: null,
+  });
+  const [kyoto, cusco] = [locations[0], locations.find((l) => l.id === 'cusco')];
+  assert.equal((await service.get(kyoto)).status, 'live');
+  assert.equal((await service.get(cusco)).status, 'live');
+  assert.deepEqual(
+    calls.map((u) => u.split('?')[0]),
+    [
+      'api/weather',
+      'https://api.open-meteo.com/v1/forecast',
+      'https://api.open-meteo.com/v1/forecast',
+    ],
+  );
+});

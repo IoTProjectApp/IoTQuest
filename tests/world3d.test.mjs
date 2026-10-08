@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createWorldModel } from '../public/world-model.js';
 import { World3D } from '../public/world3d.js';
+import { locations } from '../public/locations.js';
 import {
   multiply,
   modelMatrix,
@@ -30,6 +31,7 @@ const areas = [
   ['Entrance', 32, 51],
 ];
 function renderer() {
+  const listeners = new Map();
   const calls = { draws: 0, uniforms: [], shaders: [] },
     noop = () => {},
     gl = new Proxy(
@@ -57,7 +59,13 @@ function renderer() {
     clientHeight: 490,
     style: {},
     getContext: () => gl,
-    addEventListener() {},
+    listeners,
+    addEventListener(type, handler) {
+      listeners.set(type, handler);
+    },
+    removeEventListener(type, handler) {
+      if (listeners.get(type) === handler) listeners.delete(type);
+    },
   };
   const state = {
     devices: [],
@@ -150,6 +158,148 @@ test('renderer uploads finite transforms and draws mesh geometry with perspectiv
   assert.match(calls.shaders[1], /uLights/);
   assert.ok(canvas.width > 0 && canvas.height > 0);
 });
+test('reset camera retains the selected room and restores its close-up framing', () => {
+  const { world } = renderer();
+  world.yaw = 2;
+  world.pitch = 1;
+  world.follow = true;
+  world.resetCamera('detail', ['Kitchen', 35, 31], 1.9);
+  assert.equal(world.follow, false);
+  assert.equal(world.yaw, 0.32);
+  assert.equal(world.pitch, 0.62);
+  assert.equal(world.distance, 11);
+  const expected = toWorld({ x: 35, y: 31 });
+  assert.deepEqual(world.target, [expected[0], 0.75, expected[2]]);
+  world.resetCamera();
+  assert.equal(world.overview, true);
+  assert.equal(world.distance, 35);
+});
+test('Sky view uses an eye-height camera and can centre the actual moon in mirrored homes', () => {
+  const { world, state } = renderer();
+  Object.assign(state, {
+    skyMode: 'simulated',
+    skyDate: '2024-09-18',
+    skyStartHour: 22,
+    simClockMs: 0,
+  });
+  world.render(1, 0.016);
+  for (const mirrored of [false, true]) {
+    world.model.mirrored = mirrored;
+    assert.equal(world.findMoon(), true);
+    world.render(2, 0.016);
+    const moon = world.project(world.model.sky.moon.mesh.pos);
+    assert.equal(moon.visible, true);
+    assert.ok(Math.abs(moon.x - world.width / 2) < 0.01);
+    assert.ok(Math.abs(moon.y - world.height / 2) < 0.01);
+    assert.equal(world.eye[1], 1.7);
+  }
+  state.skyStartHour = 12;
+  world.render(3, 0.016);
+  assert.equal(world.findMoon(), false);
+  world.setView('world');
+  assert.equal(world.skyView, false);
+  assert.ok(world.pitch > 0);
+});
+test('Landscape view widens the camera and scenery holds still when the game is paused', () => {
+  const { world, state } = renderer();
+  world.setView('landscape');
+  assert.equal(world.landscapeView, true);
+  assert.equal(world.distance, 68);
+  state.reduced = true;
+  world.render(1, 0.016);
+  assert.ok(world.currentDistance >= 68);
+  const before = JSON.stringify(
+    world.model.landscape.birds.map((b) => b.parts.map((p) => p.mesh.pos)),
+  );
+  state.reduced = false;
+  state.paused = true;
+  world.render(2, 0.016);
+  world.render(3, 0.016);
+  assert.equal(
+    JSON.stringify(world.model.landscape.birds.map((b) => b.parts.map((p) => p.mesh.pos))),
+    before,
+  );
+  world.setView('house');
+  assert.equal(world.landscapeView, false);
+  assert.ok(world.distance < 68);
+});
+test('returning from a distant panorama keeps the house inside the camera clipping range', () => {
+  const { world, state } = renderer();
+  world.currentDistance = 175;
+  world.setView('world');
+  world.render(1, 0.001);
+  const house = world.project([0, 0.35, 0]);
+  assert.equal(house.visible, true);
+});
+test('raised-house garage doors stay at their own floor height', () => {
+  const { world, state } = renderer();
+  state.locationId = 'brisbane';
+  world.setRegion('brisbane');
+  const door = world.model.dynamic.garageDoor,
+    closed = 0.38 + 0.68;
+  world.render(1, 0.016);
+  assert.equal(door.pos[1], closed);
+  state.env.door = 1;
+  world.render(2, 0.016);
+  assert.ok(Math.abs(door.pos[1] - (closed + 1.82)) < 1e-8);
+});
+test('pausing the horse farm freezes sprinkler droplets and animal poses', () => {
+  const { world, state } = renderer();
+  state.locationId = 'macedon';
+  world.setRegion('macedon');
+  state.devices = defaults(['valve'], 'ESP32');
+  state.outputs[state.devices[0].pin] = 1;
+  world.render(1, 0.016);
+  state.paused = true;
+  const snapshot = () =>
+    JSON.stringify({
+      mist: world.model.farm.shelters.flatMap((s) => s.mist.map((m) => [m.pos, m.opacity])),
+      animals: world.model.animals.map((a) => a.parts.map((p) => p.mesh.pos)),
+    });
+  const before = snapshot();
+  world.render(4, 0.016);
+  assert.equal(snapshot(), before);
+});
+test('disposing a world removes its controls and cannot delete resources twice', () => {
+  const { world, canvas } = renderer();
+  assert.ok(canvas.listeners.size > 0);
+  const cancel = globalThis.cancelAnimationFrame;
+  globalThis.cancelAnimationFrame = () => {};
+  try {
+    world.dispose();
+    assert.equal(canvas.listeners.size, 0);
+    assert.equal(world.drag, null);
+    world.dispose();
+  } finally {
+    globalThis.cancelAnimationFrame = cancel;
+  }
+});
+test('every destination renders finite geometry through daylight, storms, Sky and Landscape views', () => {
+  const { world, state } = renderer();
+  for (const location of [{ id: 'legacy' }, ...locations]) {
+    state.locationId = location.id;
+    world.setRegion(location.id);
+    for (const view of ['world', 'landscape', 'sky']) {
+      world.setView(view);
+      Object.assign(state.env, {
+        light: view === 'sky' ? 3 : 70,
+        rain: view === 'landscape' ? 85 : 0,
+        cloud: view === 'landscape' ? 95 : 20,
+        wind: 40,
+      });
+      world.render(1, 0.016);
+      for (const mesh of world.model.objects) {
+        assert.ok(world.geometries[mesh.shape], location.id + ' known geometry ' + mesh.shape);
+        assert.ok(mesh.pos.every(Number.isFinite), location.id + ' finite position');
+        assert.ok(mesh.rotation.every(Number.isFinite), location.id + ' finite rotation');
+        assert.ok(
+          mesh.size.every((v) => Number.isFinite(v) && v > 0),
+          location.id + ' valid dimensions',
+        );
+      }
+    }
+  }
+});
 test('installed 3D device geometry is rendered, updates from outputs, and is removed cleanly', () => {
   const { world, state } = renderer();
   world.render(0, 0.016);
@@ -202,6 +352,26 @@ test('reduced motion stops rotating fan blades and rainfall while retaining outp
   assert.equal(blade.rotation[2], rotation);
   assert.equal(world.model.rain[0].pos[1], rainY);
   assert.ok(world.deviceObjects[0].face.emission > 0);
+});
+test('AC louvres sweep while cooling, hold still under reduced motion and close when off', () => {
+  const { world, state } = renderer();
+  state.devices = defaults(['ac'], 'ESP32');
+  const pin = state.devices[0].pin,
+    louvre = () => world.deviceObjects[0].parts.find((p) => p.louvre === 0);
+  state.outputs[pin] = 1;
+  world.render(1, 0.016);
+  const first = louvre().rotation[0];
+  world.render(2, 0.016);
+  assert.ok(first > 0);
+  assert.notEqual(louvre().rotation[0], first);
+  state.reduced = true;
+  world.render(3, 0.016);
+  const held = louvre().rotation[0];
+  world.render(4, 0.016);
+  assert.equal(louvre().rotation[0], held);
+  state.outputs[pin] = 0;
+  world.render(5, 0.016);
+  assert.equal(louvre().rotation[0], 0);
 });
 test('WebGL unavailability produces an actionable error', () => {
   assert.throws(() => new World3D({ getContext: () => null }), /WebGL is unavailable/);
@@ -425,35 +595,41 @@ test('clouds appear with cloud cover, turn grey in storms and never cross the pr
     still,
   );
 });
-test('the sky shows the sun by day and the moon and stars at night, always behind the property', async () => {
+test('the sky uses astronomical horizons and does not turn with the camera', async () => {
   const { addSky, updateSky } = await import('../public/sky.js');
-  const { createWorldModel } = await import('../public/world-model.js');
   const sky = addSky(createWorldModel()),
-    starsShown = () => sky.stars.filter((s) => s.mesh.opacity > 0).length;
-  updateSky(sky, 1, 0, false);
-  assert.ok(sky.sun.mesh.opacity > 0.9 && sky.moon.mesh.opacity === 0 && starsShown() === 0);
-  updateSky(sky, 0, 0, false);
-  assert.ok(sky.sun.mesh.opacity === 0 && sky.moon.mesh.opacity > 0.9);
-  assert.equal(starsShown(), sky.stars.length);
-  for (let yaw = 0; yaw < Math.PI * 2; yaw += 0.5) {
-    updateSky(sky, 0, 0, false, yaw);
-    for (const mesh of [sky.sun.mesh, sky.moon.mesh, ...sky.stars.map((s) => s.mesh)])
-      assert.ok(mesh.pos[0] * Math.sin(yaw) + mesh.pos[2] * Math.cos(yaw) < -20);
-  }
+    context = { date: new Date('2024-09-18T12:00Z') };
+  updateSky(sky, 0, 0, true, 0.32, {}, 0, context);
+  assert.equal(sky.sun.mesh.opacity, 0);
+  assert.ok(sky.moon.mesh.opacity > 0.9);
+  assert.ok(sky.visibleStars > 0 && sky.visibleStars < sky.stars.length);
+  const positions = sky.stars.map((s) => [...s.mesh.pos]);
+  updateSky(sky, 0, 0, true, 2, {}, 0, context);
+  assert.deepEqual(
+    sky.stars.map((s) => s.mesh.pos),
+    positions,
+  );
+  for (let i = 0; i < sky.stars.length; i++)
+    if (sky.ephemeris.stars[i].altitude <= 0) assert.equal(sky.stars[i].mesh.opacity, 0);
+  updateSky(sky, 1, 0, true, 0.32, {}, 0, { date: new Date('2024-09-18T02:00Z') });
+  assert.ok(sky.sun.mesh.opacity > 0.9);
+  assert.equal(sky.moon.mesh.opacity, 0);
+  assert.equal(sky.visibleStars, 0);
 });
 test('weather dims the night sky and storms flash with lightning', async () => {
   const { addSky, updateSky, lightningFlash } = await import('../public/sky.js');
   const { createWorldModel } = await import('../public/world-model.js');
   const sky = addSky(createWorldModel()),
     stars = () => sky.stars.reduce((sum, s) => sum + s.mesh.opacity, 0);
-  updateSky(sky, 0, 0, true, 0.32, { cloud: 0 });
+  const context = { date: new Date('2024-09-18T12:00Z') };
+  updateSky(sky, 0, 0, true, 0.32, { cloud: 0 }, 0, context);
   const clearStars = stars(),
     clearMoon = sky.moon.mesh.opacity;
   assert.ok(clearMoon > 0.9 && sky.moon.halo.opacity > 0);
   assert.ok(sky.moon.craters.every((c) => c.mesh.opacity === clearMoon));
-  updateSky(sky, 0, 0, true, 0.32, { cloud: 80 });
+  updateSky(sky, 0, 0, true, 0.32, { cloud: 80 }, 0, context);
   assert.ok(stars() < clearStars && sky.moon.mesh.opacity < clearMoon);
-  updateSky(sky, 0, 0, true, 0.32, { cloud: 100, rain: 60 });
+  updateSky(sky, 0, 0, true, 0.32, { cloud: 100, rain: 60 }, 0, context);
   assert.equal(stars(), 0);
   assert.ok(sky.moon.mesh.opacity < 0.1);
   // Lightning only in storms, never with reduced motion, and only briefly.
@@ -497,4 +673,46 @@ test('live weather types drive rain, snow, fog and lightning in the 3D world', a
   state.env = { ...state.env, rain: 30, wind: 5, cloud: 60, weatherCode: 95 };
   world.render(0.05, 0.016);
   assert.equal(world.flash, 1, 'a thunderstorm code brings lightning');
+});
+
+test('a talking resident stays in place, faces the technician and resumes routines after chat', () => {
+  const { world, state } = renderer();
+  state.env.motion = true;
+  world.render(1, 0.1);
+  const actor = world.model.actors.find((a) => a.id === 'Maya');
+  const body = actor.parts.find((p) => p.local[1] === 0.8);
+  const position = [body.pos[0], body.pos[2]];
+  state.talkingNpc = 'Maya';
+  state.routine = { actors: { Maya: [8, 4] } };
+  world.render(2, 0.1);
+  world.render(3, 0.1);
+  assert.deepEqual([body.pos[0], body.pos[2]], position);
+  const p = toWorld(state.player);
+  assert.equal(body.rotation[1], Math.atan2(p[0] - position[0], p[2] - position[1]));
+  const arm = actor.parts.find((p) => p.limb === 'arm' && p.side === -1);
+  assert.notEqual(arm.rotation[0], 0);
+  state.paused = true;
+  world.render(4, 0.1);
+  const held = [...arm.pos];
+  world.render(5, 0.1);
+  assert.deepEqual(arm.pos, held);
+  state.reduced = true;
+  world.render(6, 0.1);
+  assert.equal(arm.rotation[0], 0);
+  assert.deepEqual([body.pos[0], body.pos[2]], position);
+  state.talkingNpc = null;
+  world.render(7, 0.1);
+  assert.equal(actor.talkPosition, undefined);
+  assert.deepEqual([body.pos[0], body.pos[2]], [8, 4]);
+});
+test('chat started before a destination renders uses actor world positions', () => {
+  const { world, state } = renderer();
+  world.render(1, 0.016);
+  world.setRegion('kyoto');
+  state.locationId = 'kyoto';
+  state.talkingNpc = 'Alex';
+  const actor = world.model.actors.find((a) => a.id === 'Alex');
+  const expected = [actor.x, actor.z];
+  world.render(2, 0.016);
+  assert.deepEqual(actor.talkPosition, expected);
 });

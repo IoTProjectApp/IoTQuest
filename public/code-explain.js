@@ -24,6 +24,8 @@ const MEANING = {
   temp: ['°C'],
   outdoorTemp: ['°C'],
   humidity: ['% humidity'],
+  wind: ['km/h'],
+  cloud: ['% cloud cover'],
   distance: ['cm'],
   motion: ['no movement', 'movement detected'],
   door: ['closed', 'open'],
@@ -41,6 +43,8 @@ const DIRECTION = {
   temp: ['colder', 'hotter'],
   outdoorTemp: ['colder', 'hotter'],
   humidity: ['drier air', 'more humid'],
+  wind: ['calmer', 'windier'],
+  cloud: ['clearer sky', 'cloudier sky'],
   distance: ['closer', 'further away'],
 };
 const DIGITAL = new Set(['motion', 'door', 'armed', 'occupied']);

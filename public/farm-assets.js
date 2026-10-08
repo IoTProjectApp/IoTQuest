@@ -1,3 +1,4 @@
+import { buildTree } from './vegetation.js';
 import { addAnimal, setGoal } from './animals.js';
 // Victorian farm scenes: a homestead on the usual property, surrounded by post-and-wire
 // paddocks with farm buildings, water and animals. The playable property stays where it is.
@@ -96,18 +97,13 @@ export function buildFarm(l, m) {
       blades.push(box(hub[0], hub[1], hub[2], 0.18, 1.3, 0.04, '#d6d9d6'));
     (m.windmills ??= []).push({ hub, blades, angle: 0 });
   };
-  const fruitTree = (x, z) => {
-    cylinder(x, 0.6, z, 0.12, 1.2, '#7a6249');
-    sphere(x, 1.6, z, 0.9, '#5f9150');
-    for (let i = 0; i < 5; i++)
-      sphere(
-        x + Math.cos(i * 1.3) * 0.7,
-        1.4 + (i % 2) * 0.4,
-        z + Math.sin(i * 1.3) * 0.7,
-        0.12,
-        '#c93a2f',
-      );
-  };
+  const fruitTree = (x, z) =>
+    buildTree(m, x, z, 0.85, {
+      style: 'fruit',
+      fruit: true,
+      detailed: false,
+      foliage: ['#5f815c', '#719267', '#829e72'],
+    });
   let seed = l.latitude * -1000;
   const herd = (kind, paddock, count) => {
     for (let i = 0; i < count; i++) addAnimal(m, kind, paddock, (seed += 17.3));
@@ -120,6 +116,13 @@ export function buildFarm(l, m) {
       dam(8, 24, 3.2);
       windmill(27, -22);
       trough(24, -22);
+      // Dairy equipment: two milk silos, a wash station and a loading platform.
+      for (const x of [-10.5, -8.5]) {
+        cylinder(x, 1.35, -24, 0.7, 2.5, '#bcc6c5', { farmFeature: 'milk-silo', roughness: 0.25 });
+        sphere(x, 2.6, -24, 0.7, '#cbd3d0', { farmFeature: 'milk-silo' });
+        box(x, 0.35, -23.25, 0.18, 0.12, 0.5, '#849995', { farmFeature: 'milk-silo' });
+      }
+      box(-10, 0.15, -20.5, 4.5, 0.3, 1.8, '#bebdb1', { farmFeature: 'dairy-platform' });
       // Gates from the side paddocks into the dairy yard.
       farm.gates = [fenceGate(-17.3, -23.2), fenceGate(17.3, -23.2)];
       herd('cow', PADDOCKS.left, 5);
@@ -127,7 +130,16 @@ export function buildFarm(l, m) {
       break;
     case 'sheep':
       shed(-3, -23, 11, 6, 2.4, '#b8bfc2', '#9aa3a6'); // shearing shed
-      box(4.5, 0.6, -23, 4, 1.2, 4, '#a7a08c'); // holding yard pens
+      // Open sorting pens and a loading race, rather than a solid holding-yard block.
+      for (const x of [2.5, 4.5, 6.5])
+        for (let z = -25; z <= -21; z += 2) {
+          cylinder(x, 0.6, z, 0.045, 1.2, '#8d918a', { farmFeature: 'sorting-pen' });
+          for (const y of [0.4, 0.8, 1.1])
+            box(x, y, z + 1, 0.035, 0.035, 2, '#b0b5ad', { farmFeature: 'sorting-pen' });
+        }
+      for (const z of [-25, -21])
+        for (const y of [0.4, 0.8, 1.1])
+          box(4.5, y, z, 4, 0.035, 0.035, '#b0b5ad', { farmFeature: 'sorting-pen' });
       windmill(26, -20);
       farm.troughWater = trough(23.5, -20);
       dam(-26, 21, 3.5);
@@ -144,11 +156,33 @@ export function buildFarm(l, m) {
       farm.henDoor = box(-6, 0.45, -20.43, 0.9, 0.95, 0.05, '#8c6a4a');
       for (const z of [-25, -18]) box(-1, 0.45, z, 10, 0.9, 0.04, '#b9bcb8', { opacity: 0.6 }); // run
       dam(0, 24, 4);
+      // Orchard packing station and stacked fruit crates, outside the hen run.
+      openShed(13, -23, 5, 4, 2.2, '#698366');
+      for (let i = 0; i < 6; i++) {
+        const x = 11.5 + (i % 3) * 0.9,
+          z = -23.7 + Math.floor(i / 3) * 1.1;
+        box(x, 0.45, z, 0.7, 0.6, 0.7, '#b99765', { farmFeature: 'fruit-crate' });
+        for (let k = 0; k < 4; k++)
+          sphere(
+            x - 0.22 + (k % 2) * 0.4,
+            0.79,
+            z - 0.22 + Math.floor(k / 2) * 0.4,
+            0.1,
+            '#b66f4e',
+            { farmFeature: 'fruit-crate' },
+          );
+      }
       herd('chicken', [-12, -27, 9, -16], 9);
       herd('duck', [-4, 20, 4, 28], 4);
       break;
     case 'horse':
       shed(0, -23, 13, 4.5, 2.2, '#8c6a4a', '#3f4d45'); // stables
+      // Tack racks and hay feeders give the stable yard its own working equipment.
+      for (const x of [-5, 0, 5]) {
+        cylinder(x, 0.75, -25, 0.04, 1.5, '#627572', { farmFeature: 'tack-rack' });
+        box(x, 1.35, -25, 0.65, 0.06, 0.09, '#627572', { farmFeature: 'tack-rack' });
+        mesh('sphere', [x, 1.4, -25], [0.48, 0.15, 0.45], '#a28361', { farmFeature: 'tack-rack' });
+      }
       for (let i = 0; i < 4; i++) box(-4.8 + i * 3.2, 1.0, -20.7, 1.5, 1.8, 0.06, '#5f4632'); // doors
       for (let i = 0; i < 24; i++) {
         const a = (i / 24) * Math.PI * 2;

@@ -1,71 +1,55 @@
-// Low-poly farm animals. Each animal is a set of meshes with offsets in its own frame (x is
+import { livestockModels } from './livestock-models.js';
+// Articulated farm animals. Each animal is a set of meshes with offsets in its own frame (x is
 // forward, y is up); updateAnimals moves it around its paddock, turning towards a target,
 // alternating between walking and grazing (head down), and places every part each frame.
 // setGoal sends an animal along a route (through gates, into sheds) to graze in new bounds.
 
 // [shape, local position, size, colour key or colour, role]
-const BODIES = {
-  cow: [
-    ['box', [0, 1.0, 0], [1.7, 0.75, 0.75], 'coat'],
-    ['box', [0.25, 1.06, 0], [0.5, 0.5, 0.78], 'patch'],
-    ['box', [-0.5, 1.0, 0], [0.45, 0.55, 0.78], 'patch'],
-    ['box', [1.05, 1.15, 0], [0.5, 0.45, 0.42], 'coat', 'head'],
-    ['box', [1.33, 1.05, 0], [0.18, 0.22, 0.34], '#e4a6a0', 'head'],
-    ['box', [1.0, 1.42, 0.24], [0.08, 0.08, 0.16], '#efe7d2', 'head'],
-    ['box', [1.0, 1.42, -0.24], [0.08, 0.08, 0.16], '#efe7d2', 'head'],
-    ['sphere', [-0.35, 0.58, 0], [0.32, 0.22, 0.3], '#e4a6a0'],
-    ['box', [-0.9, 0.85, 0], [0.06, 0.6, 0.06], 'patch'],
-    ...legs(0.6, 0.25, 0.65, 0.09, '#3a3430'),
-  ],
-  sheep: [
-    ['sphere', [0, 0.75, 0], [1.1, 0.72, 0.78], 'coat'],
-    ['sphere', [-0.25, 0.92, 0], [0.7, 0.5, 0.6], 'coat'],
-    ['box', [0.6, 0.84, 0], [0.3, 0.3, 0.26], 'patch', 'head'],
-    ['box', [0.55, 0.92, 0.18], [0.08, 0.06, 0.14], 'patch', 'head'],
-    ['box', [0.55, 0.92, -0.18], [0.08, 0.06, 0.14], 'patch', 'head'],
-    ...legs(0.3, 0.18, 0.45, 0.05, '#2f2b28'),
-  ],
-  horse: [
-    ['box', [0, 1.35, 0], [1.6, 0.65, 0.55], 'coat'],
-    ['box', [0.75, 1.62, 0], [0.42, 0.45, 0.32], 'coat', 'head'],
-    ['box', [0.95, 1.95, 0], [0.36, 0.45, 0.28], 'coat', 'head'],
-    ['box', [1.22, 2.02, 0], [0.55, 0.26, 0.24], 'coat', 'head'],
-    ['box', [0.85, 1.95, 0], [0.12, 0.5, 0.06], 'patch', 'head'],
-    ['box', [-0.85, 1.2, 0], [0.12, 0.65, 0.12], 'patch'],
-    ...legs(0.6, 0.18, 1.0, 0.07, 'patch'),
-  ],
-  goat: [
-    ['box', [0, 0.72, 0], [0.85, 0.42, 0.36], 'coat'],
-    ['box', [0.5, 0.95, 0], [0.3, 0.3, 0.24], 'coat', 'head'],
-    ['box', [0.62, 0.78, 0], [0.06, 0.14, 0.06], 'patch', 'head'],
-    ['cone', [0.45, 1.16, 0.07], [0.06, 0.2, 0.06], '#d9cfb8', 'head'],
-    ['cone', [0.45, 1.16, -0.07], [0.06, 0.2, 0.06], '#d9cfb8', 'head'],
-    ...legs(0.3, 0.13, 0.5, 0.04, 'patch'),
-  ],
-  chicken: [
-    ['sphere', [0, 0.3, 0], [0.34, 0.28, 0.24], 'coat'],
-    ['sphere', [0.16, 0.45, 0], [0.16, 0.16, 0.14], 'coat', 'head'],
-    ['box', [0.17, 0.54, 0], [0.09, 0.07, 0.03], '#c9372c', 'head'],
-    ['box', [0.25, 0.44, 0], [0.07, 0.03, 0.04], '#e3a53a', 'head'],
-    ['box', [-0.17, 0.4, 0], [0.08, 0.16, 0.1], 'patch'],
-    ['box', [0.02, 0.1, 0.05], [0.02, 0.2, 0.02], '#e3a53a'],
-    ['box', [0.02, 0.1, -0.05], [0.02, 0.2, 0.02], '#e3a53a'],
-  ],
-  duck: [
-    ['sphere', [0, 0.22, 0], [0.44, 0.24, 0.26], 'coat'],
-    ['sphere', [0.22, 0.38, 0], [0.15, 0.15, 0.13], 'patch', 'head'],
-    ['box', [0.33, 0.36, 0], [0.13, 0.04, 0.08], '#e8902f', 'head'],
-  ],
-  dog: [
-    ['box', [0, 0.5, 0], [0.72, 0.28, 0.24], 'coat'],
-    ['box', [0.45, 0.66, 0], [0.3, 0.24, 0.22], 'coat', 'head'],
-    ['box', [0.62, 0.6, 0], [0.12, 0.1, 0.12], 'patch', 'head'],
-    ['cone', [0.42, 0.84, 0.07], [0.07, 0.14, 0.04], 'coat', 'head'],
-    ['cone', [0.42, 0.84, -0.07], [0.07, 0.14, 0.04], 'coat', 'head'],
-    ['box', [-0.42, 0.58, 0], [0.24, 0.06, 0.06], 'coat'],
-    ...legs(0.25, 0.08, 0.38, 0.035, 'patch'),
-  ],
-};
+const BODIES = { ...livestockModels };
+BODIES.deer = [
+  ['sphere', [0, 0.91, 0], [1.2, 0.63, 0.45], 'coat'],
+  ['sphere', [0.61, 1.2, 0], [0.28, 0.54, 0.25], 'coat', 'head'],
+  ['sphere', [0.77, 1.43, 0], [0.39, 0.24, 0.23], 'coat', 'head'],
+  ['sphere', [0.64, 1.61, 0.13], [0.15, 0.19, 0.06], 'patch', 'head'],
+  ['sphere', [0.64, 1.61, -0.13], [0.15, 0.19, 0.06], 'patch', 'head'],
+  ['sphere', [0.97, 1.39, 0], [0.07, 0.07, 0.13], '#333b31', 'head'],
+  ...[-1, 1].flatMap((side) => [
+    ['cylinder', [0.58, 1.77, side * 0.11], [0.035, 0.35, 0.035], '#b5a080', 'head'],
+    ['box', [0.63, 1.82, side * 0.11], [0.19, 0.025, 0.025], '#b5a080', 'head'],
+  ]),
+  ...legs(0.39, 0.14, 0.66, 0.033, '#50483a'),
+];
+BODIES.antelope = BODIES.deer
+  .filter((row) => !['cylinder', 'box'].includes(row[0]) || row[4] === 'leg')
+  .concat(
+    [-1, 1].map((side) => [
+      'cone',
+      [0.57, 1.84, side * 0.09],
+      [0.06, 0.43, 0.06],
+      '#675b46',
+      'head',
+    ]),
+  );
+BODIES.rabbit = [
+  ['sphere', [0, 0.24, 0], [0.45, 0.34, 0.28], 'coat'],
+  ['sphere', [0.22, 0.4, 0], [0.22, 0.22, 0.2], 'coat', 'head'],
+  ['sphere', [0.2, 0.62, 0.055], [0.07, 0.34, 0.055], 'patch', 'head'],
+  ['sphere', [0.2, 0.62, -0.055], [0.07, 0.34, 0.055], 'patch', 'head'],
+  ['sphere', [-0.23, 0.29, 0], [0.13, 0.13, 0.13], '#e5decd'],
+  ...legs(0.12, 0.09, 0.15, 0.025, 'coat'),
+];
+BODIES.kangaroo = [
+  ['sphere', [0, 0.92, 0], [0.55, 1.02, 0.4], 'coat'],
+  ['sphere', [0.3, 1.48, 0], [0.39, 0.25, 0.22], 'coat', 'head'],
+  ['sphere', [0.19, 1.69, 0.075], [0.09, 0.29, 0.06], 'patch', 'head'],
+  ['sphere', [0.19, 1.69, -0.075], [0.09, 0.29, 0.06], 'patch', 'head'],
+  ['box', [-0.59, 0.2, 0], [1.05, 0.11, 0.14], 'coat'],
+  ...[-1, 1].flatMap((side) => [
+    ['sphere', [-0.04, 0.41, side * 0.14], [0.33, 0.43, 0.16], 'coat', 'leg'],
+    ['box', [0.11, 0.12, side * 0.14], [0.46, 0.09, 0.11], 'patch', 'leg'],
+    ['cylinder', [0.24, 0.91, side * 0.13], [0.055, 0.34, 0.055], 'coat'],
+  ]),
+];
 function legs(along, across, height, radius, colour) {
   return [
     [along, across],
@@ -109,8 +93,33 @@ const COATS = {
     ['#8a6a46', '#3f6b4a'],
   ],
   dog: [['#3b2b22', '#c48a52']],
+  deer: [
+    ['#a48766', '#d5c3a1'],
+    ['#8c7559', '#bfac8c'],
+  ],
+  antelope: [['#b69b71', '#ded1b1']],
+  rabbit: [
+    ['#8e8979', '#c8bca5'],
+    ['#9f927e', '#ddcdb5'],
+  ],
+  kangaroo: [
+    ['#9e8b72', '#6e6455'],
+    ['#b09b80', '#89745d'],
+  ],
 };
-const SPEED = { cow: 0.45, sheep: 0.55, horse: 0.9, goat: 0.6, chicken: 0.35, duck: 0.3, dog: 1.5 };
+const SPEED = {
+  cow: 0.45,
+  sheep: 0.55,
+  horse: 0.9,
+  goat: 0.6,
+  chicken: 0.35,
+  duck: 0.3,
+  dog: 1.5,
+  deer: 0.7,
+  antelope: 0.8,
+  rabbit: 0.5,
+  kangaroo: 0.8,
+};
 
 function seeded(seed) {
   let s = Math.max(1, Math.floor(seed * 7919) % 2147483646);
@@ -134,10 +143,23 @@ export function addAnimal(model, kind, paddock, seed) {
       phase: rand() * 10,
       parts: [],
     };
-  for (const [shape, local, size, colour, role] of BODIES[kind]) {
+  const scale = livestockModels[kind] ? 1 + Math.sin(seed * 1.7) * 0.035 : 1;
+  for (const [shape, local, size, colour, role, options = {}] of BODIES[kind]) {
     const fill = colour === 'coat' ? coat : colour === 'patch' ? patch : colour,
-      mesh = model.mesh(shape, [0, 0, 0], size, fill, { animal: kind });
-    animal.parts.push({ mesh, local, role });
+      mesh = model.mesh(
+        shape,
+        [0, 0, 0],
+        size.map((v) => v * scale),
+        fill,
+        { animal: kind, roughness: shape === 'wool' ? 1 : 0.88, ...options },
+      );
+    animal.parts.push({
+      mesh,
+      local: local.map((v) => v * scale),
+      role,
+      restRotation: [...(options.rotation || [0, 0, 0])],
+      opacity: options.opacity,
+    });
   }
   model.animals.push(animal);
   pose(animal, 0);
@@ -149,17 +171,39 @@ function pose(animal, t, walking = false, grazing = false) {
     sin = Math.sin(animal.heading),
     bob = walking ? Math.abs(Math.sin(t * 6 + animal.phase)) * 0.04 : 0,
     graze = grazing ? 0.18 + Math.sin(t * 1.5 + animal.phase) * 0.05 : 0;
-  for (const { mesh, local, role } of animal.parts) {
+  for (const { mesh, local, role, restRotation = [0, 0, 0], opacity } of animal.parts) {
     const [lx, ly, lz] = local,
       // Heads dip forward and down while grazing.
-      dy = role === 'head' ? -graze * (ly > 0.6 ? 1.6 : 0.8) : role === 'leg' ? 0 : bob,
+      dy =
+        role === 'head'
+          ? -graze * (ly > 0.6 ? 1.6 : 0.8)
+          : ['leg', 'hoof', 'shadow'].includes(role)
+            ? 0
+            : bob,
       dx = role === 'head' ? graze * 0.4 : 0;
     // Rotation about y: local x (forward) maps to (cos, -sin) in the ground plane.
-    mesh.pos[0] = animal.x + (lx + dx) * cos + lz * sin;
-    mesh.pos[1] = ly + dy;
-    mesh.pos[2] = animal.z - (lx + dx) * sin + lz * cos;
-    mesh.rotation[1] = animal.heading;
+    const limb = role === 'leg' || role === 'hoof',
+      stride =
+        walking && limb
+          ? Math.sin(t * 6 + animal.phase + (lx < 0 ? Math.PI : 0) + (lz < 0 ? Math.PI : 0))
+          : 0,
+      step = stride * 0.1,
+      lift = Math.max(0, stride) * 0.045;
+    mesh.pos[0] = animal.x + (lx + dx + step) * cos + lz * sin;
+    mesh.pos[1] = ly + dy + lift;
+    mesh.pos[2] = animal.z - (lx + dx + step) * sin + lz * cos;
+    mesh.rotation = [
+      restRotation[0],
+      animal.heading + restRotation[1],
+      restRotation[2] +
+        (role === 'leg'
+          ? -stride * 0.1
+          : role === 'tail'
+            ? Math.sin(t * 2 + animal.phase) * 0.08
+            : 0),
+    ];
     if (animal.hidden) mesh.opacity = 0;
+    else if (opacity !== undefined) mesh.opacity = opacity;
     else delete mesh.opacity;
   }
 }

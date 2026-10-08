@@ -1,5 +1,27 @@
+import { sectionQuests } from './section-quests.js';
+import { weatherQuests } from './weather-quests.js';
 import { guidedStarter } from './code-coach.js';
+// Sensors read through the 12-bit ADC (0–4095). Other analogue channels are calibrated units.
+export const ADC_SIGNALS = ['light', 'soil', 'tank', 'rain', 'pot', 'pond'];
 export const components = [
+  {
+    id: 'wind',
+    name: 'Wind speed station',
+    icon: '≋',
+    signal: 'wind',
+    analog: true,
+    area: 'Entrance',
+    desc: 'Virtual calibrated wind speed in km/h, following local weather in Live mode. Physical anemometers need a sensor driver.',
+  },
+  {
+    id: 'cloud',
+    name: 'Cloud cover channel',
+    icon: '☁',
+    signal: 'cloud',
+    analog: true,
+    area: 'Greenhouse',
+    desc: 'Virtual cloud cover percentage, 0–100, following local weather in Live mode. This is weather-service data rather than a physical GPIO sensor.',
+  },
   {
     id: 'occupancy',
     name: 'Resident presence',
@@ -379,6 +401,8 @@ export const missions = [
       ['Dark only', { light: 10, motion: 0, temp: 22 }, [1, 0, 0]],
     ],
   },
+  ...weatherQuests,
+  ...sectionQuests,
 ];
 export const baseEnv = {
   light: 70,
@@ -396,6 +420,8 @@ export const baseEnv = {
   appliance: 0,
   pond: 60,
   outdoorTemp: 24,
+  wind: 12,
+  cloud: 20,
 };
 export function defaults(ids, board) {
   let a = 0,
@@ -465,7 +491,10 @@ export function program(mission, language, devices, worked = false) {
       inputs
         .map(
           (d) =>
-            '  int ' +
+            '  ' +
+            (d.analog && !ADC_SIGNALS.includes(d.signal)
+              ? 'float '
+              : 'int ') +
             d.signal +
             ' = ' +
             (d.analog ? 'analogRead' : 'digitalRead') +

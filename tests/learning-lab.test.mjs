@@ -8,10 +8,19 @@ import {
   updateResources,
   circuitSnapshot,
   residentRoutine,
+  samplePractice,
 } from '../public/lab.js';
 import { projectFiles, zipFiles } from '../public/project-package.js';
 import { SimulatedBroker } from '../public/mqtt.js';
 import { isLocationUnlocked, locations, adaptMissions } from '../public/locations.js';
+test('a daily cycle that starts at midnight stays dark rather than falling back to 08:00', () => {
+  const lab = createLabState();
+  lab.startHour = 0;
+  lab.dailyCycle = true;
+  const env = samplePractice(baseEnv, lab);
+  assert.equal(env.isDay, false);
+  assert.equal(env.light, 2);
+});
 for (const language of ['cpp', 'python']) {
   test(`${language}: fast batches keep controller millis and world time synchronized`, () => {
     const ds = defaults(['ldr', 'led'], 'ESP32'),

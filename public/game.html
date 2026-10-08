@@ -235,7 +235,8 @@
                   <div class="tabs world-tabs">
                     <button class="selected" data-view="world">⌂ World</button
                     ><button data-view="house">House</button
-                    ><button data-view="garden">Garden</button>
+                    ><button data-view="garden">Garden</button><button data-view="sky">Sky</button
+                    ><button data-view="landscape">Landscape</button>
                   </div>
                   <div class="world-status">
                     <button
@@ -274,6 +275,7 @@
                     <div id="areas"></div>
                     <div id="deviceEffects"></div>
                     <div id="deviceWorldTargets"></div>
+                    <div id="sectionResidents"></div>
                     <button
                       class="resident resident-maya npc"
                       id="resident"
@@ -314,6 +316,8 @@
                     <span class="three-d-badge">3D WORLD</span
                     ><button id="roofToggle">Roof: cutaway</button
                     ><button id="followCamera" aria-pressed="false">Follow technician</button
+                    ><button id="resetCamera" title="Restore the camera for this view">
+                      Reset view</button
                     ><button id="expandWorld" aria-label="Expand 3D world">⛶</button>
                   </div>
                   <div class="map-tools">
@@ -386,12 +390,17 @@
                     <option value="advanced">Advanced</option></select
                   ><button class="text-btn" id="questList">All quests ↗</button>
                 </div>
-                <div class="mission-number" id="missionNumber">01 / 08 <span>BEGINNER</span></div>
+                <div class="mission-number" id="missionNumber">01 / 13 <span>BEGINNER</span></div>
                 <h2 id="missionTitle">Light the Path</h2>
                 <div class="quest-meta">
                   <span id="missionArea">⌖ Garden path</span><span id="missionXp">✦ 100 XP</span>
                 </div>
                 <p id="missionBudget" class="mission-budget"></p>
+                <div class="weather-quest-note" id="weatherQuestNote" hidden>
+                  <strong>Weather quest</strong>
+                  <p id="weatherQuestDescription"></p>
+                  <button class="text-btn" id="useLiveQuestWeather">Use live weather</button>
+                </div>
                 <div class="resident-card">
                   <div class="resident-avatar" id="residentAvatar">👩🏽‍🌾</div>
                   <div>
@@ -422,6 +431,29 @@
                 ><small id="weatherClockSource"></small>
               </section>
               <section class="environment panel">
+                <div class="sky-settings">
+                  <div class="section-heading">
+                    <h3>Night sky</h3>
+                    <select id="skyModeSelect" aria-label="Sky clock">
+                      <option value="live">Real time</option>
+                      <option value="simulated">Simulated time</option>
+                    </select>
+                  </div>
+                  <label class="sky-date-label"
+                    >Sky date
+                    <input type="date" id="skyDateInput" min="1900-01-01" max="2100-12-31" disabled
+                  /></label>
+                  <p id="skyDetails">
+                    Open Sky view to explore the moon and stars at your destination.
+                  </p>
+                  <button class="text-btn" id="openSky">Look at the sky</button>
+                  <button class="text-btn" id="findMoon">Find the moon</button>
+                  <small
+                    ><a href="./data/SKY-ATTRIBUTION.txt" target="_blank" rel="noopener"
+                      >Astronomy Engine · HYG star catalogue</a
+                    ></small
+                  >
+                </div>
                 <div class="section-heading">
                   <h3>Change the conditions</h3>
                   <span>≋</span>

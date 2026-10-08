@@ -8,6 +8,8 @@ const ADC_SIGNALS = new Set(['light', 'soil', 'tank', 'rain', 'pot', 'pond']),
     temp: [-10, 50, '°C'],
     outdoorTemp: [-20, 50, '°C'],
     humidity: [0, 100, '%'],
+    wind: [0, 300, 'km/h'],
+    cloud: [0, 100, '% cloud cover'],
     distance: [0, 300, 'cm'],
   };
 

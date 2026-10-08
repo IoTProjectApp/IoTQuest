@@ -1,4 +1,5 @@
 import { clamp } from './world-math.js';
+import { ADC_SIGNALS } from './missions.js';
 import { advanceEnvironment } from './weather.js';
 export const RESOURCE_ASSUMPTIONS = {
   tankLitres: 100,
@@ -69,7 +70,7 @@ export function createLabState() {
 }
 export function samplePractice(env, lab, location) {
   const s = scenarios[lab.scenario] || scenarios.normal,
-    hour = ((lab.startHour || 8) + lab.elapsedMs / 3600000) % 24,
+    hour = ((Number.isFinite(lab.startHour) ? lab.startHour : 8) + lab.elapsedMs / 3600000) % 24,
     day = Math.max(0, Math.sin(((hour - 6) / 12) * Math.PI)),
     cycle = lab.dailyCycle;
   const out = { ...env };
@@ -278,7 +279,7 @@ export function circuitSnapshot(devices, outputs, inputs = {}, kinds = {}, env =
   const used = new Map();
   for (const d of devices) used.set(d.pin, (used.get(d.pin) || 0) + 1);
   return devices.map((d) => {
-    const calibrated = ['temp', 'outdoorTemp', 'humidity'].includes(d.signal),
+    const adc = ADC_SIGNALS.includes(d.signal),
       raw = d.faultValue ?? env[d.signal] ?? 0;
     return {
       id: d.id,
@@ -287,7 +288,7 @@ export function circuitSnapshot(devices, outputs, inputs = {}, kinds = {}, env =
       type: d.output ? 'Output' : d.analog ? 'Analogue input' : 'Digital input',
       value: d.output
         ? (outputs[d.pin] ?? 0)
-        : (inputs[d.pin] ?? (d.analog && !calibrated ? Math.round(raw * 40.95) : raw)),
+        : (inputs[d.pin] ?? (d.analog && adc ? Math.round(raw * 40.95) : raw)),
       kind: kinds[d.pin] || 'digital',
       sampled: d.output ? Object.hasOwn(outputs, d.pin) : Object.hasOwn(inputs, d.pin),
       connected: d.power && d.ground,

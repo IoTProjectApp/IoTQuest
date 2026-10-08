@@ -6,7 +6,8 @@ import { homeVariant, VARIANT_OPTIONS } from '../public/home-variants.js';
 import { createRegionalModel } from '../public/regions.js';
 import { victorianFarms } from '../public/farms.js';
 import { updateAnimals } from '../public/animals.js';
-import { resolveMove, toWorld } from '../public/world-math.js';
+import { resolveMove, toWorld, findFree, collides } from '../public/world-math.js';
+import { houseDesign } from '../public/house-design.js';
 import { updateFarm } from '../public/farm-assets.js';
 import { advanceEnvironment } from '../public/weather.js';
 
@@ -44,6 +45,97 @@ test('every destination gets its own garden combination, unlike the original hom
         option + ' ' + value + ' unused',
       );
   assert.deepEqual(createRegionalModel('legacy').variant, {});
+});
+
+test('every destination has distinct actual house geometry and a stable interior design', () => {
+  const seenGeometry = new Map(),
+    seenDesign = new Map();
+  for (const l of locations) {
+    const model = createRegionalModel(l.id),
+      design = houseDesign(l);
+    assert.deepEqual(
+      design,
+      houseDesign({ id: l.id, farm: l.farm }),
+      l.id + ' identity does not depend on catalogue position',
+    );
+    const signature = JSON.stringify([
+      design.bedroom,
+      design.living,
+      design.dining,
+      design.fitting,
+      design.textile,
+      design.floor,
+    ]);
+    assert.ok(!seenDesign.has(signature), l.id + ' repeats interior ' + seenDesign.get(signature));
+    seenDesign.set(signature, l.id);
+    // No colours, names, seed metadata, landscaping or animated actors count as
+    // unique house geometry: compare the actual meshes within the house.
+    const geometry = JSON.stringify(
+      model.objects
+        .filter(
+          (o) =>
+            !o.actor &&
+            !o.landscape &&
+            !o.interiorFloor &&
+            o.pos[0] > -13.4 &&
+            o.pos[0] < 1.7 &&
+            o.pos[2] > -11.4 &&
+            o.pos[2] < -1,
+        )
+        .map((o) => [
+          o.shape,
+          o.pos.map((n) => +n.toFixed(4)),
+          o.size.map((n) => +n.toFixed(4)),
+          o.rotation.map((n) => +n.toFixed(4)),
+        ])
+        .sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b))),
+    );
+    assert.ok(
+      !seenGeometry.has(geometry),
+      l.id + ' repeats house geometry ' + seenGeometry.get(geometry),
+    );
+    seenGeometry.set(geometry, l.id);
+    for (const [name, x, y] of [
+      ['Bedroom', 19, 17],
+      ['Bathroom', 30, 15],
+      ['Kitchen', 35, 31],
+      ['Utility room', 48, 12],
+      ['Living room', 20, 35],
+      ['Garage', 50, 30],
+      ['Greenhouse', 80, 20],
+      ['Water tank', 91, 43],
+      ['Plant beds', 77, 64],
+      ['Garden path', 43, 60],
+      ['Entrance', 32, 51],
+    ]) {
+      const [ax, ay] = model.areaOverrides?.[name] || l.areaOverrides?.[name] || [x, y];
+      const landing = findFree({ x: ax, y: ay + 5 }, model.colliders),
+        point = toWorld(landing);
+      assert.equal(collides(point[0], point[2], model.colliders), false, l.id + ' ' + name);
+    }
+  }
+  assert.equal(seenGeometry.size, locations.length);
+});
+
+test('farm facilities are specific to their agricultural purpose', () => {
+  const expected = {
+    gippsland: 'milk-silo',
+    westerndistrict: 'sorting-pen',
+    yarravalley: 'fruit-crate',
+    macedon: 'tack-rack',
+  };
+  for (const l of victorianFarms) {
+    const m = createRegionalModel(l.id);
+    assert.ok(
+      m.objects.some((o) => o.farmFeature === expected[l.id]),
+      l.id,
+    );
+    for (const feature of Object.values(expected).filter((f) => f !== expected[l.id]))
+      assert.ok(
+        !m.objects.some((o) => o.farmFeature === feature),
+        l.id + ' should not repeat ' + feature,
+      );
+  }
 });
 
 test('garden variants change what is built, and farms are fenced with wire', () => {

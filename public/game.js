@@ -1,7 +1,17 @@
+import { residentsForSections, createGreetingTracker } from './section-residents.js';
+import {
+  createConversation,
+  selectedRequest,
+  chooseRequest,
+  sendConversationMessage,
+  conversationQuestions,
+  nearestCharacter,
+} from './conversations.js';
 import { components, missions, baseEnv, defaults, validate, program } from './missions.js';
+import { localSkyDate, DEFAULT_OBSERVER } from './astronomy.js';
 import { Runtime } from './runtime.js';
 import { World3D } from './world3d.js';
-import { toWorld } from './world-math.js';
+import { toWorld, fromWorld } from './world-math.js';
 import { locations, locationById, adaptMissions, progressForLocation } from './locations.js';
 import { WeatherService, advanceEnvironment } from './weather.js';
 import { advancedMenu } from './advanced-tools.js';
@@ -143,6 +153,8 @@ let tab = 'code',
   edited = false,
   errorLine = null,
   npcTime = 0;
+let activeConversation = null;
+const greetingTracker = createGreetingTracker();
 const mission = () =>
   activeFault
     ? {
@@ -248,11 +260,15 @@ function toast(text) {
   toast.timeout = setTimeout(() => $('toast').classList.remove('visible'), 4300);
 }
 function modal(title, html) {
+  activeConversation = null;
   $('modalTitle').textContent = title;
   $('modalBody').innerHTML = html;
   $('modal').showModal();
 }
 $('closeModal').onclick = () => $('modal').close();
+$('modal').addEventListener('close', () => {
+  activeConversation = null;
+});
 $('modal').addEventListener('click', (e) => {
   if (e.target === $('modal')) {
     const r = $('modal').getBoundingClientRect();
@@ -277,6 +293,7 @@ function markEdited({ typing = false } = {}) {
   else save();
 }
 function renderMission() {
+  syncSkyControls();
   let m = mission();
   $('missionTitle').textContent = m.title;
   $('mapMission').textContent = m.title;
@@ -293,7 +310,7 @@ function renderMission() {
       ' / ' +
       String(activeMissions().length).padStart(2, '0') +
       ' <span>' +
-      (state.mission < 3 ? 'BEGINNER' : 'LEVEL UP') +
+      (m.weatherQuest ? 'WEATHER QUEST' : state.mission < 3 ? 'BEGINNER' : 'LEVEL UP') +
       '</span>';
   $('residentName').textContent = m.resident;
   $('residentRole').textContent = m.role;
@@ -385,6 +402,19 @@ function relevantSignals() {
   ];
 }
 function renderEnvironment() {
+  const weatherQuest = !free && !activeFault && mission().weatherQuest;
+  $('weatherQuestNote').hidden = !weatherQuest;
+  $('weatherQuestDescription').textContent = currentLocation()
+    ? state.weatherMode === 'live'
+      ? 'Run your code with local weather readings. Live data may use a labelled fallback if unavailable. Tests check fixed weather scenarios, so you can finish in any weather.'
+      : 'Try the practice sliders or switch to live local weather. Tests check fixed weather scenarios, so you can finish in any weather.'
+    : 'Choose a destination for live local weather, or use practice readings here. Tests check fixed weather scenarios.';
+  $('useLiveQuestWeather').hidden = !!currentLocation() && state.weatherMode === 'live';
+  $('useLiveQuestWeather').textContent = currentLocation()
+    ? 'Use live weather'
+    : 'Choose a destination';
+  $('useLiveQuestWeather').onclick = () =>
+    currentLocation() ? setWeatherMode('live') : returnToGlobe();
   const signals = relevantSignals(),
     scope = free || allConditions ? '' : 'Showing what this quest’s sensors read. ';
   $('conditionsNote').textContent =
@@ -494,6 +524,8 @@ function enterArea(name) {
   view = 'detail';
   zoom = 1.9;
   state.player = world3d?.findFree({ x: a[1], y: a[2] + 5 }) ?? { x: a[1], y: a[2] + 5 };
+  const p = toWorld(state.player);
+  greetingTracker.acknowledge({ x: p[0], z: p[2] }, characterPositions());
   save();
   $('worldTip').textContent = 'Press E to install devices here';
   setMapView();
@@ -501,6 +533,10 @@ function enterArea(name) {
   $('world').focus();
 }
 function setMapView() {
+  $('world').classList.toggle('sky-view', view === 'sky');
+  if (view === 'sky') $('worldTip').textContent = 'Drag to look around · scroll to zoom';
+  else if (view === 'landscape')
+    $('worldTip').textContent = 'Mountains · river valley · lake · wildlife';
   const a = focusArea,
     tx = a ? (50 - a[1]) * zoom : 0,
     ty = a ? (50 - a[2]) * zoom : 0;
@@ -536,20 +572,24 @@ function changeView(v) {
   if (state.layout === 'code') setLayout('split');
   view = v;
   focusArea = v === 'house' ? ['House', 34, 25] : v === 'garden' ? ['Garden', 74, 52] : null;
-  zoom = v === 'world' ? 1 : 1.5;
+  zoom = v === 'world' || v === 'sky' || v === 'landscape' ? 1 : 1.5;
   setMapView();
 }
 document
   .querySelectorAll('[data-view]')
   .forEach((b) => (b.onclick = () => changeView(b.dataset.view)));
 $('returnBtn').onclick = () => changeView('world');
+$('resetCamera').onclick = () => {
+  world3d?.resetCamera(view, focusArea, zoom);
+  $('followCamera').setAttribute('aria-pressed', 'false');
+};
 $('zoomIn').onclick = () => {
   zoom = Math.min(3, zoom + 0.25);
   setMapView();
 };
 $('zoomOut').onclick = () => {
-  zoom = Math.max(1, zoom - 0.25);
-  if (zoom === 1) {
+  zoom = Math.max(view === 'landscape' ? 0.6 : 1, zoom - 0.25);
+  if (zoom === 1 && !['sky', 'landscape'].includes(view)) {
     view = 'world';
     focusArea = null;
   }
@@ -566,10 +606,12 @@ function updatePlayer() {
   $('miniPlayer').style.top = state.player.y + '%';
 }
 function move(dir, amount = 1.1) {
+  if (view === 'sky') return;
   if (state.travelScreen || $('modal').open) return;
   if (world3d) {
     state.player = world3d.move(state.player, dir, amount);
     updatePlayer();
+    checkResidentGreetings();
     return;
   }
   state.player.x = Math.max(
@@ -581,6 +623,7 @@ function move(dir, amount = 1.1) {
     Math.min(92, state.player.y + (dir === 'down' ? amount : dir === 'up' ? -amount : 0)),
   );
   updatePlayer();
+  checkResidentGreetings();
 }
 $('rotateLeft').onclick = () => {
   if (world3d) world3d.yaw -= Math.PI / 6;
@@ -590,9 +633,44 @@ $('rotateRight').onclick = () => {
 };
 $('followCamera').onclick = () => {
   if (!world3d) return;
+  if (view === 'sky') changeView('world');
   world3d.setFollow(!world3d.follow);
   $('followCamera').setAttribute('aria-pressed', String(world3d.follow));
 };
+$('openSky').onclick = () => changeView('sky');
+$('findMoon').onclick = () => {
+  changeView('sky');
+  if (!world3d) toast('Finding the moon needs the 3D world view.');
+  else if (world3d.findMoon()) zoom = 3;
+  else
+    toast(
+      'The moon is below the horizon at this location and time. Try simulated time or a different date.',
+    );
+};
+function syncSkyControls() {
+  $('skyModeSelect').value = state.skyMode === 'simulated' ? 'simulated' : 'live';
+  $('skyDateInput').disabled = state.skyMode !== 'simulated';
+  $('skyDateInput').value =
+    state.skyDate ||
+    localSkyDate(new Date(), currentLocation()?.timezone || DEFAULT_OBSERVER.timezone);
+}
+$('skyModeSelect').onchange = () => {
+  state.skyMode = $('skyModeSelect').value === 'simulated' ? 'simulated' : 'live';
+  if (!state.skyDate)
+    state.skyDate = localSkyDate(
+      new Date(),
+      currentLocation()?.timezone || DEFAULT_OBSERVER.timezone,
+    );
+  syncSkyControls();
+  save();
+};
+$('skyDateInput').onchange = () => {
+  if ($('skyDateInput').value && $('skyDateInput').checkValidity?.())
+    state.skyDate = $('skyDateInput').value;
+  syncSkyControls();
+  save();
+};
+syncSkyControls();
 $('expandWorld').onclick = () => {
   if (document.fullscreenElement) document.exitFullscreen?.();
   else
@@ -651,16 +729,34 @@ document.querySelectorAll('[data-move]').forEach((b) => {
   };
   b.onpointerup = b.onpointercancel = () => keys.delete(b.dataset.move);
 });
-function interact() {
-  let near = areas.reduce(
-    (best, a) =>
-      Math.hypot(a[1] - state.player.x, a[2] - state.player.y) <
-      Math.hypot(best[1] - state.player.x, best[2] - state.player.y)
-        ? a
-        : best,
-    areas[0],
+// Map-unit radius around an area point where E installs devices even if a resident is close by
+// (enterArea lands the technician 5 units from the point, beside that room's resident).
+const INSTALL_RADIUS = 6;
+function nearestArea() {
+  const distance = (a) => Math.hypot(a[1] - state.player.x, a[2] - state.player.y);
+  const area = areas.reduce((best, a) => (distance(a) < distance(best) ? a : best), areas[0]);
+  return { area, distance: distance(area) };
+}
+// The resident E would talk to, or null when installing takes priority or nobody is in reach.
+function talkTarget(engine = world3d) {
+  if (nearestArea().distance <= INSTALL_RADIUS) return null;
+  const p = toWorld(state.player);
+  return nearestCharacter(
+    { x: p[0], z: p[2] },
+    characterPositions(engine),
+    2.2,
+    engine?.model.colliders || [],
   );
-  if (Math.hypot(near[1] - state.player.x, near[2] - state.player.y) > 13) {
+}
+function interact() {
+  if ($('modal').open || view === 'sky') return;
+  const character = talkTarget();
+  if (character) {
+    openConversation(character.key);
+    return;
+  }
+  const { area: near, distance } = nearestArea();
+  if (distance > 13) {
     toast('Walk closer to a room, garden bed, or installation point.');
     return;
   }
@@ -693,15 +789,25 @@ function setWorldShare(value, persist = true) {
 }
 {
   const handle = $('splitHandle'),
-    shareAt = (clientY) => {
+    wideLayout =
+      typeof matchMedia === 'function'
+        ? matchMedia('(min-width: 1600px) and (min-height: 640px)')
+        : null,
+    updateOrientation = () =>
+      handle.setAttribute('aria-orientation', wideLayout?.matches ? 'vertical' : 'horizontal'),
+    shareAt = (event) => {
       const column = handle.parentElement.getBoundingClientRect();
-      return ((clientY - column.top) / column.height) * 100;
+      return wideLayout?.matches
+        ? ((event.clientX - column.left) / column.width) * 100
+        : ((event.clientY - column.top) / column.height) * 100;
     };
+  updateOrientation();
+  wideLayout?.addEventListener?.('change', updateOrientation);
   handle.onpointerdown = (e) => {
     e.preventDefault();
     handle.setPointerCapture(e.pointerId);
     handle.classList.add('dragging');
-    handle.onpointermove = (move) => setWorldShare(shareAt(move.clientY), false);
+    handle.onpointermove = (move) => setWorldShare(shareAt(move), false);
   };
   handle.onpointerup = handle.onpointercancel = () => {
     handle.onpointermove = null;
@@ -710,7 +816,9 @@ function setWorldShare(value, persist = true) {
   };
   handle.ondblclick = () => setWorldShare(WORLD_SHARE.default);
   handle.addEventListener('keydown', (e) => {
-    const step = { ArrowUp: -5, ArrowDown: 5 }[e.key];
+    const step = (
+      wideLayout?.matches ? { ArrowLeft: -5, ArrowRight: 5 } : { ArrowUp: -5, ArrowDown: 5 }
+    )[e.key];
     if (step) setWorldShare((state.worldShare ?? WORLD_SHARE.default) + step);
     else if (e.key === 'Home') setWorldShare(WORLD_SHARE.min);
     else if (e.key === 'End') setWorldShare(WORLD_SHARE.max);
@@ -1322,7 +1430,7 @@ function installDialog(id) {
   let c = components.find((c) => c.id === id);
   let valid = free
     ? areas.map((a) => a[0])
-    : [mission().area === 'Greenhouse' ? 'Greenhouse' : c.area];
+    : [mission().sectionQuest || mission().area === 'Greenhouse' ? mission().area : c.area];
   modal(
     'Install ' + c.name,
     '<div class="install-dialog"><div class="component-icon">' +
@@ -2815,41 +2923,211 @@ function applyImport(plan) {
 }
 
 $('exportBtn').onclick = exportProject;
-document.querySelectorAll('[data-npc]').forEach(
-  (n) =>
-    (n.onclick = () => {
-      const key = n.dataset.npc,
-        resident = currentLocation()?.names[key] || key;
-      modal(
-        'A chat with ' + resident,
-        '<div class="guide"><p>' +
-          esc(activeMissions().find((m) => m.resident === resident).quote) +
-          '</p><p>“Bring your toolkit over, install the devices, and show me what your code can do.”</p></div>' +
-          activeMissions()
-            .map((m, i) =>
-              m.resident === resident
-                ? '<button class="quest-option" data-chat-quest="' +
-                  i +
-                  '"><span>⚑</span><div><strong>' +
-                  esc(m.title) +
-                  '</strong><small>' +
-                  esc(m.area) +
-                  ' · ' +
-                  m.xp +
-                  ' XP</small></div></button>'
-                : '',
-            )
-            .join(''),
-      );
-      document
-        .querySelectorAll('[data-chat-quest]')
-        .forEach((b) => (b.onclick = () => selectMission(Number(b.dataset.chatQuest))));
+function characterPositions(engine = world3d) {
+  if (engine)
+    return engine.model.actors
+      .filter((a) => a.id !== 'player')
+      .map((actor) => {
+        const body = actor.parts.find((p) => p.local[1] === 0.8) || actor.parts[0];
+        return {
+          key: actor.id,
+          name: actor.name || currentLocation()?.names[actor.id] || actor.id,
+          area: actor.area,
+          section: actor.section,
+          x: engine.matrix ? body.pos[0] : actor.x,
+          z: engine.matrix ? body.pos[2] : actor.z,
+        };
+      });
+  return [
+    ...residentsForSections(
+      currentLocation(),
+      Object.fromEntries(areas.map(([area, x, y]) => [area, [x, y]])),
+    ),
+    ...[
+      ['Maya', 70, 51],
+      ['Alex', 49, 48],
+      ['Sam', 35, 35],
+    ].map(([key, x, y]) => {
+      const p = toWorld({ x, y });
+      return { key, name: currentLocation()?.names[key] || key, x: p[0], z: p[2] };
     }),
-);
+  ];
+}
+function renderSectionResidents() {
+  $('sectionResidents').innerHTML = residentsForSections(
+    currentLocation(),
+    Object.fromEntries(areas.map(([area, x, y]) => [area, [x, y]])),
+  )
+    .map((c) => {
+      const point = fromWorld(c.x, c.z);
+      return (
+        '<button class="resident npc section-resident" data-section-npc="' +
+        esc(c.key) +
+        '" id="resident-' +
+        esc(c.key) +
+        '" style="left:' +
+        point.x +
+        '%;top:' +
+        point.y +
+        '%" aria-label="Talk to ' +
+        esc(c.name) +
+        ' about ' +
+        esc(c.section) +
+        '"><span aria-hidden="true">🧑</span><small>' +
+        esc(c.name) +
+        ' · ' +
+        esc(c.section) +
+        '</small></button>'
+      );
+    })
+    .join('');
+  document
+    .querySelectorAll('[data-section-npc]')
+    .forEach((b) => (b.onclick = () => openConversation(b.dataset.sectionNpc)));
+}
+function checkResidentGreetings() {
+  const p = toWorld(state.player);
+  const character = greetingTracker.approach(
+    { x: p[0], z: p[2] },
+    characterPositions().filter((c) => c.area),
+    !state.travelScreen && !$('modal').open && view !== 'sky',
+    world3d?.model.colliders || [],
+  );
+  if (character) {
+    keys.clear();
+    openConversation(character.key);
+  }
+}
+function openConversation(key) {
+  const character = characterPositions().find((c) => c.key === key);
+  const player = toWorld(state.player);
+  greetingTracker.acknowledge({ x: player[0], z: player[2] }, characterPositions());
+  const resident = character?.name || currentLocation()?.names[key] || key,
+    quests = activeMissions();
+  const completed = Object.fromEntries(
+    quests.map((m, i) => [i, !!currentCompletions()[missionKey(i)]]),
+  );
+  activeConversation = createConversation({
+    key,
+    resident,
+    quests,
+    currentIndex: state.mission,
+    completed,
+    area: character?.area,
+  });
+  activeConversation.section = character?.section;
+  renderConversation();
+}
+function renderConversation() {
+  const chat = activeConversation;
+  if (!chat) return;
+  const request = selectedRequest(chat),
+    wasOpen = $('modal').open;
+  $('modalTitle').textContent = 'A chat with ' + chat.resident;
+  $('modalBody').innerHTML =
+    '<section class="character-chat">' +
+    '<p class="chat-topic">' +
+    esc(
+      (chat.section ? chat.section + ' · ' : '') +
+        (request ? 'Discussing: ' + request.mission.title : 'Talk with your neighbour'),
+    ) +
+    '</p>' +
+    '<div class="chat-messages" id="chatMessages" role="log" aria-live="polite" aria-relevant="additions text" aria-label="Conversation">' +
+    chat.messages
+      .map(
+        (m) =>
+          '<div class="chat-message ' +
+          m.speaker +
+          '"><strong>' +
+          esc(m.speaker === 'resident' ? chat.resident : state.name) +
+          '</strong><p>' +
+          esc(m.text) +
+          '</p></div>',
+      )
+      .join('') +
+    '</div>' +
+    '<div class="chat-questions" aria-label="Suggested questions">' +
+    conversationQuestions
+      .map(
+        (q) =>
+          '<button class="text-btn" data-chat-question="' + esc(q) + '">' + esc(q) + '</button>',
+      )
+      .join('') +
+    '</div>' +
+    '<form id="chatForm" class="chat-form"><label class="sr-only" for="chatInput">Ask ' +
+    esc(chat.resident) +
+    ' about their request</label><input id="chatInput" type="text" maxlength="240" autocomplete="off" placeholder="Ask about the request, components or animation…"/><button class="primary" type="submit">Send</button></form>' +
+    '<details class="chat-requests"><summary>Other requests from ' +
+    esc(chat.resident) +
+    '</summary>' +
+    chat.requests
+      .map(
+        (r) =>
+          '<button class="quest-option ' +
+          (r.index === chat.selectedIndex ? 'selected' : '') +
+          '" data-chat-request="' +
+          r.index +
+          '"><span>⚑</span><div><strong>' +
+          esc(r.mission.title) +
+          '</strong><small>' +
+          esc(r.mission.area) +
+          ' · ' +
+          (r.complete ? 'Passed' : r.mission.xp + ' XP') +
+          '</small></div></button>',
+      )
+      .join('') +
+    '</details>' +
+    (request
+      ? '<button class="primary chat-start" id="startChatQuest">' +
+        (request.complete ? 'Review this request' : 'Start this request') +
+        '</button>'
+      : '') +
+    '</section>';
+  if (!wasOpen) $('modal').showModal();
+  const log = $('chatMessages');
+  log.scrollTop = log.scrollHeight;
+  const send = (text) => {
+    const failedTests =
+      !free && !activeFault && state.mission === chat.selectedIndex ? testResults : [];
+    if (
+      sendConversationMessage(chat, text, {
+        failedTests,
+        weatherMode: state.weatherMode,
+      })
+    ) {
+      renderConversation();
+      $('chatInput').focus();
+    }
+  };
+  $('chatForm').onsubmit = (event) => {
+    event.preventDefault();
+    send($('chatInput').value);
+  };
+  document
+    .querySelectorAll('[data-chat-question]')
+    .forEach((b) => (b.onclick = () => send(b.dataset.chatQuestion)));
+  document.querySelectorAll('[data-chat-request]').forEach(
+    (b) =>
+      (b.onclick = () => {
+        chooseRequest(chat, Number(b.dataset.chatRequest));
+        renderConversation();
+      }),
+  );
+  if ($('startChatQuest'))
+    $('startChatQuest').onclick = () => {
+      const index = chat.selectedIndex;
+      activeConversation = null;
+      selectMission(index);
+    };
+}
+document
+  .querySelectorAll('[data-npc]')
+  .forEach((n) => (n.onclick = () => openConversation(n.dataset.npc)));
 document.body.classList.toggle('reduced-motion', state.reduced);
 $('characterBtn').textContent = state.name[0].toUpperCase();
 $('resident').style.left = '70%';
 $('resident').style.top = '51%';
+renderSectionResidents();
 renderMission();
 setLayout(state.layout);
 setWorldShare(state.worldShare ?? WORLD_SHARE.default, false);
@@ -3192,6 +3470,7 @@ function returnToGlobe() {
   save();
 }
 function showLocation() {
+  greetingTracker.reset();
   state.travelScreen = false;
   $('travelScreen').hidden = true;
   $('adventureScreen').hidden = false;
@@ -3212,8 +3491,12 @@ function showLocation() {
     ['resident', 'Maya'],
     ['alexNpc', 'Alex'],
     ['samNpc', 'Sam'],
-  ])
-    $(id).querySelector('small').textContent = location?.names[key] || key;
+  ]) {
+    const name = location?.names[key] || key;
+    $(id).querySelector('small').textContent = name;
+    $(id).setAttribute('aria-label', 'Talk to ' + name);
+  }
+  renderSectionResidents();
   state.player = world3d?.findFree({ x: 48, y: 77 }) ?? { x: 48, y: 77 };
   changeView('world');
   renderMission();
@@ -3307,6 +3590,50 @@ if (typeof fetch === 'function' && typeof $('globeCanvas')?.getContext === 'func
   });
 renderRegionalWeather();
 function projectWorldLabels(engine) {
+  if (view !== 'sky' && !$('modal').open) {
+    const near = talkTarget(engine);
+    const tip = near
+      ? 'Press E to talk to ' + near.name
+      : view === 'detail' || nearestArea().distance <= INSTALL_RADIUS
+        ? 'Press E to install devices here'
+        : view === 'landscape'
+          ? 'Mountains · river valley · lake · wildlife'
+          : 'Drag to orbit · scroll to zoom';
+    // Runs every frame: only touch the DOM when the tip actually changes.
+    if ($('worldTip').textContent !== tip) $('worldTip').textContent = tip;
+  }
+  const sky = engine.model.sky;
+  if (sky?.ephemeris) {
+    const e = sky.ephemeris,
+      key = e.date + ':' + sky.visibleStars + ':' + state.skyMode + ':' + state.activeLocation;
+    if ($('skyDetails').dataset.signature !== key) {
+      $('skyDetails').dataset.signature = key;
+      const location = currentLocation() || DEFAULT_OBSERVER;
+      const time = new Intl.DateTimeFormat('en-GB', {
+        timeZone: location.timezone,
+        dateStyle: 'medium',
+        timeStyle: 'short',
+      }).format(new Date(e.date));
+      $('skyDetails').textContent =
+        time +
+        ' · ' +
+        location.timezone +
+        '\n' +
+        e.moon.phase +
+        ' · ' +
+        Math.round(e.moon.illumination * 100) +
+        '% illuminated\nMoon: ' +
+        (e.moon.altitude > 0
+          ? Math.round(e.moon.altitude) +
+            '° above horizon · azimuth ' +
+            Math.round(e.moon.azimuth) +
+            '°'
+          : 'below the horizon') +
+        '\n' +
+        sky.visibleStars +
+        ' bright catalogue stars visible. North 0° · east 90°.';
+    }
+  }
   const place = (el, p) => {
     if (!el) return;
     const v = engine.project(p);
@@ -3347,11 +3674,18 @@ function projectWorldLabels(engine) {
   for (const actor of engine.model.actors) {
     if (actor.id === 'player') continue;
     const part = actor.parts.find((p) => p.shape === 'sphere' && p.local[1] === 1.27);
-    place($(actor.id === 'Maya' ? 'resident' : actor.id === 'Alex' ? 'alexNpc' : 'samNpc'), [
-      part.pos[0],
-      part.pos[1] + 0.58,
-      part.pos[2],
-    ]);
+    place(
+      $(
+        actor.area
+          ? 'resident-' + actor.id
+          : actor.id === 'Maya'
+            ? 'resident'
+            : actor.id === 'Alex'
+              ? 'alexNpc'
+              : 'samNpc',
+      ),
+      [part.pos[0], part.pos[1] + 0.58, part.pos[2]],
+    );
   }
 }
 if (typeof $('worldCanvas')?.getContext === 'function') {
@@ -3373,6 +3707,10 @@ if (typeof $('worldCanvas')?.getContext === 'function') {
         batteryWh: labState().resources.batteryWh,
         roofsVisible: state.roofsVisible,
         simClockMs: labState().elapsedMs,
+        skyMode: state.skyMode || 'live',
+        skyDate: state.skyDate,
+        skyStartHour: labState().startHour,
+        talkingNpc: $('modal').open ? activeConversation?.key : null,
         paused: labState().paused,
         routine: state.routinesEnabled
           ? residentRoutine(labState().elapsedMs, labState().startHour)

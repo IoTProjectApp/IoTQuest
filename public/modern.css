@@ -10,10 +10,102 @@
   --orange: #b87929;
   --mono: 'IBM Plex Mono', ui-monospace, monospace;
 }
+.weather-quest-note {
+  margin: 12px 0;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--sage);
+  font-size: 12px;
+  line-height: 1.5;
+}
+.weather-quest-note strong {
+  color: var(--green);
+}
+.weather-quest-note p {
+  margin: 6px 0;
+}
 body {
   background: radial-gradient(ellipse at 65% 0%, #e9edff 0, transparent 42%), #f3f6fb;
   color: var(--ink);
   font-size: 14px;
+}
+.character-chat {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.chat-topic {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+.chat-messages {
+  max-height: min(42vh, 360px);
+  min-height: 130px;
+  overflow-y: auto;
+  padding: 4px;
+  scrollbar-width: thin;
+}
+.chat-message {
+  max-width: 90%;
+  margin: 0 0 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 14px 14px 14px 4px;
+  background: var(--white, #fff);
+  color: var(--ink);
+}
+.chat-message.technician {
+  margin-left: auto;
+  background: var(--sage);
+  border-radius: 14px 14px 4px 14px;
+}
+.chat-message strong {
+  color: var(--green);
+  font-size: 12px;
+}
+.chat-message p {
+  margin: 6px 0 0;
+  font-size: 13px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+.chat-questions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.chat-questions button {
+  padding: 7px 10px;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: var(--sage);
+  color: var(--ink);
+  font-size: 11px;
+}
+.chat-form {
+  display: flex;
+  gap: 8px;
+}
+.chat-form input {
+  flex: 1;
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--white, #fff);
+  color: var(--ink);
+  padding: 11px;
+  font: inherit;
+}
+.chat-requests summary {
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 12px;
+  padding: 6px 0;
+}
+.chat-start {
+  align-self: flex-end;
 }
 button {
   transition:
@@ -2665,4 +2757,16 @@ html[data-theme='dark'] .u-feedback.no {
 }
 .u-summary li {
   padding: 4px 0;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
 }

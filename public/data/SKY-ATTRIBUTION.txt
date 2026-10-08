@@ -1,0 +1,14 @@
+Star catalogue: HYG v4.1 by David Nash / Astronexus
+https://github.com/astronexus/HYG-Database/blob/main/hyg/README.md
+Source: https://raw.githubusercontent.com/astronexus/HYG-Database/main/hyg/CURRENT/hygdata_v41.csv
+License: Creative Commons Attribution-ShareAlike 4.0 International
+https://creativecommons.org/licenses/by-sa/4.0/
+Changes: filtered out the Sun; selected stars with visual magnitude <= 3.0; retained IDs, names, Cartesian positions and velocities, magnitude; derived display colour from colour index. The adapted catalogue in bright-stars.js is distributed under CC BY-SA 4.0.
+Source CSV SHA256: d9f69fd86bbf90a4e4d52b4c5c53eacfa6dfc0bfdef85bfd94f095e0bebe4ebd
+
+Ephemeris: Astronomy Engine by Don Cross
+https://github.com/cosinekitty/astronomy
+MIT license: ../vendor/ASTRONOMY-LICENSE.txt
+Source: https://raw.githubusercontent.com/cosinekitty/astronomy/master/source/js/astronomy.browser.min.js
+Source SHA256: d1b3ab4b86aa409f78c0f0d95162a847496cba7e938eb6f4712cf9c1c45f4a2e
+Change: wrapped the vendored UMD library as a local ES module. No runtime network dependency.

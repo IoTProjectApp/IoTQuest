@@ -1,54 +1,26 @@
-// Sun, moon and stars. Like the clouds, they sit in a band beyond the far edge of the property
-// as seen from the camera, so they stay in the background as the view rotates. Their visibility
-// follows the simulated light level: the sun by day, the moon and twinkling stars by night.
-
-// Camera-relative positions: [across, height, distance (negative = away from the camera)].
-const SUN = [21, 1.5, -28],
-  MOON = [-20, 1.3, -27];
-// Craters on the side of the moon that faces the camera: [across, height, size].
-const CRATERS = [
-  [-0.45, 0.35, 0.34],
-  [0.4, -0.2, 0.26],
-  [0.1, 0.55, 0.18],
-];
-const STAR_COUNT = 70;
-
-function seeded(seed) {
-  let s = seed;
-  return () => ((s = (s * 16807) % 2147483647) - 1) / 2147483646;
-}
+import { calculateSky, DEFAULT_OBSERVER } from './astronomy.js';
+import { brightStars } from './data/bright-stars.js';
 
 export function addSky(model) {
-  const rand = seeded(4242),
-    hidden = { opacity: 0, sky: true };
-  const stars = Array.from({ length: STAR_COUNT }, () => {
-    const across = (rand() - 0.5) * 80,
-      height = 0.6 + rand() * 4.2,
-      away = -27 - rand() * 12,
-      radius = 0.06 + rand() * 0.1;
-    return {
-      at: [across, height, away],
-      phase: rand() * Math.PI * 2,
-      mesh: model.sphere(0, 0, 0, radius, '#f4f1dc', { ...hidden, emission: 1 }),
-    };
-  });
+  const hidden = { opacity: 0, sky: true };
   return {
-    stars,
-    sun: { at: SUN, mesh: model.sphere(0, 0, 0, 1.5, '#ffd56b', { ...hidden, emission: 1 }) },
+    stars: brightStars.map((star, i) => ({
+      id: star.id,
+      phase: i * 1.7,
+      mesh: model.sphere(0, 0, 0, 0.06 + Math.max(0, 3 - star.mag) * 0.022, star.color, {
+        ...hidden,
+        emission: 1,
+      }),
+    })),
+    sun: { mesh: model.sphere(0, 0, 0, 0.55, '#fff0c4', { ...hidden, emission: 1 }) },
     moon: {
-      at: MOON,
-      mesh: model.sphere(0, 0, 0, 1.45, '#eef0e6', { ...hidden, emission: 0.95 }),
-      // A soft glow around the moon on clear nights.
-      halo: model.sphere(0, 0, 0, 2.6, '#c9d6ec', { ...hidden, emission: 1 }),
-      craters: CRATERS.map(([across, height, size]) => ({
-        at: [MOON[0] + across, MOON[1] + height, MOON[2] + 1.2],
-        mesh: model.sphere(0, 0, 0, size, '#c8ccc0', { ...hidden, emission: 0.8 }),
-      })),
+      mesh: model.sphere(0, 0, 0, 0.55, '#e6e8e5', { ...hidden, moonSurface: true }),
+      halo: model.sphere(0, 0, 0, 1.4, '#c9d6ec', { ...hidden, emission: 1 }),
+      craters: [],
     },
   };
 }
 
-// Storm lightning: a quick double flash every few seconds of real time (none with reduced motion).
 export function lightningFlash(env, seconds, reduced) {
   const stormy =
     env.thunder || ((env.rain || 0) >= 55 && ((env.wind || 0) >= 30 || (env.cloud || 0) >= 85));
@@ -57,39 +29,70 @@ export function lightningFlash(env, seconds, reduced) {
   return phase < 0.015 ? 1 : phase > 0.03 && phase < 0.045 ? 0.6 : 0;
 }
 
-// `daylight` is 0 at night and 1 in full day; `yaw` is the camera's orbit angle. Cloud cover
-// and rain hide the stars first, then dim the moon and sun.
-export function updateSky(sky, daylight, t, reduced, yaw = 0.32, env = {}, extra = 0) {
+// Horizontal coordinates stay fixed to geographic north/east as the camera moves.
+// Cache ephemerides to the nearest simulated minute; weather/twinkle still update per frame.
+export function updateSky(
+  sky,
+  daylight,
+  t,
+  reduced,
+  yaw = 0.32,
+  env = {},
+  extra = 0,
+  context = {},
+) {
   if (!sky) return;
-  const cos = Math.cos(yaw),
-    sin = Math.sin(yaw),
-    place = (mesh, [across, height, distance]) => {
-      const away = distance - extra;
-      mesh.pos[0] = across * cos + away * sin;
-      mesh.pos[1] = height;
-      mesh.pos[2] = -across * sin + away * cos;
+  const date = context.date || new Date(),
+    location = context.location || DEFAULT_OBSERVER;
+  const bucket = Math.floor(date.getTime() / 60000),
+    key = location.latitude + ':' + location.longitude + ':' + bucket;
+  if (sky.key !== key) {
+    sky.ephemeris = calculateSky(new Date(bucket * 60000), location);
+    sky.key = key;
+  }
+  const ephemeris = sky.ephemeris,
+    radius = 120,
+    origin = context.eye || [0, 0, 0],
+    mirrored = context.mirrored ? -1 : 1,
+    place = (mesh, direction) => {
+      // Updated in place: this runs for every catalogue star on every frame.
+      mesh.pos[0] = origin[0] + direction[0] * radius * mirrored;
+      mesh.pos[1] = origin[1] + direction[1] * radius;
+      mesh.pos[2] = origin[2] + direction[2] * radius;
     },
-    night = 1 - daylight,
     cover = Math.min(1, Math.max(0, (env.cloud || 0) / 100)),
     rain = Math.min(1, Math.max(0, (env.rain || 0) / 40)),
-    // How much of the sky's light gets through the weather.
-    clearSky = (1 - Math.max(0, cover - 0.5) * 1.5) * (1 - rain * 0.85),
-    moonLevel = (night > 0.45 ? Math.min(1, (night - 0.45) * 3) : 0) * Math.max(0, clearSky);
-  place(sky.sun.mesh, sky.sun.at);
-  sky.sun.mesh.opacity =
-    (daylight > 0.45 ? Math.min(1, (daylight - 0.45) * 3) : 0) * Math.max(0, clearSky);
-  place(sky.moon.mesh, sky.moon.at);
-  sky.moon.mesh.opacity = moonLevel;
-  place(sky.moon.halo, sky.moon.at);
-  sky.moon.halo.opacity = moonLevel * 0.16 * (1 - cover);
-  for (const crater of sky.moon.craters) {
-    place(crater.mesh, crater.at);
-    crater.mesh.opacity = moonLevel;
-  }
+    clearSky = Math.max(0, (1 - Math.max(0, cover - 0.5) * 1.5) * (1 - rain * 0.85)),
+    // Astronomical twilight determines star visibility, rather than a light sensor slider.
+    night = Math.max(0, Math.min(1, (-ephemeris.sun.altitude - 6) / 12));
+  place(sky.sun.mesh, ephemeris.sun.direction);
+  sky.sun.mesh.size.fill(Math.tan(ephemeris.sun.angularRadius) * radius * 2);
+  sky.sun.mesh.opacity = ephemeris.sun.altitude > 0 ? clearSky : 0;
+  place(sky.moon.mesh, ephemeris.moon.direction);
+  const moonDiameter = Math.tan(ephemeris.moon.angularRadius) * radius * 2;
+  sky.moon.mesh.size.fill(moonDiameter);
+  sky.moon.mesh.opacity = ephemeris.moon.altitude > 0 ? clearSky : 0;
+  sky.moon.mesh.skySun = ephemeris.sun.direction.map((v, i) => (i === 0 ? v * mirrored : v));
+  place(sky.moon.halo, ephemeris.moon.direction);
+  sky.moon.halo.size.fill(moonDiameter * 2.6);
+  sky.moon.halo.opacity =
+    sky.moon.mesh.opacity * night * ephemeris.moon.illumination * 0.08 * (1 - cover);
   const starLevel =
-    (night > 0.55 ? Math.min(1, (night - 0.55) * 3) : 0) * (1 - cover) ** 1.5 * (1 - rain);
-  for (const star of sky.stars) {
-    place(star.mesh, star.at);
-    star.mesh.opacity = starLevel * (reduced ? 0.85 : 0.6 + 0.4 * Math.sin(t * 2.3 + star.phase));
+    night *
+    (1 - cover) ** 1.5 *
+    (1 - rain) *
+    (1 - ephemeris.moon.illumination * sky.moon.mesh.opacity * 0.25);
+  for (let i = 0; i < sky.stars.length; i++) {
+    const star = sky.stars[i],
+      point = ephemeris.stars[i];
+    place(star.mesh, point.direction);
+    const horizonFade = Math.max(0, Math.min(1, point.altitude / 8)),
+      brightness = Math.min(1, Math.pow(10, -0.16 * point.mag));
+    star.mesh.opacity =
+      starLevel *
+      horizonFade *
+      brightness *
+      (reduced ? 0.9 : 0.85 + 0.15 * Math.sin(t * 2.3 + star.phase));
   }
+  sky.visibleStars = sky.stars.filter((s) => s.mesh.opacity > 0.01).length;
 }

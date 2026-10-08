@@ -98,9 +98,13 @@ function reading(mission, devices, language) {
         ? 'The temperature in °C (this virtual sensor is calibrated)'
         : d.signal === 'humidity'
           ? 'The humidity as a percentage, from 0 to 100'
-          : d.signal === 'distance'
-            ? 'The distance in centimetres'
-            : '1 (HIGH) or 0 (LOW)',
+          : d.signal === 'cloud'
+            ? 'The cloud cover as a percentage, from 0 to 100'
+            : d.signal === 'wind'
+              ? 'The wind speed in kilometres per hour'
+              : d.signal === 'distance'
+                ? 'The distance in centimetres'
+                : '1 (HIGH) or 0 (LOW)',
     digital = range.startsWith('1 (HIGH)'),
     switchOutput = py ? '`.value()` on an output' : '`digitalWrite`';
   return question(

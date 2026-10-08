@@ -100,6 +100,14 @@ export function collides(x, z, colliders, radius = 0.23) {
       !c.disabled && Math.abs(x - c.x) < c.w / 2 + radius && Math.abs(z - c.z) < c.d / 2 + radius,
   );
 }
+// True when nothing in colliders blocks the straight line between two world points.
+export function clearPath(a, b, colliders) {
+  const steps = Math.ceil(Math.hypot(b.x - a.x, b.z - a.z) / 0.05);
+  for (let i = 1; i < steps; i++)
+    if (collides(a.x + ((b.x - a.x) * i) / steps, a.z + ((b.z - a.z) * i) / steps, colliders, 0.02))
+      return false;
+  return true;
+}
 export function resolveMove(player, dir, amount, yaw, colliders) {
   const [x, , z] = toWorld(player),
     f = (dir === 'up' ? -1 : dir === 'down' ? 1 : 0) * amount * 0.32,

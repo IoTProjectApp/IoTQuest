@@ -1,3 +1,4 @@
+import { addSectionResidents } from './section-residents.js';
 // Region-specific geometry augments the shared learning property. Inspiration is
 // labelled in the location card; these are adapted homes, not national archetypes.
 import { buildDestinationModel } from './regional-assets.js';
@@ -6,9 +7,14 @@ import { addClouds } from './clouds.js';
 import { addSky } from './sky.js';
 import { homeVariant } from './home-variants.js';
 import { locationById } from './locations.js';
+import { addLandscape } from './landscape.js';
 export function createRegionalModel(id) {
   const destination = buildDestinationModel(id);
-  if (destination) return destination;
+  if (destination) {
+    addSectionResidents(destination, locationById(id));
+    addLandscape(destination, locationById(id));
+    return destination;
+  }
   const m = createWorldModel(id && id !== 'legacy' ? homeVariant(locationById(id)) : {});
   m.region = id || 'legacy';
   m.floorHeight = (x, z) => (x > -13.1 && x < 1.4 && z > -11 && z < -1 ? 0.23 : 0);
@@ -17,6 +23,8 @@ export function createRegionalModel(id) {
     m.clouds = addClouds(m);
     m.sky = addSky(m);
     m.pitchedRoof('#a8735a', { ridge: '#8b5d48' });
+    addSectionResidents(m);
+    addLandscape(m);
     return m;
   }
   const { box, cylinder, sphere, mesh } = m;
@@ -188,10 +196,14 @@ export function createRegionalModel(id) {
     m.gardenLayout = 'native-inspired-rainwater-garden';
   }
   m.windObjects = m.objects
-    .filter((o) => o.shape === 'sphere' && o.pos[1] > 1.5 && !o.actor && !o.device)
+    .filter(
+      (o) => ['foliage', 'leaf'].includes(o.shape) && o.vegetation === 'tree' && o.pos[1] > 1.5,
+    )
     .map((o) => ({ mesh: o, base: [...o.pos] }));
   m.clouds = addClouds(m);
   m.sky = addSky(m);
   m.wetSurface = box(0, 0.025, 3, 29, 0.005, 18, '#6c9296', { opacity: 0 });
+  addSectionResidents(m, locationById(id));
+  addLandscape(m, locationById(id));
   return m;
 }

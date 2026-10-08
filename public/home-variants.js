@@ -1,4 +1,5 @@
 import { locations } from './locations.js';
+import { houseDesign } from './house-design.js';
 // Gives every destination its own garden: mirrored layout, greenhouse type, bed edging, water
 // tank, fence, path, garden feature, tree layout and foliage. Mission areas stay in place, so
 // quests work the same everywhere.
@@ -36,6 +37,15 @@ export function homeVariant(location) {
     code = Math.floor(code / options.length);
   }
   variant.treeSeed = index + 1;
+  variant.treeStyle =
+    location.iso === 'AUS'
+      ? 'eucalypt'
+      : ['cold', 'highland'].includes(location.climate)
+        ? 'conifer'
+        : ['palm', 'tropical', 'banana'].includes(location.planting)
+          ? 'palm'
+          : 'broadleaf';
+  variant.design = houseDesign(location);
   variant.foliage =
     location.iso === 'AUS' ? FOLIAGE.eucalypt : FOLIAGE[location.climate] || undefined;
   // Farms are fenced with post and wire.

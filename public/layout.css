@@ -283,3 +283,146 @@
 .minimap.mirrored {
   transform: scaleX(-1);
 }
+.sky-settings {
+  margin-bottom: 18px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--line);
+}
+.sky-date-label {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  font-size: 12px;
+}
+.sky-date-label input {
+  min-width: 0;
+  max-width: 150px;
+  padding: 5px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--white, #fff);
+  color: var(--ink);
+  font: inherit;
+}
+#skyDetails {
+  white-space: pre-line;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.65;
+}
+.sky-settings small {
+  display: block;
+  margin-top: 8px;
+  font-size: 10px;
+}
+.world.sky-view .map-layer,
+.world.sky-view .dpad,
+.world.sky-view .minimap,
+.world.sky-view .quest-locator,
+.world.sky-view #roofToggle,
+.world.sky-view #followCamera {
+  display: none;
+}
+
+/* Large displays can show the scene and the code at useful heights together. */
+@media (min-width: 1600px) and (min-height: 640px) {
+  main {
+    max-width: none;
+  }
+  .play-layout {
+    grid-template-columns: minmax(0, 1fr) 260px;
+  }
+  #adventureScreen[data-layout='split'] .simulation-column {
+    flex-direction: row;
+  }
+  #adventureScreen[data-layout='split'] .world-panel {
+    flex: 0 0 clamp(320px, var(--world-share, 60%), calc(100% - 494px));
+    min-width: 0;
+  }
+  #adventureScreen[data-layout='split'] .workbench {
+    min-width: 480px;
+  }
+  #adventureScreen[data-layout='split'] .split-handle {
+    cursor: col-resize;
+  }
+  #adventureScreen[data-layout='split'] .split-handle::after {
+    top: 50%;
+    left: 5px;
+    margin: -22px 0 0;
+    width: 4px;
+    height: 44px;
+  }
+  #adventureScreen[data-layout='split'] .world-panel .panel-bar {
+    height: auto;
+    flex-wrap: wrap;
+    padding: 8px 12px;
+    gap: 6px;
+  }
+  #adventureScreen[data-layout='split'] .world-status {
+    width: 100%;
+    justify-content: space-between;
+  }
+  #adventureScreen[data-layout='split'] .editor-layout,
+  #adventureScreen[data-layout='split'] .editor-layout.with-coach {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  #adventureScreen[data-layout='split'] .coach {
+    height: auto;
+    min-height: 0;
+    max-height: 220px;
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+  }
+  #adventureScreen[data-layout='split'] .editor-wrap {
+    height: max(320px, calc(100vh - 510px));
+  }
+}
+
+/* Keep the camera controls distinct from the room labels and movement pad. */
+.camera-bar {
+  max-width: calc(100% - 32px);
+  box-sizing: border-box;
+  flex-wrap: wrap;
+  justify-content: center;
+  border-radius: 12px;
+  backdrop-filter: blur(12px);
+}
+.world-tabs {
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+.world-tabs button {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+.camera-bar button {
+  min-height: 28px;
+  padding: 5px 8px;
+}
+.map-tools {
+  border-radius: 12px;
+  overflow: hidden;
+}
+.world.is-3d .area-marker {
+  border-radius: 9px;
+  box-shadow: 0 3px 10px #17243b14;
+}
+.bench-tabs {
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+.bench-tabs button {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+@media (max-width: 600px) {
+  .camera-bar .three-d-badge {
+    display: none;
+  }
+  .camera-bar {
+    width: calc(100% - 32px);
+  }
+}

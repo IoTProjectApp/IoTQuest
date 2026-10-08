@@ -1,3 +1,8 @@
+import { updateLandscape } from './landscape.js';
+import { addDeviceDetails } from './device-objects.js';
+import { locationById } from './locations.js';
+import { skyTime, DEFAULT_OBSERVER } from './astronomy.js';
+import { geometry, roundedObject } from './world-geometry.js';
 import {
   multiply,
   perspective,
@@ -20,8 +25,56 @@ import { weatherEffects } from './weather.js';
 import { updateSky, lightningFlash } from './sky.js';
 import { updateAnimals } from './animals.js';
 import { updateFarm } from './farm-assets.js';
-const VERTEX = `attribute vec3 aPosition; attribute vec3 aNormal; uniform mat4 uModel; uniform mat4 uViewProjection; uniform mat3 uNormal; varying vec3 vNormal; varying vec3 vWorld; void main(){vec4 world=uModel*vec4(aPosition,1.0);vWorld=world.xyz;vNormal=normalize(uNormal*aNormal);gl_Position=uViewProjection*world;}`;
-const FRAGMENT = `precision mediump float; varying vec3 vNormal; varying vec3 vWorld; uniform vec4 uColor; uniform float uDay; uniform float uEmission; uniform float uWet; uniform vec3 uEye; uniform vec3 uFog; uniform float uHaze; uniform vec3 uLights[8]; uniform vec3 uLightColor[8]; void main(){vec3 n=normalize(vNormal);float sun=max(0.0,dot(n,normalize(vec3(-0.5,1.0,0.65))));float ambient=mix(0.19,0.68,uDay);vec3 lit=uColor.rgb*(ambient+sun*mix(0.12,0.37,uDay));for(int i=0;i<8;i++){float d=distance(vWorld,uLights[i]);float fall=max(0.0,1.0-d/4.0);lit+=uColor.rgb*uLightColor[i]*fall*fall*1.7;}lit=mix(lit,lit*0.83+vec3(0.03,0.07,0.09),uWet*max(0.0,n.y)*0.3);lit=mix(lit,uColor.rgb*1.15,clamp(uEmission,0.0,1.0));float fog=smoothstep(mix(38.0,12.0,uHaze),mix(90.0,52.0,uHaze),distance(vWorld,uEye));gl_FragColor=vec4(mix(lit,uFog,fog*mix(.48,.88,uHaze)),uColor.a);}`;
+const VERTEX = `attribute vec3 aPosition; attribute vec3 aNormal; uniform mat4 uModel; uniform mat4 uViewProjection; uniform mat3 uNormal; varying vec3 vNormal; varying vec3 vWorld; void main(){vec4 world=uModel*vec4(aPosition,1.0);vWorld=world.xyz;vNormal=uNormal*aNormal;gl_Position=uViewProjection*world;}`;
+const FRAGMENT = `
+precision mediump float;
+varying vec3 vNormal;
+varying vec3 vWorld;
+uniform vec4 uColor;
+uniform float uDay;
+uniform float uEmission;
+uniform float uWet;
+uniform float uRoughness;
+uniform vec3 uEye;
+uniform vec3 uFog;
+uniform float uHaze;
+uniform vec3 uLights[8];
+uniform vec3 uLightColor[8];
+uniform float uCelestial;
+uniform vec3 uSkySun;
+void main() {
+  vec3 n = normalize(vNormal);
+  if (uCelestial > 0.5) {
+    vec3 surface = uColor.rgb;
+    if (uCelestial < 1.5) surface *= 0.025 + 0.975 * max(0.0, dot(n, uSkySun));
+    gl_FragColor = vec4(surface, uColor.a);
+    return;
+  }
+  vec3 lightDir = normalize(vec3(-0.5, 1.0, 0.65));
+  vec3 viewDir = normalize(uEye - vWorld);
+  float sun = max(0.0, dot(n, lightDir));
+  // Cool skylight and a warm key light reveal curved surfaces without hard bands.
+  float hemisphere = n.y * 0.5 + 0.5;
+  vec3 fill = mix(vec3(0.56, 0.53, 0.49), vec3(0.76, 0.82, 0.89), hemisphere);
+  vec3 ambient = mix(vec3(0.14, 0.17, 0.23), fill, uDay);
+  vec3 lit = uColor.rgb * (ambient + vec3(1.0, 0.94, 0.84) * sun * mix(0.08, 0.3, uDay));
+  float wet = uWet * max(0.0, n.y);
+  float roughness = clamp(uRoughness - wet * 0.22, 0.18, 1.0);
+  vec3 halfDir = normalize(lightDir + viewDir);
+  float specular = pow(max(0.0, dot(n, halfDir)), mix(72.0, 10.0, roughness));
+  lit += vec3(1.0, 0.96, 0.88) * specular * sun * uDay * (1.0 - roughness) * 0.28;
+  float rim = pow(1.0 - max(0.0, dot(n, viewDir)), 3.0);
+  lit += uColor.rgb * vec3(0.74, 0.85, 1.0) * rim * hemisphere * uDay * 0.045;
+  for (int i = 0; i < 8; i++) {
+    float d = distance(vWorld, uLights[i]);
+    float fall = max(0.0, 1.0 - d / 4.0);
+    lit += uColor.rgb * uLightColor[i] * fall * fall * 1.7;
+  }
+  lit = mix(lit, lit * 0.83 + vec3(0.03, 0.07, 0.09), wet * 0.3);
+  lit = mix(lit, uColor.rgb * 1.15, clamp(uEmission, 0.0, 1.0));
+  float fog = smoothstep(mix(38.0, 12.0, uHaze), mix(90.0, 52.0, uHaze), distance(vWorld, uEye));
+  gl_FragColor = vec4(mix(lit, uFog, fog * mix(0.48, 0.88, uHaze)), uColor.a);
+}`;
 // Parsed colours are cached (read-only) because objects are recoloured every frame.
 const colorCache = new Map();
 function color(hex) {
@@ -46,113 +99,6 @@ function parseColor(hex) {
     parseInt(h.slice(4, 6), 16) / 255,
     h.length === 8 ? parseInt(h.slice(6, 8), 16) / 255 : 1,
   ];
-}
-function geometry(shape) {
-  const p = [],
-    n = [];
-  const triangle = (a, b, c, normal = null) => {
-    for (const v of [a, b, c]) {
-      p.push(...v);
-      n.push(...(normal || v));
-    }
-  };
-  if (shape === 'box') {
-    const faces = [
-      [
-        [1, 0, 0],
-        [
-          [0.5, -0.5, -0.5],
-          [0.5, 0.5, -0.5],
-          [0.5, 0.5, 0.5],
-          [0.5, -0.5, 0.5],
-        ],
-      ],
-      [
-        [-1, 0, 0],
-        [
-          [-0.5, -0.5, 0.5],
-          [-0.5, 0.5, 0.5],
-          [-0.5, 0.5, -0.5],
-          [-0.5, -0.5, -0.5],
-        ],
-      ],
-      [
-        [0, 1, 0],
-        [
-          [-0.5, 0.5, -0.5],
-          [-0.5, 0.5, 0.5],
-          [0.5, 0.5, 0.5],
-          [0.5, 0.5, -0.5],
-        ],
-      ],
-      [
-        [0, -1, 0],
-        [
-          [-0.5, -0.5, 0.5],
-          [-0.5, -0.5, -0.5],
-          [0.5, -0.5, -0.5],
-          [0.5, -0.5, 0.5],
-        ],
-      ],
-      [
-        [0, 0, 1],
-        [
-          [0.5, -0.5, 0.5],
-          [0.5, 0.5, 0.5],
-          [-0.5, 0.5, 0.5],
-          [-0.5, -0.5, 0.5],
-        ],
-      ],
-      [
-        [0, 0, -1],
-        [
-          [-0.5, -0.5, -0.5],
-          [-0.5, 0.5, -0.5],
-          [0.5, 0.5, -0.5],
-          [0.5, -0.5, -0.5],
-        ],
-      ],
-    ];
-    for (const [normal, v] of faces) {
-      triangle(v[0], v[1], v[2], normal);
-      triangle(v[0], v[2], v[3], normal);
-    }
-  } else if (shape === 'sphere') {
-    const lat = 7,
-      lon = 10,
-      point = (i, j) => {
-        const a = (i / lat) * Math.PI,
-          b = (j / lon) * Math.PI * 2;
-        return [
-          Math.sin(a) * Math.cos(b) * 0.5,
-          Math.cos(a) * 0.5,
-          Math.sin(a) * Math.sin(b) * 0.5,
-        ];
-      };
-    for (let i = 0; i < lat; i++)
-      for (let j = 0; j < lon; j++) {
-        triangle(point(i, j), point(i + 1, j), point(i + 1, j + 1));
-        triangle(point(i, j), point(i + 1, j + 1), point(i, j + 1));
-      }
-  } else {
-    const sides = 12;
-    for (let i = 0; i < sides; i++) {
-      const a = (i / sides) * Math.PI * 2,
-        b = ((i + 1) / sides) * Math.PI * 2,
-        lo = [Math.cos(a) * 0.5, -0.5, Math.sin(a) * 0.5],
-        lo2 = [Math.cos(b) * 0.5, -0.5, Math.sin(b) * 0.5],
-        hi = shape === 'cone' ? [0, 0.5, 0] : [lo[0], 0.5, lo[2]],
-        hi2 = shape === 'cone' ? [0, 0.5, 0] : [lo2[0], 0.5, lo2[2]],
-        normal = [Math.cos((a + b) / 2), shape === 'cone' ? 0.5 : 0, Math.sin((a + b) / 2)];
-      triangle(lo, hi, lo2, normal);
-      if (shape !== 'cone') {
-        triangle(lo2, hi, hi2, normal);
-        triangle([0, 0.5, 0], hi2, hi, [0, 1, 0]);
-      }
-      triangle([0, -0.5, 0], lo, lo2, [0, -1, 0]);
-    }
-  }
-  return { positions: new Float32Array(p), normals: new Float32Array(n), count: p.length / 3 };
 }
 export class World3D {
   constructor(canvas, { getState, onFrame, onError, onRecover } = {}) {
@@ -186,6 +132,8 @@ export class World3D {
     this.heading = 0;
     this.lastTime = 0;
     this.disposed = false;
+    this.controlListeners = [];
+    this.visualClock = 0;
     this.drag = null;
     this.matrix = null;
     this.day = 1;
@@ -225,11 +173,14 @@ export class World3D {
       'uDay',
       'uEmission',
       'uWet',
+      'uRoughness',
       'uEye',
       'uFog',
       'uHaze',
       'uLights[0]',
       'uLightColor[0]',
+      'uCelestial',
+      'uSkySun',
     ])
       this.uniforms[name] = gl.getUniformLocation(this.program, name);
     this.position = gl.getAttribLocation(this.program, 'aPosition');
@@ -239,7 +190,21 @@ export class World3D {
     gl.enable(gl.DEPTH_TEST);
     gl.enable(gl.BLEND);
     gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
-    for (const shape of ['box', 'sphere', 'cylinder', 'cone']) {
+    for (const shape of [
+      'box',
+      'roundedBox',
+      'sphere',
+      'cylinder',
+      'cone',
+      'torus',
+      'bowl',
+      'vase',
+      'shade',
+      'mountain',
+      'leaf',
+      'foliage',
+      'wool',
+    ]) {
       const g = geometry(shape),
         buffer = (data) => {
           const b = gl.createBuffer();
@@ -256,37 +221,47 @@ export class World3D {
   }
   bindControls() {
     const c = this.canvas;
-    c.addEventListener('pointerdown', (e) => {
+    const on = (type, handler, options) => {
+      c.addEventListener(type, handler, options);
+      this.controlListeners.push([type, handler, options]);
+    };
+    on('pointerdown', (e) => {
       if (e.button !== 0 && e.button !== 2) return;
       this.drag = { x: e.clientX, y: e.clientY };
       c.setPointerCapture(e.pointerId);
       c.style.cursor = 'grabbing';
       c.focus();
     });
-    c.addEventListener('pointermove', (e) => {
+    on('pointermove', (e) => {
       if (!this.drag) return;
       const dx = e.clientX - this.drag.x,
         dy = e.clientY - this.drag.y;
       this.yaw -= dx * 0.007;
-      this.pitch = clamp(this.pitch + dy * 0.006, 0.25, 1.2);
+      this.pitch = clamp(
+        this.pitch + dy * 0.006,
+        this.skyView ? -1.55 : 0.25,
+        this.skyView ? 0.15 : 1.2,
+      );
       this.drag = { x: e.clientX, y: e.clientY };
     });
     const end = () => {
       this.drag = null;
       c.style.cursor = 'grab';
     };
-    c.addEventListener('pointerup', end);
-    c.addEventListener('pointercancel', end);
-    c.addEventListener('contextmenu', (e) => e.preventDefault());
-    c.addEventListener(
+    on('pointerup', end);
+    on('pointercancel', end);
+    on('contextmenu', (e) => e.preventDefault());
+    on(
       'wheel',
       (e) => {
         e.preventDefault();
-        this.distance = clamp(this.distance + e.deltaY * 0.018, 5, 55);
+        if (this.skyView) this.skyZoom = clamp((this.skyZoom || 1) - e.deltaY * 0.001, 1, 3);
+        else
+          this.distance = clamp(this.distance + e.deltaY * 0.018, 5, this.landscapeView ? 90 : 55);
       },
       { passive: false },
     );
-    c.addEventListener('webglcontextlost', (e) => {
+    on('webglcontextlost', (e) => {
       // preventDefault lets the browser restore the context; rendering resumes on restore.
       e.preventDefault();
       this.contextLost = true;
@@ -295,7 +270,7 @@ export class World3D {
         '3D graphics connection was lost. Waiting for it to recover; reload the page if the view does not return.',
       );
     });
-    c.addEventListener('webglcontextrestored', () => {
+    on('webglcontextrestored', () => {
       if (this.disposed) return;
       try {
         this.geometries = {};
@@ -312,23 +287,55 @@ export class World3D {
     });
   }
   setView(view, focus, zoom = 1) {
+    if (view === 'sky' && !this.skyView) this.pitch = -0.35;
+    else if (view === 'landscape' && !this.landscapeView) this.pitch = 0.58;
+    else if (view !== 'sky' && view !== 'landscape' && (this.skyView || this.landscapeView))
+      this.pitch = 0.73;
+    this.landscapeView = view === 'landscape';
+    this.skyView = view === 'sky';
+    this.skyZoom = zoom;
     this.follow = false;
-    this.overview = view === 'world';
+    this.overview = view === 'world' || view === 'landscape';
     this.target = focus ? toWorld({ x: focus[1], y: focus[2] }) : [0, 0, 0];
-    this.target[1] = 0.35;
+    this.target[1] = view === 'detail' ? 0.75 : 0.35;
     this.distance = clamp(
-      (view === 'world' ? 35 : view === 'detail' ? 15 : 25) /
-        Math.max(1, zoom / (view === 'detail' ? 1.9 : view === 'world' ? 1 : 1.5)),
+      (view === 'landscape' ? 68 : view === 'world' ? 35 : view === 'detail' ? 11 : 25) /
+        (view === 'landscape'
+          ? Math.max(0.6, zoom)
+          : Math.max(
+              1,
+              zoom / (view === 'detail' ? 1.9 : view === 'world' || view === 'landscape' ? 1 : 1.5),
+            )),
       5,
-      55,
+      view === 'landscape' ? 90 : 55,
     );
   }
+  resetCamera(view = 'world', focus = null, zoom = 1) {
+    this.yaw = 0.32;
+    this.pitch =
+      view === 'sky' ? -0.35 : view === 'landscape' ? 0.58 : view === 'detail' ? 0.62 : 0.73;
+    this.setView(view, focus, zoom);
+  }
   setFollow(value) {
+    // Following the technician returns from the observer's sky camera.
+    if (this.skyView) this.pitch = 0.73;
+    this.skyView = false;
+    this.landscapeView = false;
     this.follow = value;
     this.overview = false;
     if (value) this.distance = 11;
   }
+  findMoon() {
+    const moon = this.model.sky?.ephemeris?.moon;
+    if (!moon || moon.altitude <= 0) return false;
+    this.setView('sky', null, 3);
+    this.yaw = (-moon.azimuth * Math.PI) / 180;
+    this.pitch = -clamp((moon.altitude * Math.PI) / 180, 0.01, 1.5);
+    return true;
+  }
   setRegion(id) {
+    this.matrix = null;
+    this.skyLocation = null;
     this.upgradeSignature = null;
     this.lastSimClockMs = undefined;
     this.model = createRegionalModel(id);
@@ -415,16 +422,7 @@ export class World3D {
           opacity: 0,
         });
       }
-      if (['fan', 'ac'].includes(d.id)) {
-        record.parts.push(this.model.box(x, 1.1 + h, z, 0.55, 0.48, 0.17, '#d2dfd0', extra));
-        for (let i = 0; i < 3; i++)
-          record.parts.push(
-            this.model.box(x, 1.1 + h, z + 0.12, 0.47, 0.11, 0.07, '#7e9c96', {
-              ...extra,
-              blade: i,
-            }),
-          );
-      }
+      addDeviceDetails(this.model, record, h);
       if (['pump', 'valve'].includes(d.id)) {
         for (let i = 0; i < 18; i++)
           record.parts.push(
@@ -478,8 +476,13 @@ export class World3D {
           : Math.max(0, (state.simClockMs - this.lastSimClockMs) / 1000)
         : dt * state.speed;
     this.lastSimClockMs = state.simClockMs;
-    if (state.simClockMs !== undefined) t = state.simClockMs / 1000;
     if (state.paused) dt = 0;
+    const realDt = Math.min(0.1, Math.max(0, dt || 0));
+    if (!state.paused && !state.reduced) this.visualClock += realDt;
+    t =
+      state.simClockMs !== undefined
+        ? state.simClockMs / 1000
+        : this.visualClock * (state.speed || 1);
     this.syncDevices(state);
     this.syncUpgrades(state);
     const { env, outputs, player, reduced, color: toolColor, appearance } = state;
@@ -503,6 +506,14 @@ export class World3D {
         az = p[2];
         angle = this.heading;
         phase = moved > 0.001 && !reduced ? this.walkPhase : 0;
+      } else if (state.talkingNpc === actor.id) {
+        // A resident stops walking and turns towards the technician during chat.
+        if (!actor.talkPosition) {
+          const body = actor.parts.find((p) => p.local[1] === 0.8) || actor.parts[0];
+          actor.talkPosition = this.matrix ? [body.pos[0], body.pos[2]] : [actor.x, actor.z];
+        }
+        [ax, az] = actor.talkPosition;
+        angle = Math.atan2(p[0] - ax, p[2] - az);
       } else if (state.routine?.actors?.[actor.id]) {
         const target = state.routine.actors[actor.id];
         actor.x +=
@@ -518,7 +529,14 @@ export class World3D {
         angle = Math.atan2(Math.cos(t * 0.8), -Math.sin(t * 0.8));
         phase = t * 9;
       }
-      if (actor.id === 'Maya' && !motion && env.motion) {
+      if (state.talkingNpc !== actor.id) delete actor.talkPosition;
+      if (
+        actor.id === 'Maya' &&
+        !motion &&
+        env.motion &&
+        state.talkingNpc !== actor.id &&
+        !state.routine?.actors?.[actor.id]
+      ) {
         ax = -4.3;
         az = 0.5;
       }
@@ -533,6 +551,8 @@ export class World3D {
       for (const part of actor.parts) {
         let [lx, ly, lz] = part.local,
           limb = phase ? Math.sin(phase) * 0.32 * (part.side || 1) : 0;
+        if (state.talkingNpc === actor.id && part.limb === 'arm' && part.side === -1 && !reduced)
+          limb = 0.18 + Math.sin(this.visualClock * 2.8) * 0.16;
         if (part.limb) {
           lz += limb * (part.limb === 'arm' ? -1 : 1);
           ly += Math.abs(limb) * 0.15;
@@ -565,11 +585,24 @@ export class World3D {
       }
       for (const part of record.parts) {
         if (part.blade !== undefined) {
-          part.rotation = [
-            0,
-            0,
-            (part.blade * Math.PI * 2) / 3 + (s.on && !reduced ? this.fanAngle * s.brightness : 0),
-          ];
+          const angle =
+            (part.blade * Math.PI * 2) / 3 + (s.on && !reduced ? this.fanAngle * s.brightness : 0);
+          part.rotation = [0, 0, angle];
+          if (part.bladeRadius) {
+            part.pos[0] = record.x + Math.cos(angle) * part.bladeRadius;
+            part.pos[1] =
+              (this.model.floorHeight?.(record.x, record.z) || 0) +
+              1.1 +
+              Math.sin(angle) * part.bladeRadius;
+          }
+        }
+        if (part.louvre !== undefined) {
+          const tilt = !s.on
+            ? 0
+            : reduced
+              ? 0.5
+              : 0.5 + 0.3 * Math.sin(t * 1.4 + part.louvre * 0.25);
+          part.rotation = [tilt, 0, 0];
         }
         if (part.droplet !== undefined) {
           const cycle = reduced ? 0.5 : (t * 1.7 + part.droplet * 0.13) % 1;
@@ -605,9 +638,9 @@ export class World3D {
         wet = env.soil > 85;
       for (const leaf of plant.leaves) {
         leaf.color = dry ? '#b6a369' : wet ? '#809584' : '#719d59';
-        leaf.rotation[2] = dry ? 0.65 : wet ? -0.15 : 0.25;
+        leaf.rotation[2] = (leaf.restTilt ?? 0.25) + (dry ? 0.4 : wet ? -0.1 : 0);
       }
-      plant.fruit.color = dry ? '#b59a66' : '#cf7756';
+      for (const fruit of plant.fruits || [plant.fruit]) fruit.color = dry ? '#b59a66' : '#cf7756';
     }
     for (const appliance of this.model.objects.filter((o) => o.appliance)) {
       appliance.emission = env.appliance ? 0.6 : 0;
@@ -625,18 +658,30 @@ export class World3D {
       effects = weatherEffects(env),
       rainLevel = clamp(env.rain || 0, 0, 100);
     this.haze = effects.fog ? 1 : 0;
-    this.flash = lightningFlash({ ...env, thunder: effects.thunder }, this.realTime ?? t, reduced);
+    this.flash = lightningFlash({ ...env, thunder: effects.thunder }, this.visualClock, reduced);
     const skyDistance = this.model.skyDistance || 0;
     const skyYaw = this.model.mirrored ? -this.yaw : this.yaw;
     updateClouds(this.model.clouds || [], env, t, reduced, skyYaw, daylight, skyDistance);
     // Clouds light up from inside during a lightning flash.
     for (const cloud of this.model.clouds || [])
       for (const { mesh } of cloud.puffs) mesh.emission = this.flash * 0.7;
-    updateSky(this.model.sky, daylight, t, reduced, skyYaw, env, skyDistance);
+    // Accurate celestial positions depend on the observer and an explicit clock.
+    this.skyLocation ??= locationById(state.locationId) || DEFAULT_OBSERVER;
+    const date = skyTime(
+      {
+        mode: state.skyMode || 'live',
+        date: state.skyDate,
+        startHour: state.skyStartHour ?? 8,
+        elapsedMs: state.simClockMs || 0,
+      },
+      this.skyLocation,
+    );
+    // Placement is refreshed in render once the current camera position is known.
+    this.skyContext = { date, location: this.skyLocation };
     // Farm animals roam and graze in real time; windmills turn with the wind.
-    const realDt = Math.min(0.1, Math.max(0, dt || 0));
-    updateFarm(this.model, state.devices, outputs, env, this.realTime ?? t, reduced);
-    updateAnimals(this.model.animals, this.realTime ?? t, realDt, reduced || state.paused);
+    updateLandscape(this.model, env, realDt, reduced || state.paused);
+    updateFarm(this.model, state.devices, outputs, env, this.visualClock, reduced);
+    if (!state.paused) updateAnimals(this.model.animals, this.visualClock, realDt, reduced);
     for (const mill of this.model.windmills || []) {
       if (!reduced) mill.angle += realDt * (0.6 + Math.min(4, (env.wind || 0) / 12));
       mill.blades.forEach((blade, i) => {
@@ -712,12 +757,14 @@ export class World3D {
     mate.rotation[1] = gate;
     this.model.dynamic.gateCollider.disabled = gate > 0.3;
     this.model.dynamic.blinds.size[1] = Math.max(0.1, 0.83 * (1 - blinds / Math.PI));
-    this.model.dynamic.garageDoor.pos[1] = env.door ? 2.2 : 0.38;
+    const garageDoor = this.model.dynamic.garageDoor;
+    const garageFloor =
+      this.model.floorHeight?.(garageDoor.pos[0], garageDoor.pos[2] - 0.05) ?? 0.23;
+    garageDoor.pos[1] = (env.door ? 2.2 : 0.38) + garageFloor - 0.23;
   }
   render(t, dt) {
     const gl = this.gl,
       s = this.getState();
-    this.realTime = t;
     this.animate(s, t, dt);
     const width = Math.max(1, this.canvas.clientWidth),
       height = Math.max(1, this.canvas.clientHeight),
@@ -739,31 +786,57 @@ export class World3D {
     const smooth = s.reduced ? 1 : 1 - Math.exp(-dt * 7);
     for (let i = 0; i < 3; i++)
       this.currentTarget[i] += (this.target[i] - this.currentTarget[i]) * smooth;
-    const fittedDistance =
-      this.distance * (this.overview ? Math.max(1, 1.6 / (width / height)) : 1);
+    const fittedDistance = Math.min(
+      this.landscapeView ? 180 : 95,
+      this.distance * (this.overview ? Math.max(1, 1.6 / (width / height)) : 1),
+    );
     this.currentDistance += (fittedDistance - this.currentDistance) * smooth;
     // Mirrored homes are drawn through a left-right flip after the view transform: the camera
     // orbits the flipped scene as usual while the model, animations and game logic stay as built.
     const r = this.currentDistance,
       mirrored = !!this.model.mirrored,
       flip = (p) => (mirrored ? [-p[0], p[1], p[2]] : p),
-      target = flip(this.currentTarget),
-      viewEye = [
-        target[0] + Math.sin(this.yaw) * Math.cos(this.pitch) * r,
-        target[1] + Math.sin(this.pitch) * r,
-        target[2] + Math.cos(this.yaw) * Math.cos(this.pitch) * r,
-      ],
+      ground = toWorld(s.player),
+      target = this.skyView
+        ? [
+            flip(ground)[0] - Math.sin(this.yaw) * Math.cos(this.pitch) * 20,
+            (this.model.floorHeight?.(ground[0], ground[2]) || 0) + 1.7 - Math.sin(this.pitch) * 20,
+            ground[2] - Math.cos(this.yaw) * Math.cos(this.pitch) * 20,
+          ]
+        : flip(this.currentTarget),
+      viewEye = this.skyView
+        ? [flip(ground)[0], (this.model.floorHeight?.(ground[0], ground[2]) || 0) + 1.7, ground[2]]
+        : [
+            target[0] + Math.sin(this.yaw) * Math.cos(this.pitch) * r,
+            target[1] + Math.sin(this.pitch) * r,
+            target[2] + Math.cos(this.yaw) * Math.cos(this.pitch) * r,
+          ],
       // The camera position in model space, for fog and transparency sorting.
       eye = flip(viewEye);
     this.eye = eye;
+    updateSky(this.model.sky, this.day, t, s.reduced, this.yaw, s.env, 0, {
+      ...this.skyContext,
+      eye,
+      mirrored,
+    });
     const view = lookAt(viewEye, target);
     this.matrix = multiply(
-      perspective(0.78, width / height),
+      perspective(
+        this.skyView ? 0.78 / (this.skyZoom || 1) : 0.78,
+        width / height,
+        0.1,
+        this.landscapeView || this.currentDistance > 95 ? 320 : 160,
+      ),
       mirrored ? multiply(view, MIRROR) : view,
     );
     // Lightning briefly lights the whole scene, most visibly at night.
     const flash = this.flash || 0,
-      day = Math.max(clamp(s.env.light / 65, 0.04, 1), flash * 0.85),
+      day = Math.max(
+        this.skyView
+          ? clamp(((this.model.sky?.ephemeris.sun.altitude ?? 12) + 12) / 24, 0.04, 1)
+          : clamp(s.env.light / 65, 0.04, 1),
+        flash * 0.85,
+      ),
       // Sky colour: deep navy at night to a soft sky blue by day (also used as distance fog);
       // a flash washes it towards pale violet-white.
       fog = [0.09 + day * 0.6, 0.13 + day * 0.68, 0.22 + day * 0.7].map(
@@ -818,7 +891,7 @@ export class World3D {
   }
   draw(m) {
     const gl = this.gl,
-      g = this.geometries[m.shape],
+      g = this.geometries[roundedObject(m) ? 'roundedBox' : m.shape],
       mat = modelMatrix(m.pos, m.size, m.rotation),
       normal = this.normalScratch,
       c = this.colorScratch;
@@ -830,6 +903,9 @@ export class World3D {
     gl.uniformMatrix3fv(this.uniforms.uNormal, false, normal);
     gl.uniform4fv(this.uniforms.uColor, c);
     gl.uniform1f(this.uniforms.uEmission, m.emission || 0);
+    gl.uniform1f(this.uniforms.uCelestial, m.moonSurface ? 1 : m.sky ? 2 : 0);
+    gl.uniform3fv(this.uniforms.uSkySun, m.skySun || [0, 1, 0]);
+    gl.uniform1f(this.uniforms.uRoughness, m.roughness ?? (c[3] < 0.5 ? 1 : 0.76));
     gl.bindBuffer(gl.ARRAY_BUFFER, g.positions);
     gl.vertexAttribPointer(this.position, 3, gl.FLOAT, false, 0, 0);
     gl.bindBuffer(gl.ARRAY_BUFFER, g.normals);
@@ -837,8 +913,14 @@ export class World3D {
     gl.drawArrays(gl.TRIANGLES, 0, g.count);
   }
   dispose() {
+    if (this.disposed) return;
     this.disposed = true;
     cancelAnimationFrame(this.frameId);
+    for (const [type, handler, options] of this.controlListeners)
+      this.canvas.removeEventListener?.(type, handler, options);
+    this.controlListeners = [];
+    this.drag = null;
+    this.canvas.style.cursor = 'grab';
     for (const g of Object.values(this.geometries)) {
       this.gl.deleteBuffer(g.positions);
       this.gl.deleteBuffer(g.normals);

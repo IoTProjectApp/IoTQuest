@@ -1,3 +1,4 @@
+import { missions } from './missions.js';
 import { extraLocations } from './destination-catalog.js';
 import { melbourneSuburbs } from './melbourne.js';
 import { victorianFarms } from './farms.js';
@@ -173,6 +174,10 @@ function regionalBaseMissions(base, location) {
   return base.map((mission, index) => {
     const m = structuredClone(mission);
     m.resident = location.names[m.resident] || m.resident;
+    if (m.weatherQuest || m.sectionQuest) {
+      m.title = location.city + ' · ' + m.title;
+      return m;
+    }
     const names =
       location.id === 'kyoto'
         ? [
@@ -276,7 +281,7 @@ export function progressForLocation(state, id) {
   const p = id === 'legacy' ? state : state.locationProgress?.[id];
   return {
     completed: questCompletions(p?.completed).length,
-    total: id === 'legacy' ? 8 : 16,
+    total: missions.length * (id === 'legacy' ? 1 : 2),
     xp: Object.entries(p?.completed || {})
       .filter(([key]) => isQuestKey(key))
       .reduce((s, [, m]) => s + (m.xp || 0), 0),
@@ -288,6 +293,14 @@ export function adaptMissions(base, location, difficulty = 'advanced') {
   if (!location) return list;
   return list.map((m, index) => {
     m.difficulty = difficulty;
+    if (m.weatherQuest) {
+      if (difficulty === 'advanced') Object.assign(m, structuredClone(m.advanced));
+      m.learn = [
+        ...m.learn,
+        difficulty === 'advanced' ? 'Multiple weather checks' : 'One weather decision',
+      ];
+      return m;
+    }
     m.learn = [
       ...m.learn,
       difficulty === 'advanced'

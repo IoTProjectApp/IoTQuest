@@ -360,24 +360,33 @@ function loopStep(language) {
 
 function readStep(d, language) {
   const py = python(language),
+    calibrated = d.analog && !ADC.includes(d.signal),
     fn = py ? (d.analog ? 'read()' : 'value()') : d.analog ? 'analogRead' : 'digitalRead',
     line = (source = '____') =>
       py
         ? d.signal + ' = ' + source + '.' + fn
-        : 'int ' + d.signal + ' = ' + fn + '(' + source + ');';
+        : (calibrated ? 'float ' : 'int ') + d.signal + ' = ' + fn + '(' + source + ');';
   return {
     key: 'read-' + d.signal,
     title: 'Read the ' + lower(d),
     body: [
       (d.analog
-        ? 'The ' + lower(d) + ' is analogue: `' + fn + '` turns its voltage into a number. '
+        ? 'The ' +
+          lower(d) +
+          (calibrated
+            ? ' is a virtual calibrated channel: `' + fn + '` gives a reading in its stated units. '
+            : ' is analogue: `' + fn + '` turns its voltage into a number. ')
         : 'The ' + lower(d) + ' is digital: `' + fn + '` gives 1 (HIGH) or 0 (LOW). ') + d.desc,
       'Store the reading in a variable called `' +
         d.signal +
         '`. A variable is a named box: your decision will compare `' +
         d.signal +
         '` with a threshold.' +
-        (py ? '' : ' `int` means it holds a whole number.') +
+        (py
+          ? ''
+          : calibrated
+            ? ' `float` keeps decimal readings, so your threshold comparisons stay accurate.'
+            : ' `int` means it holds a whole number.') +
         ' Read it inside the loop, so it is measured again on every pass.',
     ],
     task: 'At the start of the loop' + (py ? ' (indented four spaces)' : '') + ', write:',

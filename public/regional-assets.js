@@ -1,3 +1,4 @@
+import { buildTree } from './vegetation.js';
 import { extraLocations } from './destination-catalog.js';
 import { melbourneSuburbs } from './melbourne.js';
 import { victorianFarms } from './farms.js';
@@ -274,8 +275,8 @@ export function buildDestinationModel(id) {
       const x = 6 + i * 3.25;
       box(x, 0.25 + i * 0.23, 4.6, 2.55, 0.45 + i * 0.46, 5.8, '#aca68c');
       for (const p of m.plants)
-        if (Math.abs(p.stem.pos[0] - x) < 1) {
-          for (const o of [p.stem, ...p.leaves, p.fruit]) o.pos[1] += i * 0.46;
+        if (Math.abs(p.stem.pos[0] - x) < 1 && p.stem.pos[2] > 0) {
+          for (const o of p.parts || [p.stem, ...p.leaves, p.fruit]) o.pos[1] += i * 0.46;
         }
     }
   }
@@ -283,17 +284,8 @@ export function buildDestinationModel(id) {
     for (const [x, z] of [
       [3.8, 8.1],
       [13.2, -4.2],
-    ]) {
-      cylinder(x, 1.35, z, 0.15, 2.5, '#ac9c74');
-      for (let i = 0; i < 6; i++)
-        mesh(
-          'sphere',
-          [x + Math.sin(i) * 0.65, 2.6 + Math.cos(i) * 0.15, z + Math.cos(i) * 0.65],
-          [1.6, 0.16, 0.42],
-          '#7f9e64',
-          { rotation: [0, i, Math.sin(i) * 0.2] },
-        );
-    }
+    ])
+      buildTree(m, x, z, 0.85, { style: 'palm', foliage: ['#72915d', '#7f9e64', '#8da674'] });
   }
   if (l.planting === 'xeric') {
     for (let i = 0; i < 6; i++) {
@@ -307,15 +299,22 @@ export function buildDestinationModel(id) {
       [3.8, 8.1],
       [13.2, -4.2],
     ])
-      for (let i = 0; i < 7; i++)
-        cylinder(
-          x + Math.sin(i * 2.4) * 0.45,
-          1.6,
-          z + Math.cos(i * 2.4) * 0.45,
-          0.06,
-          3 + (i % 3) * 0.3,
-          '#8fa65f',
-        );
+      for (let i = 0; i < 7; i++) {
+        const bx = x + Math.sin(i * 2.4) * 0.45,
+          bz = z + Math.cos(i * 2.4) * 0.45;
+        cylinder(bx, 1.6, bz, 0.06, 3 + (i % 3) * 0.3, '#8fa65f');
+        for (let j = 0; j < 4; j++) cylinder(bx, 0.65 + j * 0.58, bz, 0.067, 0.045, '#a9b17c');
+        for (let j = 0; j < 3; j++) {
+          const a = i * 2.4 + j * 1.8;
+          mesh(
+            'leaf',
+            [bx + Math.cos(a) * 0.21, 1.65 + j * 0.34, bz + Math.sin(a) * 0.21],
+            [0.66, 0.24, 0.12],
+            '#6f945b',
+            { vegetation: 'tree', rotation: [0, -a, 0.16] },
+          );
+        }
+      }
   }
   if (['herb', 'flower', 'vegetable', 'mixed'].includes(l.planting)) {
     // A raised bed whose plants follow the layout: low herbs, bright flowers or vegetable rows.
@@ -324,11 +323,22 @@ export function buildDestinationModel(id) {
     for (let i = 0; i < 9; i++) {
       const kind = kinds[i % kinds.length],
         x = 3.2 + i * 0.35;
-      if (kind === 'herb') sphere(x, 0.42, 8.7, 0.16, i % 2 ? '#7f9f6a' : '#94a77a');
+      if (kind === 'herb')
+        mesh('foliage', [x, 0.42, 8.7], [0.32, 0.32, 0.32], i % 2 ? '#7f9f6a' : '#94a77a');
       else if (kind === 'flower') {
         cylinder(x, 0.45, 8.7, 0.025, 0.3, '#6f8e57');
-        sphere(x, 0.63, 8.7, 0.09, ['#d98c8c', '#e2c56e', '#b495c9'][i % 3]);
-      } else mesh('sphere', [x, 0.4, 8.7], [0.28, 0.14, 0.5], i % 2 ? '#6f9a52' : '#88ad5e');
+        sphere(x, 0.63, 8.7, 0.035, '#d9bb68');
+        for (let petal = 0; petal < 5; petal++) {
+          const a = (petal * Math.PI * 2) / 5;
+          mesh(
+            'leaf',
+            [x + Math.cos(a) * 0.055, 0.63, 8.7 + Math.sin(a) * 0.055],
+            [0.13, 0.12, 0.07],
+            ['#d98c8c', '#e2c56e', '#b495c9'][i % 3],
+            { rotation: [0, -a, 0] },
+          );
+        }
+      } else mesh('leaf', [x, 0.4, 8.7], [0.5, 0.24, 0.28], i % 2 ? '#6f9a52' : '#88ad5e');
     }
   }
   buildMelbourneStyle(l, m);
@@ -349,7 +359,9 @@ export function buildDestinationModel(id) {
     m.areaOverrides['Water tank'] = [61, 76];
   }
   m.windObjects = m.objects
-    .filter((o) => o.shape === 'sphere' && o.pos[1] > 1.5 && !o.actor && !o.architectureMesh)
+    .filter(
+      (o) => ['foliage', 'leaf'].includes(o.shape) && o.vegetation === 'tree' && o.pos[1] > 1.5,
+    )
     .map((o) => ({ mesh: o, base: [...o.pos] }));
   m.clouds = addClouds(m);
   m.sky = addSky(m);
@@ -565,9 +577,13 @@ function addMelbourneStreet(l, m) {
   }
   // Neighbouring houses: fronts face the street.
   const house = (x, z, width, depth, facing, i) => {
+    // Vary each lot's built form as well as its paint; keep attached terraces
+    // within their narrow frontage and detached houses within their own lot.
+    width *= look.attached ? 0.96 + (i % 3) * 0.018 : 0.91 + (i % 4) * 0.035;
+    depth *= 0.95 + (i % 3) * 0.035;
     const wall = pick(look.walls, i),
       roofColor = pick(look.roofs, i),
-      height = 1.6,
+      height = 1.5 + i * 0.025,
       frontZ = z + (facing * depth) / 2;
     box(x, height / 2 + 0.05, z, width, height, depth, wall, { neighbour: true });
     if (look.roof === 'flat') {
@@ -596,6 +612,43 @@ function addMelbourneStreet(l, m) {
         );
     }
     // Front door and windows (windows glow at night like the property's).
+    if (i % 3 === 0) {
+      // Covered entry with two slim posts.
+      const canopyX = x - width * 0.25,
+        canopyZ = frontZ + facing * 0.5;
+      box(canopyX, 1.35, canopyZ, 1.1, 0.07, 0.9, roofColor);
+      for (const side of [-1, 1])
+        cylinder(canopyX + side * 0.48, 0.68, frontZ + facing * 0.9, 0.03, 1.32, wall);
+    } else if (i % 3 === 1) {
+      // Projecting bay window on this lot.
+      box(x + width * 0.17, 0.85, frontZ + facing * 0.2, width * 0.37, 1, 0.4, wall);
+      windows.push(
+        box(x + width * 0.17, 1.02, frontZ + facing * 0.41, width * 0.3, 0.6, 0.045, '#8abec5', {
+          opacity: 0.68,
+        }),
+      );
+    } else {
+      // Slatted window shade and a planted front box.
+      for (let j = 0; j < 5; j++)
+        box(
+          x + width * 0.15,
+          1.33 + j * 0.035,
+          frontZ + facing * 0.12,
+          width * 0.39,
+          0.018,
+          0.16,
+          roofColor,
+        );
+      box(x + width * 0.15, 0.25, frontZ + facing * 0.3, width * 0.4, 0.25, 0.35, '#9a8870');
+      for (const side of [-1, 0, 1])
+        sphere(
+          x + width * 0.15 + side * width * 0.12,
+          0.43,
+          frontZ + facing * 0.3,
+          0.18,
+          '#79916a',
+        );
+    }
     box(x - width * 0.25, 0.6, frontZ + facing * 0.03, 0.55, 1.0, 0.05, '#5b4636');
     windows.push(
       box(x + width * 0.15, 1.0, frontZ + facing * 0.03, width * 0.35, 0.6, 0.05, '#8abec5', {

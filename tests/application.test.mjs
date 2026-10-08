@@ -1,4 +1,15 @@
+import {
+  createConversation,
+  selectedRequest,
+  chooseRequest,
+  sendConversationMessage,
+  conversationQuestions,
+  nearestCharacter,
+} from '../public/conversations.js';
+import { residentsForSections, createGreetingTracker } from '../public/section-residents.js';
+import { toWorld, fromWorld } from '../public/world-math.js';
 import test from 'node:test';
+import { localSkyDate, DEFAULT_OBSERVER } from '../public/astronomy.js';
 import assert from 'node:assert/strict';
 import vm from 'node:vm';
 import { readFile, access } from 'node:fs/promises';
@@ -185,7 +196,12 @@ class Document {
 }
 function harness(
   initialSaved = null,
-  { deferWorker = false, darkPreference = false, weatherFetch = undefined } = {},
+  {
+    deferWorker = false,
+    darkPreference = false,
+    weatherFetch = undefined,
+    wideScreen = false,
+  } = {},
 ) {
   const pending = [],
     intervals = [];
@@ -241,9 +257,21 @@ function harness(
     fetch: weatherFetch,
     window: { addEventListener() {} },
     navigator: {},
-    matchMedia: (query) => (query.includes('color-scheme') ? themeMedia : { matches: false }),
+    matchMedia: (query) => (query.includes('color-scheme') ? themeMedia : { matches: wideScreen }),
     localStorage: { getItem: (k) => storage.get(k), setItem: (k, v) => storage.set(k, v) },
     components,
+    createConversation,
+    selectedRequest,
+    chooseRequest,
+    sendConversationMessage,
+    conversationQuestions,
+    nearestCharacter,
+    toWorld,
+    fromWorld,
+    residentsForSections,
+    createGreetingTracker,
+    localSkyDate,
+    DEFAULT_OBSERVER,
     missions,
     baseEnv,
     defaults,
@@ -319,7 +347,7 @@ function harness(
   });
   vm.runInContext(
     source.replace(/^import [^;]*;\n/gm, '') +
-      '\nglobalThis.api={state,project,mission,selectMission,installDialog,switchTab,testSolution,run,stop,tick,changeBoard,move,code,loadExample,renderCode,renderMission,getOutputs:()=>outputs,getTests:()=>testResults,getPassed:()=>currentPassed,getRunning:()=>running,labState,startFault,exitFault,setClockSpeed,setDifficulty,pauseExecution,stepExecution,resumeExecution,enterLocation,resumeLegacy,returnToGlobe,applyLocalWeather,setWeatherMode,advanceWorld,refreshWeather,missionKey,getPlotSamples:()=>plotSamples,previewImport,exportManifest,startBugHunt,getActiveFault:()=>activeFault,setLayout,renderCoach,downloadProgress,labContext,exportProject};',
+      '\nglobalThis.api={state,project,mission,selectMission,installDialog,switchTab,testSolution,run,stop,tick,changeBoard,move,code,loadExample,renderCode,renderMission,getOutputs:()=>outputs,getTests:()=>testResults,getPassed:()=>currentPassed,getRunning:()=>running,labState,startFault,exitFault,setClockSpeed,setDifficulty,pauseExecution,stepExecution,resumeExecution,enterLocation,resumeLegacy,returnToGlobe,applyLocalWeather,setWeatherMode,advanceWorld,refreshWeather,missionKey,getPlotSamples:()=>plotSamples,previewImport,exportManifest,startBugHunt,getActiveFault:()=>activeFault,setLayout,renderCoach,downloadProgress,labContext,exportProject,interact,enterArea,getConversation:()=>activeConversation,getTab:()=>tab};',
     ctx,
   );
   return {
@@ -580,6 +608,58 @@ test('live weather changes simulated readings gradually without turning on stude
   assert.ok(h.api.state.env.soil > before.soil);
   assert.ok(h.api.state.env.light < before.light);
   assert.equal(Object.keys(h.api.getOutputs()).length, 0);
+});
+test('Landscape camera zoom-out works without leaving the panoramic view', () => {
+  const h = harness();
+  const button = h.document
+    .querySelectorAll('[data-view]')
+    .find((b) => b.dataset.view === 'landscape');
+  button.click();
+  h.document.getElementById('zoomOut').click();
+  assert.ok(button.classList.contains('selected'));
+  assert.equal(h.document.getElementById('returnBtn').hidden, false);
+  // The transformed fallback view also exposes the zoom factor to the UI test.
+  assert.match(h.document.getElementById('mapLayer').style.transform, /scale\(0\.75\)/);
+});
+test('sky controls save the simulated date and sky exploration does not move the technician', () => {
+  const h = harness();
+  h.api.state.travelScreen = false;
+  const before = { ...h.api.state.player };
+  h.document.getElementById('openSky').click();
+  h.api.move('up');
+  assert.deepEqual({ ...h.api.state.player }, before);
+  const mode = h.document.getElementById('skyModeSelect'),
+    date = h.document.getElementById('skyDateInput');
+  mode.value = 'simulated';
+  mode.onchange();
+  assert.equal(date.disabled, false);
+  date.value = '2024-09-18';
+  date.checkValidity = () => true;
+  date.onchange();
+  assert.equal(JSON.parse(h.storage.get('iotquest-v1')).skyDate, '2024-09-18');
+  mode.value = 'live';
+  mode.onchange();
+  assert.equal(date.disabled, true);
+  assert.equal(h.api.state.skyMode, 'live');
+});
+test('weather quests show a live weather action, calibrated sensors and practice controls', async () => {
+  const h = harness();
+  await h.api.enterLocation('kyoto', fallbackWeather(locations[0]));
+  h.api.setWeatherMode('practice');
+  h.api.selectMission(8);
+  assert.equal(h.document.getElementById('weatherQuestNote').hidden, false);
+  assert.equal(h.document.getElementById('useLiveQuestWeather').hidden, false);
+  assert.match(h.document.getElementById('missionTitle').textContent, /Storm Watch/);
+  assert.match(h.document.getElementById('envControls').innerHTML, /data-env="wind"/);
+  h.document.getElementById('useLiveQuestWeather').click();
+  assert.equal(h.api.state.weatherMode, 'live');
+  assert.equal(h.document.getElementById('useLiveQuestWeather').hidden, true);
+  assert.match(
+    h.document.getElementById('weatherQuestDescription').textContent,
+    /fixed weather scenarios/,
+  );
+  h.api.selectMission(0);
+  assert.equal(h.document.getElementById('weatherQuestNote').hidden, true);
 });
 test('regional rain-aware watering keeps installation, wiring, student code and deterministic tests', async () => {
   const h = harness();
@@ -966,7 +1046,11 @@ test('fault repairs do not count as quests and advanced completions use their ow
     },
   };
   assert.equal(completedQuestCount(state), 2);
-  assert.deepEqual(progressForLocation(state, 'kyoto'), { completed: 1, total: 16, xp: 10 });
+  assert.deepEqual(progressForLocation(state, 'kyoto'), {
+    completed: 1,
+    total: missions.length * 2,
+    xp: 10,
+  });
   const h = harness();
   assert.equal(h.api.missionKey(3), '3');
 });
@@ -977,6 +1061,18 @@ test('the interact shortcut is ignored while a dialog is open', () => {
   h.document.getElementById('modal').showModal();
   h.document.listeners.keydown({ key: 'e', target: { tagName: 'BUTTON' }, preventDefault() {} });
   assert.ok(h.document.getElementById('codeInput'));
+});
+test('pressing E at a room installs devices even with its resident beside the landing point', () => {
+  const h = harness();
+  h.api.state.travelScreen = false;
+  h.api.switchTab('code');
+  h.api.enterArea('Bedroom');
+  h.api.interact();
+  assert.equal(h.api.getConversation(), null);
+  assert.equal(h.api.getTab(), 'inventory');
+  // Arriving next to the resident is already acknowledged, so the first step does not greet.
+  h.api.move('left', 0.55);
+  assert.equal(h.api.getConversation(), null);
 });
 test('Tab indents in the editor until Escape releases focus', () => {
   const h = harness();
@@ -1332,6 +1428,17 @@ test('the world/workbench divider resizes by keyboard, is clamped and saved', ()
     '85',
   );
 });
+test('wide screens use a vertical divider and left/right keys to resize the scene', () => {
+  const h = harness(null, { wideScreen: true });
+  const handle = h.document.getElementById('splitHandle');
+  assert.equal(handle.attrs['aria-orientation'], 'vertical');
+  handle.dispatchEvent({ type: 'keydown', key: 'ArrowRight', preventDefault() {} });
+  assert.equal(h.api.state.worldShare, 65);
+  handle.dispatchEvent({ type: 'keydown', key: 'ArrowLeft', preventDefault() {} });
+  assert.equal(h.api.state.worldShare, 60);
+  handle.dispatchEvent({ type: 'keydown', key: 'ArrowDown', preventDefault() {} });
+  assert.equal(h.api.state.worldShare, 60);
+});
 test('the Day / Night switch sets the light, leaves live weather and moves the daily-cycle clock', async () => {
   const h = harness();
   h.api.state.travelScreen = false;
@@ -1515,4 +1622,87 @@ test('regressions: Explain on an empty editor and Reset restarting the guide', (
   assert.match(h.document.getElementById('coach').innerHTML, /Write setup\(\)/);
   h.document.getElementById('resetCode').click();
   assert.match(h.document.getElementById('coach').innerHTML, /Step 1 of 6 · Name your pins/);
+});
+
+test('resident chat accepts safe typed questions and starts a chosen request without granting progress', () => {
+  const h = harness();
+  h.document.getElementById('resident').click();
+  assert.equal(h.document.getElementById('modalTitle').textContent, 'A chat with Maya');
+  assert.ok(h.document.getElementById('modal').open);
+  const question = h.document
+    .querySelectorAll('[data-chat-question]')
+    .find((b) => b.dataset.chatQuestion === 'What will I see animated?');
+  question.click();
+  assert.match(h.document.getElementById('modalBody').innerHTML, /lights glow/);
+  h.document.getElementById('chatInput').value = '<img src=x onerror=alert(1)>';
+  h.document.getElementById('chatForm').onsubmit({ preventDefault() {} });
+  assert.match(h.document.getElementById('modalBody').innerHTML, /&lt;img/);
+  assert.doesNotMatch(h.document.getElementById('modalBody').innerHTML, /<img src=x/);
+  h.document
+    .querySelectorAll('[data-chat-request]')
+    .find((b) => b.dataset.chatRequest === '2')
+    .click();
+  h.document.getElementById('startChatQuest').click();
+  assert.equal(h.api.state.mission, 2);
+  assert.equal(h.document.getElementById('modal').open, false);
+  assert.equal(h.api.state.xp, 0);
+  assert.equal(Object.keys(h.api.state.completed).length, 0);
+  assert.equal(h.api.project().devices.length, 0);
+});
+test('pressing E near a resident opens their chat and typing does not move the technician', () => {
+  const h = harness();
+  h.api.state.travelScreen = false;
+  h.api.state.player = { x: 70, y: 51 };
+  h.document.listeners.keydown({ key: 'e', target: { tagName: 'BUTTON' }, preventDefault() {} });
+  assert.equal(h.document.getElementById('modalTitle').textContent, 'A chat with Maya');
+  const before = { ...h.api.state.player };
+  h.document.listeners.keydown({ key: 'w', target: { tagName: 'INPUT' }, preventDefault() {} });
+  h.api.move('up', 1);
+  assert.deepEqual({ ...h.api.state.player }, before);
+});
+test('regional conversations use the destination resident names and requests', () => {
+  const h = harness();
+  h.api.enterLocation('kyoto');
+  h.document.getElementById('resident').click();
+  assert.equal(h.document.getElementById('modalTitle').textContent, 'A chat with Akari');
+  assert.equal(h.document.getElementById('resident').attrs['aria-label'], 'Talk to Akari');
+  h.document.getElementById('startChatQuest').click();
+  assert.equal(h.api.mission().resident, 'Akari');
+  assert.equal(h.api.state.activeLocation, 'kyoto');
+});
+
+test('approaching a section resident automatically opens its own quest and does not reopen after dismissal', () => {
+  const h = harness();
+  h.api.state.travelScreen = false;
+  h.api.state.player = { x: 77, y: 67 };
+  h.api.move('up', 0.5);
+  assert.equal(h.document.getElementById('modalTitle').textContent, 'A chat with Robin');
+  assert.match(h.document.getElementById('modalBody').innerHTML, /Plant beds/);
+  assert.ok(
+    h.document
+      .querySelectorAll('[data-chat-request]')
+      .every((b) => missions[Number(b.dataset.chatRequest)].area === 'Plant beds'),
+  );
+  h.document.getElementById('modal').close();
+  h.api.move('right', 0.5);
+  assert.equal(h.document.getElementById('modal').open, false);
+  h.api.state.player = { x: 77, y: 90 };
+  h.api.move('right', 0.5);
+  h.api.state.player = { x: 77, y: 67 };
+  h.api.move('up', 0.5);
+  assert.equal(h.document.getElementById('modal').open, true);
+});
+test('bedroom resident starts its dedicated quest and installs components in the bedroom', () => {
+  const h = harness();
+  h.document
+    .querySelectorAll('[data-section-npc]')
+    .find((b) => b.dataset.sectionNpc === 'section:Bedroom')
+    .click();
+  assert.equal(h.document.getElementById('modalTitle').textContent, 'A chat with Nina');
+  h.document.getElementById('startChatQuest').click();
+  assert.equal(h.api.mission().title, 'Bedroom Night Light');
+  h.api.installDialog('ldr');
+  h.document.getElementById('confirmInstall').click();
+  assert.equal(h.api.project().devices[0].area, 'Bedroom');
+  assert.equal(h.api.state.xp, 0);
 });

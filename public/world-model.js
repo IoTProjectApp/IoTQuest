@@ -1,3 +1,5 @@
+import { buildCrop, buildTree } from './vegetation.js';
+import { buildHouseObjects } from './house-objects.js';
 import { toWorld } from './world-math.js';
 // Meshes are actual scene geometry, measured in metres. y is height, x/z the ground.
 // Garden variations that make each destination's property unique. The empty variant builds the
@@ -83,8 +85,8 @@ export function createWorldModel(variant = {}) {
     mesh('cylinder', [x, y, z], [r * 2, h, r * 2], color, extra);
   const sphere = (x, y, z, r, color, extra = {}) =>
     mesh('sphere', [x, y, z], [r * 2, r * 2, r * 2], color, extra);
-  const solid = (x, y, z, w, h, d, color) => {
-    const m = box(x, y, z, w, h, d, color);
+  const solid = (x, y, z, w, h, d, color, extra = {}) => {
+    const m = box(x, y, z, w, h, d, color, extra);
     colliders.push({ x, z, w, d });
     return m;
   };
@@ -151,10 +153,35 @@ export function createWorldModel(variant = {}) {
   box(-5.8, 0.07, -6, 14.9, 0.2, 10.4, '#e9ddc6');
   for (const [name, x, z, c] of rooms) {
     box(x, 0.18, z, 4.58, 0.09, 4.8, c);
-    for (let i = 0; i < 4; i++) {
-      box(x - 1.7 + i * 1.15, 0.233, z, 0.025, 0.006, 4.7, '#e9dfc855');
-    }
+    const tiled = variant.design && !['Bathroom', 'Utility room', 'Garage'].includes(name);
+    // Designed floors cover these default plank lines, so only draw them on plain floors.
+    if (!tiled)
+      for (let i = 0; i < 4; i++) {
+        box(x - 1.7 + i * 1.15, 0.233, z, 0.025, 0.006, 4.7, '#e9dfc855');
+      }
     dynamic[name] = { x, z };
+    if (tiled) {
+      const timber = variant.design.floor === 'timber',
+        columns = timber ? 7 : 4,
+        rows = timber ? 2 : 4,
+        colours = timber
+          ? ['#c8b69c', '#c2ad90']
+          : variant.design.floor === 'stone'
+            ? ['#b9b7ac', '#c3c0b4']
+            : ['#d1cabe', '#d9d2c5'];
+      for (let i = 0; i < columns; i++)
+        for (let j = 0; j < rows; j++)
+          box(
+            x - 2.2 + ((i + 0.5) * 4.4) / columns,
+            0.236,
+            z - 2.3 + ((j + 0.5) * 4.6) / rows,
+            4.4 / columns - 0.012,
+            0.008,
+            4.6 / rows - 0.012,
+            colours[(i + j) % 2],
+            { rounded: false, interiorFloor: true },
+          );
+    }
   }
   wallH(-13.1, 1.4, -11, null, 1.55);
   wallH(-13.1, -8.2, -6, -10.5, 0.95);
@@ -172,78 +199,7 @@ export function createWorldModel(variant = {}) {
     windows.push(box(x, 1.1, -10.88, 1.35, 0.78, 0.065, '#8abec5', { opacity: 0.68 }));
     box(x, 1.1, -10.81, 0.06, 0.85, 0.1, '#fbf1dc');
   }
-  // Bedroom: upholstered bed, duvet, pillows, bedside chest and blinds.
-  solid(-11, 0.48, -8.55, 2.55, 0.55, 3, '#ab8058');
-  box(-11, 0.84, -8.5, 2.48, 0.19, 2.86, '#fcf3df');
-  box(-11, 0.96, -8, 2.48, 0.16, 1.95, '#98b58e');
-  box(-11, 1.0, -9.35, 1.9, 0.25, 0.57, '#fff8e8');
-  box(-11, 1.05, -10.04, 2.6, 1.1, 0.17, '#c39b75');
-  solid(-8.95, 0.55, -9.3, 0.65, 0.65, 0.7, '#b5946f');
-  cylinder(-8.95, 1.13, -9.3, 0.16, 0.45, '#d6b078');
-  mesh('cone', [-8.95, 1.48, -9.3], [0.5, 0.33, 0.5], '#faf1d2');
-  dynamic.blinds = box(-11.5, 1.22, -10.74, 1.42, 0.83, 0.05, '#c6ad83');
-  // Living room: sofa, rug, coffee table, TV and small bookcase.
-  box(-10.55, 0.26, -3.5, 3.5, 0.025, 3.1, '#d9b892');
-  solid(-11.8, 0.58, -3.5, 1.0, 0.72, 2.9, '#eee9d6');
-  box(-12.15, 1.02, -3.5, 0.3, 0.82, 2.9, '#e5dfcd');
-  box(-11.73, 0.91, -4.75, 1.1, 0.45, 0.32, '#e7d9b6');
-  box(-11.73, 0.91, -2.25, 1.1, 0.45, 0.32, '#e7d9b6');
-  box(-11.7, 0.99, -3.1, 0.36, 0.28, 0.46, '#b5c593');
-  solid(-9.9, 0.56, -3.6, 1.2, 0.48, 0.9, '#b58c62');
-  box(-9.9, 0.83, -3.6, 1.24, 0.11, 0.94, '#cfac7c');
-  solid(-8.7, 0.6, -4.8, 0.55, 0.7, 1.3, '#b58d6c');
-  box(-8.62, 1.35, -4.8, 0.08, 0.8, 1.28, '#354949');
-  box(-8.57, 1.37, -4.8, 0.045, 0.65, 1.12, '#637d76');
-  // Kitchen: counter, refrigerator, cupboards, cooker, dining table and stools.
-  solid(-5.8, 0.69, -5.3, 3.95, 0.93, 0.72, '#a5b99a');
-  box(-5.8, 1.19, -5.3, 4.02, 0.1, 0.83, '#f2e8d4');
-  for (const x of [-7.25, -6.3, -5.35, -4.4]) box(x, 0.77, -4.92, 0.025, 0.73, 0.06, '#6f8e6c');
-  box(-6.2, 1.25, -5.3, 0.8, 0.04, 0.55, '#7f9290');
-  for (const x of [-5.0, -4.6])
-    for (const z of [-5.48, -5.1])
-      cylinder(x, 1.27, z, 0.13, 0.035, '#4d6056', { appliance: true });
-  solid(-4.05, 1.16, -4.12, 0.78, 1.85, 0.85, '#edf0e4');
-  box(-4.04, 1.48, -3.67, 0.52, 0.015, 0.035, '#9aa993');
-  solid(-6.1, 0.75, -2.5, 1.5, 0.9, 1.2, '#c29c70');
-  box(-6.1, 1.24, -2.5, 1.66, 0.12, 1.3, '#d2b28a');
-  for (const x of [-7.35, -4.95]) {
-    cylinder(x, 0.53, -2.5, 0.3, 0.5, '#a38761');
-    cylinder(x, 0.82, -2.5, 0.38, 0.1, '#d8bc92');
-  }
-  // Bathroom: tub, water, basin, mirror, toilet and tiled partition.
-  solid(-6.6, 0.52, -8.9, 1.3, 0.65, 2.15, '#f1f2e7');
-  box(-6.6, 0.86, -8.9, 0.99, 0.025, 1.77, '#a6cfd2', { opacity: 0.7 });
-  solid(-4.3, 0.72, -9.6, 0.75, 1, 0.75, '#e8e9dc');
-  cylinder(-4.3, 1.28, -9.6, 0.34, 0.12, '#fcf8e9');
-  box(-4.3, 1.8, -10.8, 0.8, 0.75, 0.07, '#a1c5c5');
-  cylinder(-5.1, 0.58, -7.15, 0.35, 0.5, '#f3f2e9');
-  box(-5.1, 0.9, -7.52, 0.6, 0.86, 0.37, '#f3f2e9');
-  // Utility: washer, dryer, service board and storage shelves.
-  for (const x of [-2.3, -1.1]) {
-    solid(x, 0.76, -9.8, 1.0, 1.1, 1.0, '#e6e9e0');
-    mesh('cylinder', [x, 0.79, -9.25], [0.66, 0.07, 0.66], '#718582', {
-      rotation: [Math.PI / 2, 0, 0],
-    });
-    mesh('cylinder', [x, 0.79, -9.2], [0.44, 0.08, 0.44], '#b7d0ce', {
-      rotation: [Math.PI / 2, 0, 0],
-    });
-  }
-  solid(0.4, 0.8, -9.1, 0.6, 1.2, 1.8, '#c2a886');
-  for (const y of [0.55, 1, 1.45]) box(0.4, y, -9.1, 0.75, 0.08, 1.9, '#aa885f');
-  box(0.4, 1.3, -10.82, 0.7, 0.6, 0.08, '#758d7b');
-  // Garage: car, rubber tyres, workshop bench and motorised door panel.
-  solid(-1.2, 0.6, -3.75, 1.65, 0.62, 2.9, '#87a386');
-  box(-1.2, 1.15, -3.83, 1.5, 0.62, 1.55, '#9cb399');
-  box(-1.2, 1.28, -2.98, 1.32, 0.45, 0.055, '#adc9c8');
-  box(-1.2, 1.29, -4.62, 1.32, 0.42, 0.055, '#8db5b8');
-  for (const x of [-2.03, -0.37])
-    for (const z of [-4.65, -2.87])
-      mesh('cylinder', [x, 0.48, z], [0.61, 0.15, 0.61], '#3b4843', {
-        rotation: [0, 0, Math.PI / 2],
-      });
-  solid(0.75, 0.78, -4.8, 0.8, 0.9, 1.9, '#b4916d');
-  box(0.7, 1.26, -4.8, 0.96, 0.12, 2, '#d0ad81');
-  dynamic.garageDoor = box(-1.1, 0.38, -1, 3.1, 0.2, 0.16, '#a7b3ab');
+  buildHouseObjects({ mesh, colliders, dynamic, design: variant.design });
   // Greenhouse: a framed glasshouse (default), a polytunnel or a lean-to against a brick wall.
   const gx = 9.9,
     gz = -7.1;
@@ -283,27 +239,8 @@ export function createWorldModel(variant = {}) {
       });
   }
   // Plants in raised garden beds and in the greenhouse.
-  function plant(x, z, scale = 1) {
-    const stem = cylinder(x, 0.65 * scale + 0.2, z, 0.047, 1.15 * scale, '#6c8e48');
-    const leaves = [];
-    for (let i = 0; i < 4; i++) {
-      const a = i * 1.7;
-      leaves.push(
-        mesh(
-          'sphere',
-          [
-            x + Math.sin(a) * 0.19 * scale,
-            0.55 * scale + i * 0.14 * scale + 0.2,
-            z + Math.cos(a) * 0.18 * scale,
-          ],
-          [0.48 * scale, 0.17 * scale, 0.28 * scale],
-          '#709959',
-          { rotation: [0, a, 0.35] },
-        ),
-      );
-    }
-    const fruit = sphere(x + 0.14 * scale, 1.1 * scale + 0.2, z, 0.115 * scale, '#ca7053');
-    plants.push({ stem, leaves, fruit, base: scale });
+  function plant(x, z, scale = 1, rootHeight = 0.47) {
+    plants.push(buildCrop({ mesh }, x, z, scale, rootHeight));
   }
   for (const x of [6.0, 9.25, 12.5]) {
     solid(x, 0.22, 4.6, 2.35, 0.35, 5.5, VARIANT_COLOURS.beds[variant.beds] || '#b39166');
@@ -314,7 +251,7 @@ export function createWorldModel(variant = {}) {
   }
   for (const x of [8.7, 11]) {
     box(x, 0.38, -7.2, 1.45, 0.42, 3.4, '#b99468');
-    for (let i = 0; i < 3; i++) plant(x, -8.35 + i * 1.12, 0.75);
+    for (let i = 0; i < 3; i++) plant(x, -8.35 + i * 1.12, 0.75, 0.59);
   }
   // Tank, inlet pipe, visible water volume, pump, and irrigation pipes.
   const tx = 13.05,
@@ -330,7 +267,16 @@ export function createWorldModel(variant = {}) {
     : [0.37, 0.82, 1.28, 1.76])
     cylinder(tx, y, tz, 1.083, 0.065, tankRib);
   cylinder(tx, 2.13, tz, 1.1, 0.15, tankLid);
-  dynamic.tankWater = cylinder(tx, 1.1, tz, 1.08, 1.76, '#3f93b1', { opacity: 0.55 });
+  cylinder(tx, 2.24, tz, 0.3, 0.09, tankRib);
+  cylinder(tx, 2.3, tz, 0.32, 0.04, tankLid);
+  cylinder(tx + 0.8, 0.32, tz + 0.76, 0.06, 0.32, '#aebdb6', { roughness: 0.3 });
+  mesh('torus', [tx + 0.8, 0.4, tz + 0.86], [0.2, 0.2, 0.2], '#806956', {
+    rotation: [Math.PI / 2, 0, 0],
+  });
+  dynamic.tankWater = cylinder(tx, 1.1, tz, 1.08, 1.76, '#3f93b1', {
+    opacity: 0.55,
+    roughness: 0.2,
+  });
   box(tx, 1.05, tz + 1.09, 0.22, 1.7, 0.035, '#e9f3ed');
   dynamic.tankGauge = box(tx, 0.78, tz + 1.12, 0.15, 1.2, 0.04, '#5dabbf');
   beam([tx, 2.28, tz], [tx + 0.45, 2.8, tz], 0.12, '#bed3ce');
@@ -409,20 +355,10 @@ export function createWorldModel(variant = {}) {
   // Trees, hedges, rocks and flowers around the island.
   function tree(x, z, s = 1) {
     shadow(x, z, 2.5 * s, 2.4 * s);
-    cylinder(x, 1.1 * s, z, 0.18 * s, 2.0 * s, '#9f8966');
-    for (const [dx, dy, dz, r] of [
-      [0, 2.6, 0, 1.05],
-      [-0.65, 2.0, 0.25, 0.82],
-      [0.6, 2.15, -0.2, 0.78],
-      [0.1, 3.1, 0.1, 0.64],
-    ])
-      sphere(
-        x + dx * s,
-        dy * s,
-        z + dz * s,
-        r * s,
-        (variant.foliage || ['#7b9f64', '#85a971', '#93ad75'])[Math.floor((x + z + 50) % 3)],
-      );
+    buildTree({ mesh }, x, z, s, {
+      style: variant.treeStyle || 'broadleaf',
+      foliage: variant.foliage,
+    });
     colliders.push({ x, z, w: 0.5 * s, d: 0.5 * s });
   }
   const treeSpots = [
@@ -579,6 +515,7 @@ export function createWorldModel(variant = {}) {
     plants,
     lamps,
     actors,
+    addActor: actor,
     roofs,
     windows,
     dynamic,

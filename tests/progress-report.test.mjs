@@ -68,8 +68,8 @@ test('a progress report lists every quest with status, attempts, hints, guide st
   assert.equal(progressFileName(report), 'iotquest-progress-amira-k-2026-10-03.json');
   const legacy = report.quests.filter((q) => q.location === 'legacy'),
     fitzroy = report.quests.filter((q) => q.location === 'fitzroy');
-  assert.equal(legacy.length, 8);
-  assert.equal(fitzroy.length, 8, 'beginner only: no advanced work in Fitzroy');
+  assert.equal(legacy.length, missions.length);
+  assert.equal(fitzroy.length, missions.length, 'beginner only: no advanced work in Fitzroy');
   assert.deepEqual(
     [legacy[0].status, legacy[1].status, legacy[2].status],
     ['passed', 'started', 'not-started'],
@@ -160,7 +160,7 @@ test('the class grid keeps each student’s newest report and summarises each qu
     grid.rows.map((r) => r.student),
     ['amira k', 'Ben'],
   );
-  assert.equal(grid.quests.length, 8);
+  assert.equal(grid.quests.length, missions.length);
   assert.equal(grid.quests[0].passed, 1);
   assert.equal(grid.quests[1].passed, 1, 'the newer report shows quest 2 passed');
   assert.equal(grid.rows[1].cells[0].status, 'not-started');

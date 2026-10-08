@@ -7,6 +7,7 @@
     <script src="./theme-init.js"></script>
     <link rel="stylesheet" href="./game.css" />
     <link rel="stylesheet" href="./modern.css" />
+    <link rel="stylesheet" href="./layout.css" />
     <link rel="stylesheet" href="./themes.css" />
     <link rel="icon" href="./favicon.svg" />
   </head>
@@ -211,6 +212,15 @@
               <p id="regionSubtitle">Explore the neighborhood. Bring a little ingenuity.</p>
             </div>
             <div class="adventure-heading-actions">
+              <div class="layout-switch" role="group" aria-label="Screen layout">
+                <button data-layout="split" aria-pressed="true" title="World and workbench">
+                  Split</button
+                ><button data-layout="world" aria-pressed="false" title="Enlarge the world">
+                  World</button
+                ><button data-layout="code" aria-pressed="false" title="Enlarge the workbench">
+                  Code
+                </button>
+              </div>
               <button class="outline" id="backToGlobe">◎ Return to globe</button
               ><button class="outline" id="freeBtn">◇ Free build</button>
             </div>
@@ -324,6 +334,18 @@
                   ><span id="worldTip">Drag to orbit · scroll to zoom</span>
                 </div>
               </section>
+              <div
+                class="split-handle"
+                id="splitHandle"
+                role="separator"
+                aria-orientation="horizontal"
+                aria-label="Resize the 3D world and the workbench"
+                aria-valuemin="25"
+                aria-valuemax="85"
+                aria-valuenow="60"
+                tabindex="0"
+                title="Drag to resize · double-click to reset"
+              ></div>
               <section class="workbench panel">
                 <div class="panel-bar bench-bar">
                   <div class="tabs bench-tabs">

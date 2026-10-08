@@ -735,3 +735,25 @@ html[data-theme='light'] .code-line.hunt-found {
   background: #18794e14;
   box-shadow: inset 3px 0 0 #18794e;
 }
+html[data-theme='dark'] .layout-switch {
+  background: #1a263bbd;
+  border-color: #334159;
+}
+html[data-theme='dark'] .layout-switch button {
+  color: #9fb0cc;
+}
+html[data-theme='dark'] .layout-switch button[aria-pressed='true'] {
+  color: #d1d7ff;
+  background: #293354;
+}
+html[data-theme='dark'] .destination-panel .enter-location {
+  box-shadow: 0 -14px 14px #172234;
+}
+html[data-theme='dark'] .split-handle::after {
+  background: #334159;
+}
+html[data-theme='dark'] .split-handle:hover::after,
+html[data-theme='dark'] .split-handle:focus-visible::after,
+html[data-theme='dark'] .split-handle.dragging::after {
+  background: #7d8ef4;
+}

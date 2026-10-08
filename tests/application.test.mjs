@@ -306,7 +306,7 @@ function harness(
   });
   vm.runInContext(
     source.replace(/^import [^;]*;\n/gm, '') +
-      '\nglobalThis.api={state,project,mission,selectMission,installDialog,switchTab,testSolution,run,stop,tick,changeBoard,move,code,loadExample,renderCode,renderMission,getOutputs:()=>outputs,getTests:()=>testResults,getPassed:()=>currentPassed,getRunning:()=>running,labState,startFault,exitFault,setClockSpeed,setDifficulty,pauseExecution,stepExecution,resumeExecution,enterLocation,resumeLegacy,returnToGlobe,applyLocalWeather,setWeatherMode,advanceWorld,refreshWeather,missionKey,getPlotSamples:()=>plotSamples,previewImport,exportManifest,startBugHunt,getActiveFault:()=>activeFault,labContext,exportProject};',
+      '\nglobalThis.api={state,project,mission,selectMission,installDialog,switchTab,testSolution,run,stop,tick,changeBoard,move,code,loadExample,renderCode,renderMission,getOutputs:()=>outputs,getTests:()=>testResults,getPassed:()=>currentPassed,getRunning:()=>running,labState,startFault,exitFault,setClockSpeed,setDifficulty,pauseExecution,stepExecution,resumeExecution,enterLocation,resumeLegacy,returnToGlobe,applyLocalWeather,setWeatherMode,advanceWorld,refreshWeather,missionKey,getPlotSamples:()=>plotSamples,previewImport,exportManifest,startBugHunt,getActiveFault:()=>activeFault,setLayout,labContext,exportProject};',
     ctx,
   );
   return {
@@ -1273,4 +1273,39 @@ test('the conditions panel shows only what the quest sensors read, unless all ar
   assert.ok(shown().includes('outdoorTemp') && shown().includes('pond'));
   h.document.getElementById('moreConditions').onclick();
   assert.deepEqual(shown(), ['soil', 'tank']);
+});
+
+test('the World / Split / Code layout is saved and opening a workbench tab brings the bench back', () => {
+  const h = harness();
+  h.api.state.travelScreen = false;
+  h.api.setLayout('world');
+  assert.equal(h.document.getElementById('adventureScreen').dataset.layout, 'world');
+  assert.equal(JSON.parse(h.storage.get('iotquest-v1')).layout, 'world');
+  h.api.switchTab('wiring');
+  assert.equal(h.api.state.layout, 'split');
+  h.api.setLayout('code');
+  h.api.setLayout('nonsense');
+  assert.equal(h.api.state.layout, 'split');
+  assert.equal(
+    harness({ layout: 'code' }).document.getElementById('adventureScreen').dataset.layout,
+    'code',
+  );
+});
+
+test('the world/workbench divider resizes by keyboard, is clamped and saved', () => {
+  const h = harness();
+  const handle = h.document.getElementById('splitHandle');
+  assert.equal(handle.attrs['aria-valuenow'], '60');
+  handle.dispatchEvent({ type: 'keydown', key: 'ArrowDown', preventDefault() {} });
+  assert.equal(h.api.state.worldShare, 65);
+  handle.dispatchEvent({ type: 'keydown', key: 'End', preventDefault() {} });
+  assert.equal(h.api.state.worldShare, 85);
+  handle.ondblclick();
+  assert.equal(h.api.state.worldShare, 60);
+  handle.dispatchEvent({ type: 'keydown', key: 'Home', preventDefault() {} });
+  assert.equal(JSON.parse(h.storage.get('iotquest-v1')).worldShare, 25);
+  assert.equal(
+    harness({ worldShare: 500 }).document.getElementById('splitHandle').attrs['aria-valuenow'],
+    '85',
+  );
 });

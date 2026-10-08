@@ -530,6 +530,7 @@ function setMapView() {
     );
 }
 function changeView(v) {
+  if (state.layout === 'code') setLayout('split');
   view = v;
   focusArea = v === 'house' ? ['House', 34, 25] : v === 'garden' ? ['Garden', 74, 52] : null;
   zoom = v === 'world' ? 1 : 1.5;
@@ -664,7 +665,59 @@ function interact() {
   switchTab('inventory');
   toast('You’re at ' + near[0] + '. Choose a component to install.');
 }
+// Split shares the column; World or Code enlarges one side (wide screens only, see layout.css).
+function setLayout(layout) {
+  state.layout = ['split', 'world', 'code'].includes(layout) ? layout : 'split';
+  $('adventureScreen').dataset.layout = state.layout;
+  document
+    .querySelectorAll('.layout-switch [data-layout]')
+    .forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.layout === state.layout)));
+  save();
+}
+document
+  .querySelectorAll('.layout-switch [data-layout]')
+  .forEach((b) => (b.onclick = () => setLayout(b.dataset.layout)));
+// Share of the column given to the 3D world in Split layout (percent).
+const WORLD_SHARE = { min: 25, max: 85, default: 60 };
+function setWorldShare(value, persist = true) {
+  const share = Math.round(
+    Math.min(WORLD_SHARE.max, Math.max(WORLD_SHARE.min, Number(value) || WORLD_SHARE.default)),
+  );
+  state.worldShare = share;
+  $('adventureScreen').style.setProperty?.('--world-share', share + '%');
+  $('splitHandle').setAttribute('aria-valuenow', String(share));
+  if (persist) save();
+}
+{
+  const handle = $('splitHandle'),
+    shareAt = (clientY) => {
+      const column = handle.parentElement.getBoundingClientRect();
+      return ((clientY - column.top) / column.height) * 100;
+    };
+  handle.onpointerdown = (e) => {
+    e.preventDefault();
+    handle.setPointerCapture(e.pointerId);
+    handle.classList.add('dragging');
+    handle.onpointermove = (move) => setWorldShare(shareAt(move.clientY), false);
+  };
+  handle.onpointerup = handle.onpointercancel = () => {
+    handle.onpointermove = null;
+    handle.classList.remove('dragging');
+    setWorldShare(state.worldShare);
+  };
+  handle.ondblclick = () => setWorldShare(WORLD_SHARE.default);
+  handle.addEventListener('keydown', (e) => {
+    const step = { ArrowUp: -5, ArrowDown: 5 }[e.key];
+    if (step) setWorldShare((state.worldShare ?? WORLD_SHARE.default) + step);
+    else if (e.key === 'Home') setWorldShare(WORLD_SHARE.min);
+    else if (e.key === 'End') setWorldShare(WORLD_SHARE.max);
+    else return;
+    e.preventDefault();
+  });
+}
 function switchTab(next) {
+  // Opening a workbench tab while the world fills the column brings the workbench back.
+  if (state.layout === 'world' && next !== tab) setLayout('split');
   tab = next;
   document
     .querySelectorAll('[data-tab]')
@@ -2472,6 +2525,8 @@ $('characterBtn').textContent = state.name[0].toUpperCase();
 $('resident').style.left = '70%';
 $('resident').style.top = '51%';
 renderMission();
+setLayout(state.layout);
+setWorldShare(state.worldShare ?? WORLD_SHARE.default, false);
 updatePlayer();
 setMapView();
 save();

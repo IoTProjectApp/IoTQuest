@@ -116,6 +116,10 @@ Import project… (Settings, or the Export tab) opens an exported ZIP, including
 
 Every field is validated: components are rebuilt from the built-in catalogue (only pins and wiring state come from the file), code is limited to 30,000 characters, ZIPs to 4 MB and 64 files, checksums must match, and encrypted or ZIP64 archives are refused. Importing never grants badges or XP. Existing work on the same mission is kept as a backup in the Teacher dashboard, the import is recorded in the project's evidence, and a pass achieved with unedited imported code is shown as "Passed · imported code".
 
+## Layout
+
+On screens at least 1100 × 640 px, each screen fits the window: headings use one line, long panels (workbench, quest column, destination details) scroll inside themselves, and the page itself does not scroll. Split / World / Code in the adventure heading shares the column or enlarges the 3D world or the workbench. In Split, the 3D world gets 60% of the height by default; drag the handle between the world and the workbench (or focus it and use the arrow keys, Home and End) to resize, and double-click it to reset; the choice is saved, and opening a workbench tab from World view returns to Split. Smaller screens and phones keep the flowing layout. The layout rules live in `public/layout.css`.
+
 ## Accessibility and verification
 
 Use the sun/moon button in the header to switch Light/Dark appearance, or choose System default in Settings. Appearance is saved with existing progress and follows device changes in System mode. Theme changes do not affect weather, simulation daylight or running code.

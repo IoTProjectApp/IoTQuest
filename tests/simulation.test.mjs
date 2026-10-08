@@ -19,17 +19,18 @@ for (const board of ['ESP32', 'Raspberry Pi Pico'])
         }
       });
       if (index < 3)
-        test(`${board} ${language}: ${mission.title} starter fails meaningful tests`, () => {
-          const devices = defaults(mission.ids, board),
-            rt = new Runtime(program(mission, language, devices, false), language, devices, board);
-          assert.ok(
-            mission.scenarios.some(([name, env, expected]) => {
-              const r = rt.step({ ...baseEnv, ...env });
-              const actual = devices
-                .filter((d) => d.output)
-                .map((d) => ((r.outputs[d.pin] || 0) > 0 ? 1 : 0));
-              return expected.some((v, i) => v !== actual[i]);
-            }),
+        test(`${board} ${language}: ${mission.title} starter has no program to run`, () => {
+          // Students write the whole program; the starter is the quest's title and goal only.
+          const devices = defaults(mission.ids, board);
+          assert.throws(
+            () =>
+              new Runtime(
+                program(mission, language, devices, false),
+                language,
+                devices,
+                board,
+              ).step(baseEnv),
+            /needs/,
           );
         });
     }

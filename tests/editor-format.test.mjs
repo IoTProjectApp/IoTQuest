@@ -104,9 +104,15 @@ test('formatted starter and example programs are unchanged, idempotent and still
             formatted = formatCode(source, language);
           assert.equal(formatted.trimEnd(), source.trimEnd(), m.title + ' ' + language);
           assert.equal(formatCode(formatted, language), formatted);
-          const messy = source.replace(/ = /g, '=').replace(/, /g, ',');
+          // Squash spacing in code lines only; comments keep their wording.
+          const messy = source
+            .split('\n')
+            .map((line) =>
+              /^\s*(\/\/|#)/.test(line) ? line : line.replace(/ = /g, '=').replace(/, /g, ','),
+            )
+            .join('\n');
           assert.equal(formatCode(messy, language).trimEnd(), source.trimEnd());
-          new Runtime(formatted, language, devices, board).step({}, 200);
+          if (example) new Runtime(formatted, language, devices, board).step({}, 200);
         }
 });
 

@@ -44,6 +44,7 @@ import {
   PROJECT_FORMAT,
 } from '../public/project-import.js';
 import { formatCode as formatSource, FormatError, INDENT } from '../public/code-format.js';
+import { coachSteps } from '../public/code-coach.js';
 const html = await readFile('public/game.html', 'utf8'),
   source = await readFile('public/game.js', 'utf8');
 class Element {
@@ -286,6 +287,7 @@ function harness(
     PLOT_LIMIT,
     FormatError,
     INDENT,
+    coachSteps,
     structuredClone,
     Blob,
     URL,
@@ -306,7 +308,7 @@ function harness(
   });
   vm.runInContext(
     source.replace(/^import [^;]*;\n/gm, '') +
-      '\nglobalThis.api={state,project,mission,selectMission,installDialog,switchTab,testSolution,run,stop,tick,changeBoard,move,code,loadExample,renderCode,renderMission,getOutputs:()=>outputs,getTests:()=>testResults,getPassed:()=>currentPassed,getRunning:()=>running,labState,startFault,exitFault,setClockSpeed,setDifficulty,pauseExecution,stepExecution,resumeExecution,enterLocation,resumeLegacy,returnToGlobe,applyLocalWeather,setWeatherMode,advanceWorld,refreshWeather,missionKey,getPlotSamples:()=>plotSamples,previewImport,exportManifest,startBugHunt,getActiveFault:()=>activeFault,setLayout,labContext,exportProject};',
+      '\nglobalThis.api={state,project,mission,selectMission,installDialog,switchTab,testSolution,run,stop,tick,changeBoard,move,code,loadExample,renderCode,renderMission,getOutputs:()=>outputs,getTests:()=>testResults,getPassed:()=>currentPassed,getRunning:()=>running,labState,startFault,exitFault,setClockSpeed,setDifficulty,pauseExecution,stepExecution,resumeExecution,enterLocation,resumeLegacy,returnToGlobe,applyLocalWeather,setWeatherMode,advanceWorld,refreshWeather,missionKey,getPlotSamples:()=>plotSamples,previewImport,exportManifest,startBugHunt,getActiveFault:()=>activeFault,setLayout,renderCoach,labContext,exportProject};',
     ctx,
   );
   return {
@@ -363,7 +365,7 @@ test('game initializes, shows first quest, and saves locally', () => {
   assert.equal(h.document.getElementById('missionTitle').textContent, 'Light the Path');
   assert.equal(h.api.project().devices.length, 0);
   assert.ok(h.storage.has('iotquest-v1'));
-  assert.match(h.document.getElementById('highlight').innerHTML, /false/);
+  assert.match(h.document.getElementById('highlight').innerHTML, /Write your program below/);
 });
 test('install → wire → example → test completes first mission and awards XP once', () => {
   const h = harness();
@@ -397,7 +399,7 @@ test('language switch preserves installed components and wiring', () => {
   el.onchange();
   assert.equal(h.api.state.language, 'python');
   assert.equal(JSON.stringify(h.api.project().devices), before);
-  assert.match(h.api.code(), /from machine import/);
+  assert.match(h.api.code(), /^# Light the Path/);
   h.api.loadExample();
   h.api.testSolution();
   assert.equal(h.api.getPassed(), true);
@@ -717,7 +719,7 @@ test('editor typing, indentation, reset and language switching retain the intend
   assert.equal(h.api.getRunning(), true);
   h.document.getElementById('resetCode').click();
   assert.equal(h.api.getRunning(), false);
-  assert.match(h.api.code(), /if False:/);
+  assert.match(h.api.code(), /^# .*\n# Goal:/);
   assert.equal(JSON.stringify(h.api.project().devices), wiring);
 });
 
@@ -1042,6 +1044,8 @@ test('code checks appear under the editor, jump to the code, and clear when fixe
   const h = harness();
   installAndWire(h, 0);
   h.api.switchTab('code');
+  // A program that reads the sensor, so a mis-numbered pin matters.
+  h.api.loadExample();
   const ldr = h.api.project().devices.find((d) => d.id === 'ldr');
   let input = h.document.getElementById('codeInput');
   const code = h.api.code().replace('lightPin = ' + ldr.pin, 'lightPin = 33');
@@ -1143,6 +1147,13 @@ test('spot the bugs: flag lines, check, fix and pass the tests for XP once', () 
   h.api.state.travelScreen = false;
   installAndWire(h, 0);
   h.api.switchTab('tests');
+  // Finished code is shown only after the student has solved the quest themselves.
+  h.document.getElementById('huntBtn').click();
+  assert.equal(h.api.getActiveFault(), null);
+  assert.equal(h.document.getElementById('debugBtn'), null);
+  h.api.state.completed[0] = { xp: 0 };
+  h.api.switchTab('tests');
+  assert.ok(h.document.getElementById('debugBtn'));
   h.document.getElementById('huntBtn').click();
   const hunt = h.api.project().hunt;
   assert.equal(hunt.bugs.length, 3);
@@ -1172,7 +1183,8 @@ test('spot the bugs: flag lines, check, fix and pass the tests for XP once', () 
   h.api.testSolution();
   assert.equal(h.api.getPassed(), true);
   assert.equal(h.api.state.xp, 40);
-  assert.equal(completedQuestCount(h.api.state), 0);
+  // Only the quest solved beforehand counts; a hunt is not a quest.
+  assert.equal(completedQuestCount(h.api.state), 1);
   h.api.testSolution();
   assert.equal(h.api.state.xp, 40);
 });
@@ -1338,4 +1350,69 @@ test('the Day / Night switch sets the light, leaves live weather and moves the d
     const night = h.document.getElementById('dayLabel').textContent === 'Nighttime';
     assert.equal(hour(), night ? 22 : 12);
   }
+});
+
+test('the guide walks through the program step by step and checks the student’s code', () => {
+  const h = harness();
+  installAndWire(h, 0);
+  h.api.switchTab('code');
+  const coach = () => h.document.getElementById('coach'),
+    input = h.document.getElementById('codeInput'),
+    pin = (id) => h.api.project().devices.find((d) => d.id === id).pin,
+    type = (text) => {
+      input.value = h.api.code() + text;
+      input.dispatchEvent({ type: 'input' });
+      h.api.renderCoach();
+    };
+  // No code is provided: only the title and goal as comments.
+  assert.ok(
+    h.api
+      .code()
+      .split('\n')
+      .every((l) => !l.trim() || l.startsWith('//')),
+  );
+  assert.equal(coach().hidden, false);
+  assert.match(coach().innerHTML, /Step 1 of 6 · Name your pins/);
+  assert.match(coach().innerHTML, /const int lightPin = ____;/);
+  h.document.getElementById('coachHint').click();
+  assert.match(coach().innerHTML, /Hint 1/);
+  type('const int lightPin = ' + pin('ldr') + ';\nconst int ledPin = ' + pin('led') + ';\n');
+  assert.match(coach().innerHTML, /coach-status ok/);
+  h.document.getElementById('coachNext').click();
+  assert.match(coach().innerHTML, /Step 2 of 6 · Write setup\(\)/);
+  assert.match(coach().innerHTML, /coach-status wait/);
+  type('\nvoid setup() {\n  Serial.begin(115200);\n  pinMode(ledPin, OUTPUT);\n}\n');
+  assert.match(coach().innerHTML, /setup\(\) prepares the board/);
+  h.document.getElementById('coachNext').click();
+  assert.match(coach().innerHTML, /Write loop\(\)/);
+  const body = '  int light = analogRead(lightPin);\n';
+  type('\nvoid loop() {\n' + body + '  delay(200);\n}\n');
+  h.document.getElementById('coachNext').click();
+  assert.match(coach().innerHTML, /Read the light sensor/);
+  assert.match(coach().innerHTML, /The reading is stored in/);
+  h.document.getElementById('coachNext').click();
+  assert.match(coach().innerHTML, /Switch the path lights/);
+  assert.match(coach().innerHTML, /ON when the light reading is below 1800/);
+  assert.match(coach().innerHTML, /should be ON, but it is OFF/);
+  input.value = h.api
+    .code()
+    .replace(
+      body,
+      body +
+        '  if (light < 1800) {\n    digitalWrite(ledPin, HIGH);\n  } else {\n    digitalWrite(ledPin, LOW);\n  }\n',
+    );
+  input.dispatchEvent({ type: 'input' });
+  h.api.renderCoach();
+  assert.match(coach().innerHTML, /Correct in every scenario/);
+  h.document.getElementById('coachNext').click();
+  // The student's own program passes the quest.
+  h.document.getElementById('coachTest').click();
+  h.api.testSolution();
+  assert.equal(h.api.getPassed(), true);
+  // The guide can be hidden and brought back.
+  h.api.switchTab('code');
+  h.document.getElementById('coachBtn').click();
+  assert.equal(coach().hidden, true);
+  h.document.getElementById('coachBtn').click();
+  assert.equal(coach().hidden, false);
 });

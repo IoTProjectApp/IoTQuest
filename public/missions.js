@@ -1,3 +1,4 @@
+import { guidedStarter } from './code-coach.js';
 export const components = [
   {
     id: 'occupancy',
@@ -441,6 +442,8 @@ export function validate(devices, board) {
   return errors;
 }
 export function program(mission, language, devices, worked = false) {
+  // Students write the readings and decisions themselves, guided by the code coach.
+  if (!worked) return guidedStarter(mission, language, devices);
   const inputs = devices.filter((d) => !d.output),
     outputs = devices.filter((d) => d.output);
   let conditions = mission.conditions.map((c) => (worked ? c : 'false'));

@@ -2377,3 +2377,155 @@ dialog::backdrop {
   stroke: #10202f;
   stroke-width: 4px;
 }
+
+/* Step-by-step coding guide beside the editor (dark, like the editor). */
+.editor-layout.with-coach,
+.simulation-column .editor-layout.with-coach {
+  grid-template-columns: minmax(250px, 300px) minmax(0, 1fr) 230px;
+}
+.coach {
+  background: #1a2437;
+  border-right: 1px solid #ffffff12;
+  color: #c4d0e6;
+  font-size: 12px;
+  line-height: 1.55;
+  /* Fill the editor's height without making the row taller; long steps scroll. */
+  height: 0;
+  min-height: 100%;
+  overflow: auto;
+  scrollbar-width: thin;
+}
+@media (max-width: 1150px) {
+  .editor-layout.with-coach,
+  .simulation-column .editor-layout.with-coach {
+    grid-template-columns: 1fr;
+  }
+  .coach {
+    height: auto;
+    min-height: 0;
+    max-height: 300px;
+    border-right: 0;
+  }
+}
+.coach-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 16px 2px;
+  position: sticky;
+  top: 0;
+  background: #1a2437;
+}
+.coach-head strong {
+  color: #e7eefb;
+  font-size: 12px;
+}
+.coach-steps {
+  display: flex;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  flex: 1;
+  flex-wrap: wrap;
+}
+.coach-steps button {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  border: 1px solid #ffffff26;
+  background: transparent;
+  color: #9fb0cf;
+  font-size: 11px;
+  padding: 0;
+  cursor: pointer;
+}
+.coach-steps button.done {
+  background: #2f6f5f;
+  border-color: #4fb39a;
+  color: #e9fff8;
+}
+.coach-steps button.current {
+  outline: 2px solid #8fb4ff;
+  outline-offset: 1px;
+  color: #fff;
+}
+.coach-hide {
+  background: transparent;
+  border: 0;
+  color: #9fb0cf;
+  cursor: pointer;
+  font-size: 13px;
+}
+.coach-body {
+  padding: 6px 16px 14px;
+}
+.coach-body h4 {
+  margin: 4px 0 6px;
+  color: #f0f5ff;
+  font-size: 13px;
+}
+.coach-body p {
+  margin: 0 0 6px;
+}
+.coach-body code,
+.coach-pattern {
+  font-family: var(--mono);
+  color: #ffd27d;
+}
+.coach-body code {
+  background: #ffffff10;
+  padding: 1px 4px;
+  border-radius: 4px;
+}
+.coach-body details {
+  margin: 0 0 6px;
+}
+.coach-body summary {
+  cursor: pointer;
+  color: #8fb4ff;
+}
+.coach-task {
+  color: #e7eefb;
+  font-weight: 600;
+}
+.coach-pattern {
+  margin: 0 0 8px;
+  padding: 8px 10px;
+  background: #0f1626;
+  border: 1px dashed #ffffff2a;
+  border-radius: 6px;
+  white-space: pre;
+  overflow-x: auto;
+  font-size: 12px;
+}
+.coach-hint {
+  padding: 6px 9px;
+  border-left: 3px solid #8fb4ff;
+  background: #ffffff08;
+  border-radius: 0 6px 6px 0;
+}
+.coach-status {
+  padding: 6px 9px;
+  border-radius: 6px;
+}
+.coach-status.ok {
+  background: #1f4a40;
+  color: #bff3e2;
+}
+.coach-status.wait {
+  background: #3a3220;
+  color: #f3dcae;
+}
+.coach-nav {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 8px;
+}
+.coach-nav .text-btn {
+  color: #b6c3de;
+}
+.coach-nav button:disabled {
+  opacity: 0.4;
+}

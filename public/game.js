@@ -31,6 +31,7 @@ import { createBugHunt, scoreBugHunt } from './bug-hunt.js';
 import { explainCode, removeExplanations, hasExplanations } from './code-explain.js';
 import { readProject, ImportError, IMPORT_LIMITS, PROJECT_FORMAT } from './project-import.js';
 import { formatCode as formatSource, FormatError, INDENT } from './code-format.js';
+import { coachSteps } from './code-coach.js';
 const $ = (id) => document.getElementById(id);
 const STORAGE_KEY = 'iotquest-v1',
   TICK_MS = 200,
@@ -737,15 +738,156 @@ function renderBench() {
   else if (tab === 'wiring') renderWiring();
   else renderTests();
 }
+// The step-by-step coding guide: explains each part of the program as the student writes it,
+// checks each step against the code, and reveals hints one at a time.
+let coachTimer = null;
+const coachProgress = {};
+function renderCoach() {
+  const el = $('coach'),
+    button = $('coachBtn');
+  if (!el) return;
+  const available = !free && !activeFault && !huntPhase() && mission().ids.length > 0;
+  if (button) {
+    button.hidden = !available;
+    button.setAttribute('aria-pressed', String(!state.coachHidden));
+  }
+  el.hidden = !available || !!state.coachHidden;
+  $('editorLayout')?.classList.toggle('with-coach', !el.hidden);
+  if (el.hidden) return;
+  const devices = project().devices.length ? project().devices : planned(),
+    steps = coachSteps(mission(), state.language, devices, state.board),
+    key = activeKey() + ':' + state.language,
+    progress = (coachProgress[key] ??= { seen: {}, hints: {}, step: null }),
+    source = code(),
+    results = steps.map((step) =>
+      step.manual ? { done: !!progress.seen[step.key] } : step.check(source),
+    ),
+    firstOpen = results.findIndex((r) => !r.done),
+    // Start at the first unfinished step, then stay there until the student moves on, so a
+    // finished step shows its explanation and tick before Next.
+    index = Math.min(
+      steps.length - 1,
+      (progress.step ??= firstOpen < 0 ? steps.length - 1 : firstOpen),
+    ),
+    step = steps[index],
+    result = results[index],
+    shown = progress.hints[step.key] || 0,
+    rich = (text) => esc(text).replace(/`([^`]+)`/g, '<code>$1</code>'),
+    [lead, rule, ...more] = step.body;
+  setHTML(
+    el,
+    '<div class="coach-head"><strong>Guide</strong><ol class="coach-steps">' +
+      steps
+        .map(
+          (s, i) =>
+            '<li><button data-coach-step="' +
+            i +
+            '" class="' +
+            (results[i].done ? 'done' : '') +
+            (i === index ? ' current' : '') +
+            '"' +
+            (i === index ? ' aria-current="step"' : '') +
+            ' title="' +
+            esc(s.title) +
+            '" aria-label="Step ' +
+            (i + 1) +
+            ': ' +
+            esc(s.title) +
+            (results[i].done ? ' (done)' : '') +
+            '">' +
+            (results[i].done ? '✓' : i + 1) +
+            '</button></li>',
+        )
+        .join('') +
+      '</ol><button class="coach-hide" id="coachHide" aria-label="Hide the guide">✕</button></div>' +
+      '<div class="coach-body"><h4>Step ' +
+      (index + 1) +
+      ' of ' +
+      steps.length +
+      ' · ' +
+      esc(step.title) +
+      '</h4><p>' +
+      rich(lead) +
+      '</p>' +
+      (rule ? '<p>' + rich(rule) + '</p>' : '') +
+      (more.length
+        ? '<details><summary>More about this</summary>' +
+          more.map((t) => '<p>' + rich(t) + '</p>').join('') +
+          '</details>'
+        : '') +
+      '<p class="coach-task">' +
+      rich(step.task) +
+      '</p>' +
+      (step.pattern ? '<pre class="coach-pattern">' + esc(step.pattern) + '</pre>' : '') +
+      (step.hints || [])
+        .slice(0, shown)
+        .map((h, i) => '<p class="coach-hint"><b>Hint ' + (i + 1) + '</b> ' + rich(h) + '</p>')
+        .join('') +
+      (step.manual
+        ? ''
+        : '<p class="coach-status ' +
+          (result.done ? 'ok' : 'wait') +
+          '" role="status">' +
+          (result.done ? '✓ ' : '') +
+          rich(result.message || '') +
+          '</p>') +
+      '<div class="coach-nav"><button class="text-btn" id="coachBack"' +
+      (index === 0 ? ' disabled' : '') +
+      '>← Back</button>' +
+      (step.hints && shown < step.hints.length
+        ? '<button class="text-btn" id="coachHint">Hint ' +
+          (shown + 1) +
+          ' of ' +
+          step.hints.length +
+          '</button>'
+        : '') +
+      (index < steps.length - 1
+        ? '<button class="' +
+          (result.done || step.manual ? 'primary' : 'text-btn') +
+          '" id="coachNext">' +
+          (result.done || step.manual ? 'Next step →' : 'Skip for now →') +
+          '</button>'
+        : '<button class="primary" id="coachTest">Test your solution</button>') +
+      '</div></div>',
+  );
+  const go = (i) => {
+    progress.step = Math.max(0, Math.min(steps.length - 1, i));
+    renderCoach();
+  };
+  document
+    .querySelectorAll('[data-coach-step]')
+    .forEach((b) => (b.onclick = () => go(Number(b.dataset.coachStep))));
+  $('coachHide').onclick = () => {
+    state.coachHidden = true;
+    save();
+    renderCoach();
+  };
+  $('coachBack').onclick = () => go(index - 1);
+  if ($('coachHint'))
+    $('coachHint').onclick = () => {
+      progress.hints[step.key] = shown + 1;
+      renderCoach();
+    };
+  if ($('coachNext'))
+    $('coachNext').onclick = () => {
+      if (step.manual) progress.seen[step.key] = true;
+      go(index + 1);
+    };
+  if ($('coachTest'))
+    $('coachTest').onclick = () => {
+      progress.seen[step.key] = true;
+      switchTab('tests');
+    };
+}
 function renderCode() {
   $('benchContent').innerHTML =
-    '<div class="editor-layout"><div class="editor-main"><div class="editor-toolbar"><div class="select-group"><select id="languageSelect" aria-label="Programming language"><option value="cpp">Arduino C++</option><option value="python">MicroPython</option></select><select id="boardSelect" aria-label="Controller"><option>ESP32</option><option>Raspberry Pi Pico</option>' +
+    '<div class="editor-layout" id="editorLayout"><section class="coach" id="coach" aria-label="Step-by-step coding guide" hidden></section><div class="editor-main"><div class="editor-toolbar"><div class="select-group"><select id="languageSelect" aria-label="Programming language"><option value="cpp">Arduino C++</option><option value="python">MicroPython</option></select><select id="boardSelect" aria-label="Controller"><option>ESP32</option><option>Raspberry Pi Pico</option>' +
     (completedQuestCount(state) >= 4 ||
     state.freeExploration ||
     state.board === 'Raspberry Pi Pico W'
       ? '<option>Raspberry Pi Pico W</option>'
       : '') +
-    '</select><button class="text-btn" id="exampleBtn">Worked example</button><button class="text-btn" id="languageHelp">Language guide</button></div><div class="editor-actions"><button id="explainBtn" aria-pressed="false" title="Add or remove plain-English comments">Explain</button><button id="formatBtn" title="Format code (Shift+Alt+F)" aria-keyshortcuts="Shift+Alt+F">Format</button><button id="resetCode" title="Reset starter code">↺ Reset</button><button id="stopBtn">■ Stop</button><button class="primary" id="runBtn">▶ Run</button></div></div><div class="hunt-banner" id="huntBanner" hidden></div><div class="editor-wrap" id="editorWrap"><div class="line-numbers" id="lineNumbers"></div><div class="code-scroll" id="codeScroll"><pre class="highlight" id="highlight" aria-hidden="true"></pre><textarea class="code-input" id="codeInput" spellcheck="false" autocapitalize="off" aria-label="Student program code. Press Escape, then Tab, to leave the editor."></textarea></div></div><div class="diag-panel" id="diagPanel" hidden><ul id="diagList" aria-label="Code checks"></ul></div><p class="diag-message" id="diagMessage" role="status" aria-live="polite" hidden></p><div class="editor-status"><span id="editorStatus">' +
+    '</select><button class="text-btn" id="coachBtn" aria-pressed="true" aria-controls="coach">Guide</button><button class="text-btn" id="languageHelp">Language guide</button></div><div class="editor-actions"><button id="explainBtn" aria-pressed="false" title="Add or remove plain-English comments">Explain</button><button id="formatBtn" title="Format code (Shift+Alt+F)" aria-keyshortcuts="Shift+Alt+F">Format</button><button id="resetCode" title="Reset starter code">↺ Reset</button><button id="stopBtn">■ Stop</button><button class="primary" id="runBtn">▶ Run</button></div></div><div class="hunt-banner" id="huntBanner" hidden></div><div class="editor-wrap" id="editorWrap"><div class="line-numbers" id="lineNumbers"></div><div class="code-scroll" id="codeScroll"><pre class="highlight" id="highlight" aria-hidden="true"></pre><textarea class="code-input" id="codeInput" spellcheck="false" autocapitalize="off" aria-label="Student program code. Press Escape, then Tab, to leave the editor."></textarea></div></div><div class="diag-panel" id="diagPanel" hidden><ul id="diagList" aria-label="Code checks"></ul></div><p class="diag-message" id="diagMessage" role="status" aria-live="polite" hidden></p><div class="editor-status"><span id="editorStatus">' +
     (running ? 'Running · simulated devices connected' : 'Ready when you are') +
     '</span><button class="diag-summary" id="diagSummary" aria-expanded="false" aria-controls="diagPanel" hidden></button><span id="cursorPos">Ln 1, Col 1</span></div>' +
     SerialPlotter.markup() +
@@ -766,6 +908,8 @@ function renderCode() {
     markEdited({ typing: true });
     if (huntPhase() === 'fix') renderHunt();
     updateHighlight();
+    clearTimeout(coachTimer);
+    coachTimer = setTimeout(renderCoach, 350);
   });
   // Tab indents; Escape releases it so keyboard users can leave the editor (WCAG 2.1.2).
   let tabReleased = false;
@@ -844,7 +988,12 @@ function renderCode() {
     toast('Language changed. Your installed components and wiring are preserved.');
   };
   $('boardSelect').onchange = () => changeBoard($('boardSelect').value);
-  $('exampleBtn').onclick = loadExample;
+  $('coachBtn').onclick = () => {
+    state.coachHidden = !state.coachHidden;
+    save();
+    renderCoach();
+  };
+  renderCoach();
   $('languageHelp').onclick = languageGuide;
   $('formatBtn').onclick = formatCode;
   $('explainBtn').onclick = toggleExplanations;
@@ -1056,6 +1205,8 @@ function blockedByHunt(action, phases = ['spot', 'fix']) {
   toast(action + ' is not available during Spot the bugs.');
   return true;
 }
+// Loads the full worked solution. Students are guided instead (see renderCoach); this remains
+// for automated checks of each quest.
 function loadExample() {
   if (!canEdit('Programmer') || blockedByHunt('The worked example')) return;
   let ds = project().devices.length ? project().devices : planned();
@@ -1063,7 +1214,6 @@ function loadExample() {
   stop(false);
   markEdited();
   renderCode();
-  toast('Worked example loaded. Run it, change a threshold, then test again.');
 }
 function formatCode() {
   if (!canEdit('Programmer') || blockedByHunt('Format', ['spot'])) return;
@@ -1888,14 +2038,16 @@ function renderTests() {
     '<div class="bench-heading"><button class="outline" id="backCode">Back to code</button>' +
     (currentPassed && !activeFault && state.mission < activeMissions().length - 1
       ? '<button class="primary" id="nextMission">Next quest</button>'
-      : '<button class="outline" id="debugBtn">Try a debugging challenge</button>') +
+      : solvedOwnCode(state.mission)
+        ? '<button class="outline" id="debugBtn">Try a debugging challenge</button>'
+        : '') +
     (free || activeFault ? '' : '<button class="outline" id="huntBtn">Spot the bugs</button>') +
     '</div></div>';
   $('testAgain').onclick = testSolution;
   $('backCode').onclick = () => switchTab('code');
   if ($('nextMission')) $('nextMission').onclick = () => selectMission(state.mission + 1);
   if ($('debugBtn')) $('debugBtn').onclick = debugChallenge;
-  if ($('huntBtn')) $('huntBtn').onclick = () => startBugHunt();
+  if ($('huntBtn')) $('huntBtn').onclick = () => ownCodeFirst(state.mission) && startBugHunt();
 }
 function debugChallenge() {
   const m = mission();
@@ -2099,7 +2251,7 @@ function languageGuide() {
 function help() {
   modal(
     'Welcome to Willowbrook',
-    '<div class="guide"><p>You’re the neighborhood IoT technician. A little observation and a little code can make this home smarter.</p><ol><li><strong>Explore in 3D:</strong> drag to orbit the camera, scroll to zoom, and click a room or garden area for a detailed view, or walk there and press E.</li><li><strong>Install:</strong> open Components and select the highlighted devices. Choose their installation point.</li><li><strong>Wire:</strong> assign GPIOs and connect power, ground, and resistors. The recommended circuit can help you get started.</li><li><strong>Program:</strong> pick Arduino C++ or MicroPython, then replace the starter’s false conditions. Hints explain the logic. Worked examples are optional.</li><li><strong>Run:</strong> change sunlight, motion, or moisture and watch your outputs change.</li><li><strong>Test:</strong> pass every scenario to earn XP and a badge. Failed tests show what to improve.</li></ol><p>Keyboard: WASD / arrow keys walk relative to your camera; E interacts. Drag the world to orbit, scroll to zoom, or use the camera buttons. Follow technician gives a close camera view. On-screen arrows work on touch devices. Use Return to world to leave a detailed area.</p><button class="primary" id="guideLang">Open language guide</button></div>',
+    '<div class="guide"><p>You’re the neighborhood IoT technician. A little observation and a little code can make this home smarter.</p><ol><li><strong>Explore in 3D:</strong> drag to orbit the camera, scroll to zoom, and click a room or garden area for a detailed view, or walk there and press E.</li><li><strong>Install:</strong> open Components and select the highlighted devices. Choose their installation point.</li><li><strong>Wire:</strong> assign GPIOs and connect power, ground, and resistors. The recommended circuit can help you get started.</li><li><strong>Program:</strong> pick Arduino C++ or MicroPython, then follow the Guide beside the editor. It explains each part of the program, checks each step as you write it, and offers hints one at a time.</li><li><strong>Run:</strong> change sunlight, motion, or moisture and watch your outputs change.</li><li><strong>Test:</strong> pass every scenario to earn XP and a badge. Failed tests show what to improve.</li></ol><p>Keyboard: WASD / arrow keys walk relative to your camera; E interacts. Drag the world to orbit, scroll to zoom, or use the camera buttons. Follow technician gives a close camera view. On-screen arrows work on touch devices. Use Return to world to leave a detailed area.</p><button class="primary" id="guideLang">Open language guide</button></div>',
   );
   $('guideLang').onclick = () => {
     $('modal').close();
@@ -2149,6 +2301,18 @@ function toggleExplanations() {
   );
 }
 
+// Activities that start from finished code (the debugging challenge, Spot the bugs and the
+// fault workshop) open only after the student has passed that quest with their own program.
+const solvedOwnCode = (index) => !!currentCompletions()[missionKey(index)];
+function ownCodeFirst(index) {
+  if (free || activeFault || solvedOwnCode(index)) return true;
+  toast(
+    'First write and pass “' +
+      activeMissions()[index].title +
+      '” with your own code. This activity starts from finished code.',
+  );
+  return false;
+}
 // ---- Spot the bugs ------------------------------------------------------------
 const huntState = () => (activeFault?.kind === 'hunt' ? project().hunt : null);
 const huntPhase = () => huntState()?.phase || null;
@@ -2657,9 +2821,9 @@ function labContext() {
     fault: activeFault,
     switchTab,
     selectDevice,
-    startFault,
+    startFault: (id) => ownCodeFirst(0) && startFault(id),
     exitFault,
-    startBugHunt: () => startBugHunt(),
+    startBugHunt: () => ownCodeFirst(state.mission) && startBugHunt(),
     huntTitle: free ? null : activeMissions()[state.mission]?.title,
     test: testSolution,
     save,

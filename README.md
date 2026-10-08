@@ -25,7 +25,14 @@ Every push and pull request runs the formatting check, tests and build on Node 2
 
 Choose a country and city using the rotating, zoomable globe or accessible 2D map. View regional inspiration, sources, weather and progress before travelling. WASD, arrows and on-screen controls move the technician; E interacts. Select rooms or garden areas for detailed views. Device labels select their live circuit entries and related code.
 
-Install components, connect signal/power/ground and required resistors, then edit the starter program. Run, change conditions and watch outputs affect lights, fans, gates, irrigation, tanks and plants. Test checks normal conditions, thresholds and safety failures. Worked examples and progressive hints are available. Changing language preserves wiring; changing controller remaps pins and reloads starters.
+Install components, connect signal/power/ground and required resistors, then edit the starter program. Run, change conditions and watch outputs affect lights, fans, gates, irrigation, tanks and plants. Test checks normal conditions, thresholds and safety failures. Students write every line of code themselves, helped by the **Guide** beside the editor:
+
+- The editor starts with no code: only the quest's title and goal as comments.
+- The Guide goes step by step through the whole program. MicroPython: bring in the tools (imports), name your pins, repeat forever (`while True:`). Arduino C++: name your pins, write `setup()`, write `loop()`. Then, in both: read each sensor, write an if/else for each output, and run and test.
+- Each step explains what the code does and why (GPIO pins and `const int`, `setup()` and `pinMode`, the loop and `delay`, analogue vs digital reads, variables, comparison operators at the exact threshold, AND/OR, why an `else` is needed) and shows a pattern with blanks to fill in, using the student's own wiring.
+- Each step is checked as students type, and explains mistakes: a pin on the wrong GPIO, the wrong read function, a reading outside the loop. Commented-out code does not count. A decision step runs the student's program against the quest scenarios and names any scenario it gets wrong, with the readings (for example, "In At threshold (light 1800) the path lights should be OFF").
+- Hints are revealed one at a time. The last hint for a decision is the condition itself, never the full if/else.
+- Activities that start from finished code (Try a debugging challenge, Spot the bugs and the fault workshop) unlock only after the student has passed that quest with their own program. Changing language preserves wiring; changing controller remaps pins and reloads starters.
 
 Each destination has eight mission families with beginner and advanced versions, including climate-specific irrigation, ventilation, frost, rain or storage challenges. Missions unlock destinations and upgrades; free exploration opens every destination. The original home and its saved projects remain available.
 

@@ -82,6 +82,11 @@ test('explanations round-trip, are idempotent and leave programs runnable', () =
             source = program(m, language, devices, example),
             explained = explainCode(source, language, devices),
             label = [m.title, board, language, example].join(' ');
+          // The starter is comments only: nothing to explain or run.
+          if (!example) {
+            assert.equal(explained, source, label);
+            continue;
+          }
           assert.ok(hasExplanations(explained), label);
           assert.equal(removeExplanations(explained), source, label);
           assert.equal(explainCode(explained, language, devices), explained, label);

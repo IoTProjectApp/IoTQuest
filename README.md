@@ -71,7 +71,24 @@ Every destination has its own architectural style, garden combination and interi
 
 Five additional quests use the destination's live local weather: **Storm Watch**, **Garden Frost Alert**, **Heat & Humidity Response**, **Rain-Smart Sprinklers**, and **Cloudy-Day Grow Lights**. Each destination has beginner and advanced versions. Wind reads km/h and cloud cover reads 0–100%; outdoor temperature and humidity retain their calibrated units. The rain sensor uses the existing simulated 0–4095 scale, derived from the weather service's precipitation data.
 
-Choose **Use live weather** in a weather quest to run your program against local readings, or use Practice Weather to explore conditions. With live weather, **Predict, then check** asks whether each output will be on with today's readings; while the program runs, **Check with my running program** compares each prediction with what the program actually did. The existing weather panel identifies cached or fallback data. Assessment always uses fixed scenarios with boundaries, interlocks and changing weather, so students never need to wait for a storm or cold night. The original eight quest indices and saved progress remain intact; there are now 17 quests in the original home and 34 across both levels at each destination.
+Choose **Use live weather** in a weather quest to run your program against local readings, or use Practice Weather to explore conditions. With live weather, **Predict, then check** asks whether each output will be on with today's readings; while the program runs, **Check with my running program** compares each prediction with what the program actually did. The existing weather panel identifies cached or fallback data. Assessment always uses fixed scenarios with boundaries, interlocks and changing weather, so students never need to wait for a storm or cold night. The original eight quest indices and saved progress remain intact; with the component quests below there are now 25 quests in the original home and 50 across both levels at each destination.
+
+### Component quests
+
+Eight more quests (18–25) together use all 26 components, including seven that no earlier quest needed: the servo, air-conditioning, ultrasonic distance sensor, motorised gate, potentiometer, pond level probe and resident presence sensor.
+
+| Quest                          | Area         | Rule                                                                         |
+| ------------------------------ | ------------ | ---------------------------------------------------------------------------- |
+| Bedroom Sun Blinds             | Bedroom      | Blinds (servo) down when light > 3000                                        |
+| Cool Only When Someone Is Home | Living room  | AC on when temp > 26 °C and someone is home                                  |
+| Driveway Gate                  | Entrance     | Gate opens when a car is closer than 50 cm                                   |
+| Mood Light Dial                | Utility room | RGB light on when the dial reads 2048 or more                                |
+| Garden Water Manager           | Water tank   | Pump for dry soil and valve for a low pond, both protecting the tank reserve |
+| Storm Lockdown                 | Garden path  | Gate open below 40 km/h wind; buzzer on in heavy rain                        |
+| Greenhouse Climate Control     | Greenhouse   | Fan for humidity (never venting freezing air); grow lights on cloudy days    |
+| Night Watch                    | Garage       | Porch light on motion; buzzer when the door opens while armed                |
+
+Each is offered by the resident of its area and installs there. Tests check the exact boundaries, and every worked example passes on ESP32 and Pico in both languages. The air-conditioning quest has its own energy budget: the AC draws 800 W, so cooling an empty home fails the budget as well as the test. Temperatures such as 26.5 °C are tested, which is why the Guide stores calibrated readings in a `float`.
 
 ### Check your understanding
 

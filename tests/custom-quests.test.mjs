@@ -96,7 +96,8 @@ test('invalid quests explain what to fix', () => {
     [{ ...night, output: 'ldr' }, /output/],
     [{ ...night, operator: '==' }, /compared/],
     [{ ...night, threshold: 4095 }, /between 0 and 4095/],
-    [{ ...night, threshold: 1800.5 }, /whole numbers/],
+    [{ ...night, threshold: 1800.5 }, /whole numbers from 0 to 4095/],
+    [{ ...night, sensor: 'ultra', threshold: 49.5 }, /whole numbers from 0 to 300/],
     [{ ...night, sensor: 'pir', operator: '==', threshold: 2 }, /HIGH/],
   ];
   for (const [fields, message] of bad)

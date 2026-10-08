@@ -5,7 +5,15 @@ import {
   sendConversationMessage,
   nearestCharacter,
 } from './conversations.js';
-import { components, missions, baseEnv, defaults, validate, program } from './missions.js';
+import {
+  components,
+  missions,
+  baseEnv,
+  defaults,
+  validate,
+  program,
+  missionBudget,
+} from './missions.js';
 import { localSkyDate, DEFAULT_OBSERVER } from './astronomy.js';
 import { Runtime } from './runtime.js';
 import { World3D } from './world3d.js';
@@ -339,8 +347,10 @@ function renderMission() {
   $('missionBudget').textContent = free
     ? 'Free build · lifetime estimates in Budgets'
     : 'Assessment budget: ' +
-      (m.ids.includes('pump') ? 0.35 : 0.15) +
-      ' Wh · 45 L. Fixed test window.';
+      missionBudget(m).wh +
+      ' Wh · ' +
+      missionBudget(m).litres +
+      ' L. Fixed test window.';
   $('missionNumber').innerHTML = free
     ? 'OPEN WORLD <span>EXPERIMENT</span>'
     : String(state.mission + 1).padStart(2, '0') +
@@ -2322,7 +2332,7 @@ function testSolution() {
     } catch (e) {
       testResults.push({ name: 'Program execution', pass: false, detail: e.message });
     }
-    const budget = { wh: m.ids.includes('pump') ? 0.35 : 0.15, litres: 45 };
+    const budget = missionBudget(m);
     testResults.push({
       name: 'Energy and water budget',
       pass: assessment.wh <= budget.wh && assessment.litres <= budget.litres,
@@ -3983,8 +3993,9 @@ function projectWorldLabels(engine) {
       .querySelectorAll('[data-world-device]')
       .forEach((b) => (b.onclick = () => selectDevice(b.dataset.worldDevice)));
   }
+  // Device labels go last: several devices at one installation point fan out instead of piling up.
   for (const r of targets)
-    place($('world-target-' + r.device.id), [r.face.pos[0], r.face.pos[1] + 0.2, r.face.pos[2]]);
+    place($('world-target-' + r.device.id), [r.face.pos[0], r.face.pos[1] + 0.2, r.face.pos[2]], 4);
   const p = toWorld(state.player);
   p[1] = 1.95 + (engine.model.floorHeight?.(p[0], p[2]) || 0);
   place($('player'), p, 1);

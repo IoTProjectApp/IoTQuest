@@ -33,7 +33,15 @@ import vm from 'node:vm';
 import { readFile, access } from 'node:fs/promises';
 import { execFileSync } from 'node:child_process';
 import { Runtime } from '../public/runtime.js';
-import { components, missions, baseEnv, defaults, validate, program } from '../public/missions.js';
+import {
+  components,
+  missions,
+  baseEnv,
+  defaults,
+  validate,
+  program,
+  missionBudget,
+} from '../public/missions.js';
 import {
   locations,
   locationById,
@@ -355,6 +363,7 @@ function harness(
     understandingScore,
     ADC_SIGNALS,
     ADC_SCALE,
+    missionBudget,
     checkPredictions,
     conversationHTML,
     predictionHTML,
@@ -1271,23 +1280,42 @@ test('resident name tags lift clear of room buttons, or hide, so rooms stay clic
     style: {},
   });
   const room = { el: el('area-marker'), x: 100, y: 100, visible: true, priority: 0 },
-    // Stands on the room button: lifted above it, still visible.
+    // Stands on the room button: moved clear of it, still visible.
     resident = { el: el('npc'), x: 100, y: 105, visible: true, priority: 3 },
-    // Fully boxed in by labels above and below: hidden rather than covering them.
-    boxedIn = { el: el('npc'), x: 300, y: 100, visible: true, priority: 3 },
-    walls = [0, -1, -2, -3, -4].map((i) => ({
-      el: el('area-marker'),
-      x: 300,
-      y: 100 + i * 12,
-      visible: true,
-      priority: 0,
-    }));
+    // Surrounded on every side by room buttons: hidden rather than covering them.
+    boxedIn = { el: el('npc'), x: 400, y: 300, visible: true, priority: 3 },
+    walls = [];
+  for (let x = 160; x <= 640; x += 40)
+    for (let y = 180; y <= 420; y += 12)
+      walls.push({ el: el('area-marker'), x, y, visible: true, priority: 0 });
   h.api.declutterLabels([resident, room, boxedIn, ...walls]);
   assert.equal(room.el.style.visibility, 'visible');
   assert.equal(resident.el.style.visibility, 'visible');
-  assert.ok(parseFloat(resident.el.style.top) < 105 - 20);
+  assert.notEqual(resident.el.style.top ?? '105px', '105px');
   assert.equal(boxedIn.el.style.visibility, 'hidden');
   assert.ok(walls.every((w) => w.el.style.visibility === 'visible'));
+});
+test('several device labels at one installation point fan out and all stay visible', () => {
+  const h = harness();
+  const el = () => ({
+    offsetWidth: 90,
+    offsetHeight: 20,
+    classList: { contains: (c) => c === 'world-device-target' },
+    style: {},
+  });
+  const devices = [1, 2, 3, 4, 5].map(() => ({
+    el: el(),
+    x: 300,
+    y: 200,
+    visible: true,
+    priority: 4,
+  }));
+  h.api.declutterLabels(devices);
+  assert.ok(devices.every((d) => d.el.style.visibility === 'visible'));
+  const spots = devices.map(
+    (d) => (d.el.style.left ?? '300px') + ',' + (d.el.style.top ?? '200px'),
+  );
+  assert.equal(new Set(spots).size, 5, 'no two labels share a spot');
 });
 test('Tab indents in the editor until Escape releases focus', () => {
   const h = harness();

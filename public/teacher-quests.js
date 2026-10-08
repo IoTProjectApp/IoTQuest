@@ -35,6 +35,7 @@ const shown = (sensor, env) => {
 function renderRule() {
   const sensor = questSensors().find((s) => s.id === $('qSensor').value),
     [lo, hi, unit] = readingRange(sensor),
+    numeric = questOperators(sensor).length > 1,
     previous = $('qOperator').value;
   $('qOperator').innerHTML = questOperators(sensor)
     .map(
@@ -42,15 +43,15 @@ function renderRule() {
         '<option value="' +
         esc(op) +
         '">' +
-        esc(sensor.analog ? OPERATORS[op][0] : 'reads') +
+        esc(numeric ? OPERATORS[op][0] : 'reads') +
         '</option>',
     )
     .join('');
   if (questOperators(sensor).includes(previous)) $('qOperator').value = previous;
   $('qThreshold').min = lo;
   $('qThreshold').max = hi;
-  $('qThreshold').step = ADC_SIGNALS.includes(sensor.signal) ? 1 : 0.5;
-  $('qRange').textContent = sensor.analog
+  $('qThreshold').step = ADC_SIGNALS.includes(sensor.signal) || !sensor.analog ? 1 : 0.5;
+  $('qRange').textContent = numeric
     ? `This sensor reads ${lo} to ${hi}${unit ? ' ' + unit : ''}.`
     : 'Enter 1 for HIGH or 0 for LOW.';
 }

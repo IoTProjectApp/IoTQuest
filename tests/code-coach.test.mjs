@@ -1,4 +1,5 @@
 import test from 'node:test';
+import { ADC_SIGNALS } from '../public/signals.js';
 import assert from 'node:assert/strict';
 import { missions, defaults, program, baseEnv } from '../public/missions.js';
 import { locations, adaptMissions } from '../public/locations.js';
@@ -68,7 +69,8 @@ export function studentProgram(m, language, devices) {
     ins
       .map(
         (d) =>
-          '  int ' +
+          // Like the Guide: calibrated readings (°C, %, km/h) keep their decimals in a float.
+          (d.analog && !ADC_SIGNALS.includes(d.signal) ? '  float ' : '  int ') +
           d.signal +
           ' = ' +
           (d.analog ? 'analogRead' : 'digitalRead') +

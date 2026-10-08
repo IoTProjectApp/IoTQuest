@@ -21,7 +21,9 @@ const isAdc = (sensor) => ADC_SIGNALS.includes(sensor.signal);
 export const questSensors = () =>
   components.filter((c) => !c.output && c.signal && readingRange(c));
 export const questOutputs = () => components.filter((c) => c.output);
-export const questOperators = (sensor) => (sensor?.analog ? ['<', '<=', '>', '>='] : ['==']);
+// On/off sensors read only 0 or 1; every other sensor (including distance in cm) is numeric.
+const binary = (sensor) => readingRange(sensor)?.[1] === 1;
+export const questOperators = (sensor) => (binary(sensor) ? ['=='] : ['<', '<=', '>', '>=']);
 
 // Stable id from the teacher's choices, so every student's copy of a quest shares it.
 function questId(fields) {
@@ -49,14 +51,16 @@ export function buildCustomQuest(input) {
     throw new QuestError('Choose how the ' + sensor.name + ' reading is compared.');
   const [lo, hi] = readingRange(sensor);
   if (!Number.isFinite(threshold)) throw new QuestError('The threshold must be a number.');
-  if (sensor.analog ? threshold <= lo || threshold >= hi : ![0, 1].includes(threshold))
+  if (!binary(sensor) ? threshold <= lo || threshold >= hi : ![0, 1].includes(threshold))
     throw new QuestError(
-      sensor.analog
+      !binary(sensor)
         ? `The threshold must be between ${lo} and ${hi}${units(sensor) ? ' ' + units(sensor) : ''}, so the sensor can read values on both sides of it.`
         : 'A digital sensor reads 1 (HIGH) or 0 (LOW).',
     );
-  if (isAdc(sensor) && !Number.isInteger(threshold))
-    throw new QuestError('The ' + sensor.name + ' reads whole numbers from 0 to 4095.');
+  // ADC sensors (0–4095) and distance (cm) report whole numbers.
+  const whole = isAdc(sensor) || !sensor.analog;
+  if (whole && !Number.isInteger(threshold))
+    throw new QuestError(`The ${sensor.name} reads whole numbers from ${lo} to ${hi}.`);
   const fields = {
     title,
     resident,
@@ -68,10 +72,10 @@ export function buildCustomQuest(input) {
   };
   const signal = sensor.signal,
     env = (reading) => ({ [signal]: isAdc(sensor) ? reading / ADC_SCALE : reading }),
-    step = isAdc(sensor) ? 1 : 0.5,
+    step = whole ? 1 : 0.5,
     on = output.name.toLowerCase();
   // Tests check well away from the threshold, right next to it and exactly at it.
-  const readings = sensor.analog
+  const readings = !binary(sensor)
     ? [
         ['Well below the threshold', Math.round(lo + (threshold - lo) * 0.3)],
         ['Just below the threshold', threshold - step],
@@ -89,7 +93,7 @@ export function buildCustomQuest(input) {
     .map(([name, v]) => [name, env(v), [truth(operator, v, threshold) ? 1 : 0]]);
   const when =
     sensor.name.toLowerCase() +
-    (sensor.analog
+    (!binary(sensor)
       ? ` reading ${OPERATORS[operator][0]} ${threshold}${units(sensor) ? ' ' + units(sensor) : ''}`
       : ` reads ${threshold ? 'HIGH (1)' : 'LOW (0)'}`);
   return {

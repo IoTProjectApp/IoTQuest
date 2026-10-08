@@ -1,0 +1,18 @@
+{
+  "name": "iot-quest-connected-world",
+  "version": "3.0.0",
+  "private": true,
+  "type": "module",
+  "description": "An interactive 3D educational RPG with sandboxed Arduino and MicroPython simulations.",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "node scripts/serve.mjs",
+    "start": "node scripts/serve.mjs",
+    "build": "node scripts/build.mjs",
+    "test": "node --test tests/",
+    "format": "npx --yes prettier@3 --write .",
+    "check": "npx --yes prettier@3 --check ."
+  }
+}

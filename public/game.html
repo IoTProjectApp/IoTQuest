@@ -1,0 +1,420 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>IoT Quest: Connected World</title>
+    <script src="/theme-init.js"></script>
+    <link rel="stylesheet" href="/game.css" />
+    <link rel="stylesheet" href="/modern.css" />
+    <link rel="stylesheet" href="/themes.css" />
+    <link rel="icon" href="/favicon.svg" />
+  </head>
+  <body>
+    <header>
+      <a class="brand" href="#" aria-label="IoT Quest home"
+        ><span class="brand-mark"
+          ><svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.6"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            aria-hidden="true"
+          >
+            <path d="M3 10 12 3l9 7v10H3Z" />
+            <path d="M8 20v-6h8v6M12 7v3m-5 0h3m4 0h3" />
+            <circle cx="12" cy="11" r="1.5" /></svg></span
+        ><span>IoT<span class="brand-quest">Quest</span><small>CONNECTED WORLD</small></span></a
+      >
+      <div class="chapter">
+        <span class="tiny-leaf">✧</span> One planet. A world of possibilities.
+      </div>
+      <div class="header-actions">
+        <span class="saved" id="saved">✓ Progress saved locally</span
+        ><button class="xp" id="progressBtn">✦ <span id="xp">0</span> XP</button
+        ><button class="avatar" id="characterBtn" aria-label="Customize technician">T</button
+        ><button
+          class="icon-btn theme-toggle"
+          id="themeToggle"
+          aria-label="Switch to dark mode"
+          title="Switch to dark mode"
+        >
+          ☾</button
+        ><button class="icon-btn" id="settingsBtn" aria-label="Settings">⚙</button>
+      </div>
+    </header>
+    <div class="app-shell">
+      <nav class="rail" aria-label="Main navigation">
+        <button class="rail-item active" data-nav="world">
+          <span
+            ><svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.6"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+            >
+              <circle cx="12" cy="12" r="9" />
+              <ellipse cx="12" cy="12" rx="4" ry="9" />
+              <path d="M3 12h18M5 7h14M5 17h14" /></svg></span
+          >World</button
+        ><button class="rail-item" data-nav="missions">
+          <span
+            ><svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.6"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+            >
+              <path d="M6 21V3m0 1h12l-3 4 3 4H6" /></svg></span
+          >Quests</button
+        ><button class="rail-item" data-nav="inventory">
+          <span
+            ><svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.6"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+            >
+              <rect x="3" y="7" width="18" height="14" rx="2" />
+              <path d="M8 7V4h8v3M3 12h18M9 12v3h6v-3" /></svg></span
+          >Toolkit</button
+        ><button class="rail-item" data-nav="progress">
+          <span
+            ><svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.6"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+            >
+              <path d="m8 14-2 7 6-3 6 3-2-7" />
+              <circle cx="12" cy="9" r="6" />
+              <path d="m10 9 1.5 1.5L14 8" /></svg></span
+          >Badges
+        </button>
+        <div class="rail-bottom">
+          <button class="rail-item" data-nav="help">
+            <span
+              ><svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.6"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                aria-hidden="true"
+              >
+                <circle cx="12" cy="12" r="9" />
+                <path d="M9.5 9a2.5 2.5 0 0 1 5 0c0 2-2.5 2-2.5 4m0 3h.01" /></svg></span
+            >Guide</button
+          ><span class="version">v3.0</span>
+        </div>
+      </nav>
+      <main>
+        <section id="travelScreen" class="travel-screen">
+          <div class="travel-heading">
+            <div>
+              <div class="eyebrow">THE CONNECTED WORLD EXPEDITION</div>
+              <h1>Big ideas. <br />A connected world<span>.</span></h1>
+              <p>Explore remarkable homes. Build smart solutions. Make a difference.</p>
+            </div>
+            <button class="outline" id="freeExploration">Free exploration · all destinations</button
+            ><button class="outline" id="resumeLegacy">Resume original home</button>
+          </div>
+          <div class="travel-summary" aria-label="Adventure highlights">
+            <span
+              ><i class="summary-dot" aria-hidden="true"></i><strong>24</strong> destinations</span
+            ><span><strong>2</strong> coding languages</span><span>Weather-powered worlds</span>
+          </div>
+          <div class="travel-layout">
+            <section class="atlas-panel">
+              <div class="atlas-top">
+                <span>WORLD NETWORK / 01</span
+                ><button id="mapAlternative" aria-pressed="false">Accessible 2D map</button>
+              </div>
+              <div class="globe-stage" id="globeStage">
+                <canvas
+                  id="globeCanvas"
+                  tabindex="0"
+                  aria-label="Interactive Earth. Drag to rotate, scroll to zoom, or use the country selector."
+                ></canvas
+                ><canvas
+                  id="flatMapCanvas"
+                  tabindex="0"
+                  aria-label="Geographically accurate 2D world map. Use the continent and country selectors to travel."
+                  hidden
+                ></canvas>
+                <div id="globeMarkers"></div>
+                <div class="globe-caption">
+                  <span class="network-pulse"></span> 24 HOMES. ONE CONNECTED PLANET.
+                </div>
+                <div class="globe-controls" id="globe-controls">
+                  <button id="globeLeft" aria-label="Rotate globe left">←</button
+                  ><button id="globeRight" aria-label="Rotate globe right">→</button
+                  ><button id="globeUp" aria-label="Rotate globe up">↑</button
+                  ><button id="globeDown" aria-label="Rotate globe down">↓</button
+                  ><button id="globeZoomIn" aria-label="Zoom globe in">+</button
+                  ><button id="globeZoomOut" aria-label="Zoom globe out">−</button>
+                </div>
+                <div id="atlasMessage" class="atlas-message" role="status"></div>
+              </div>
+              <div class="atlas-footer">
+                <span>Drag to rotate · scroll to zoom · select a country</span
+                ><a
+                  href="https://www.naturalearthdata.com/about/terms-of-use/"
+                  target="_blank"
+                  rel="noopener"
+                  >Natural Earth boundaries</a
+                >
+              </div>
+            </section>
+            <aside class="destination-panel panel">
+              <div class="eyebrow">CHOOSE YOUR NEXT CHAPTER</div>
+              <label class="travel-label" for="continentSelect">01 &nbsp; Continent</label
+              ><select id="continentSelect" class="travel-select"></select
+              ><label class="travel-label" for="countrySelect">02 &nbsp; Country</label
+              ><select id="countrySelect" class="travel-select"></select>
+              <div id="locationChoices"></div>
+              <div id="destinationDetail"></div>
+            </aside>
+          </div>
+          <div class="journey-note">
+            <span>✧</span>
+            <div>
+              <strong>Every home has its own story.</strong>
+              <p>
+                Explore specific regional architectural examples. These homes do not represent every
+                home in their countries.
+              </p>
+            </div>
+            <button class="text-btn" id="travelSources">Research & data sources</button>
+          </div>
+        </section>
+        <div id="adventureScreen" hidden>
+          <div class="page-heading">
+            <div>
+              <div class="eyebrow">YOUR CONNECTED ADVENTURE</div>
+              <h1 id="regionHeading">Make yourself at home<span>.</span></h1>
+              <p id="regionSubtitle">Explore the neighborhood. Bring a little ingenuity.</p>
+            </div>
+            <div class="adventure-heading-actions">
+              <button class="outline" id="backToGlobe">◎ Return to globe</button
+              ><button class="outline" id="freeBtn">◇ Free build</button>
+            </div>
+          </div>
+          <div class="play-layout">
+            <div class="simulation-column">
+              <section class="world-panel panel">
+                <div class="panel-bar">
+                  <div class="tabs world-tabs">
+                    <button class="selected" data-view="world">⌂ World</button
+                    ><button data-view="house">House</button
+                    ><button data-view="garden">Garden</button>
+                  </div>
+                  <div class="world-status">
+                    <span id="dayIcon">☀</span> <span id="dayLabel">Daytime</span
+                    ><span class="sep"></span
+                    ><select id="clockSpeed" aria-label="Simulation speed">
+                      <option value="0">Paused</option>
+                      <option value="1">1× normal</option>
+                      <option value="4">4× faster</option>
+                      <option value="60">60× day study</option>
+                      <option value="360">360× · day in ~4 min</option></select
+                    ><span id="simClock" class="sim-clock">08:00 simulated</span>
+                  </div>
+                </div>
+                <div
+                  class="world"
+                  id="world"
+                  tabindex="0"
+                  role="application"
+                  aria-label="Game world. Move with arrow keys or WASD. Press E to interact."
+                >
+                  <canvas
+                    id="worldCanvas"
+                    tabindex="0"
+                    aria-label="Interactive 3D house and garden. Drag to orbit, scroll to zoom. Use WASD to walk."
+                  ></canvas>
+                  <div id="graphicsMessage" class="graphics-message" hidden></div>
+                  <div class="map-layer" id="mapLayer">
+                    <div id="nightShade"></div>
+                    <div id="rainEffect"></div>
+                    <div id="areas"></div>
+                    <div id="deviceEffects"></div>
+                    <div id="deviceWorldTargets"></div>
+                    <button
+                      class="resident resident-maya npc"
+                      id="resident"
+                      data-npc="Maya"
+                      aria-label="Talk to Maya, garden enthusiast"
+                    >
+                      <span>👩🏽‍🌾</span><small>Maya</small></button
+                    ><button
+                      class="resident npc"
+                      id="alexNpc"
+                      data-npc="Alex"
+                      aria-label="Talk to Alex"
+                      style="left: 49%; top: 48%"
+                    >
+                      <span>🧑🏻</span><small>Alex</small></button
+                    ><button
+                      class="resident npc"
+                      id="samNpc"
+                      data-npc="Sam"
+                      aria-label="Talk to Sam"
+                      style="left: 35%; top: 35%"
+                    >
+                      <span>🧑🏾‍🍳</span><small>Sam</small>
+                    </button>
+                    <div class="technician" id="player">
+                      <div class="player-shadow"></div>
+                      <span class="player-body">🧑‍🔧</span><small>You</small>
+                    </div>
+                  </div>
+                  <div class="quest-locator">
+                    <span class="locator-icon">⚑</span>
+                    <div>
+                      <small>YOUR NEXT ADVENTURE</small
+                      ><strong id="mapMission">Light the Path</strong>
+                    </div>
+                  </div>
+                  <div class="camera-bar">
+                    <span class="three-d-badge">3D WORLD</span
+                    ><button id="roofToggle">Roof: cutaway</button
+                    ><button id="followCamera" aria-pressed="false">Follow technician</button
+                    ><button id="expandWorld" aria-label="Expand 3D world">⛶</button>
+                  </div>
+                  <div class="map-tools">
+                    <button id="rotateLeft" aria-label="Rotate camera left">↶</button
+                    ><button id="rotateRight" aria-label="Rotate camera right">↷</button
+                    ><button id="zoomIn" aria-label="Zoom in">+</button
+                    ><button id="zoomOut" aria-label="Zoom out">−</button>
+                  </div>
+                  <button class="return-btn" id="returnBtn" hidden>⌂ Return to world</button>
+                  <div class="map-location" id="location"><span>⌖</span> Willowbrook home</div>
+                  <div class="minimap" id="minimap" aria-label="Minimap">
+                    <div class="mini-house"></div>
+                    <div class="mini-garden"></div>
+                    <i id="miniPlayer"></i>
+                  </div>
+                  <div class="dpad" aria-label="On-screen movement">
+                    <button data-move="up" aria-label="Move up">↑</button
+                    ><button data-move="left" aria-label="Move left">←</button
+                    ><button data-move="down" aria-label="Move down">↓</button
+                    ><button data-move="right" aria-label="Move right">→</button>
+                  </div>
+                </div>
+                <div class="world-footer">
+                  <span
+                    ><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> to walk · drag to orbit
+                    <span class="foot-sep">·</span> <kbd>E</kbd> to interact</span
+                  ><span id="worldTip">Drag to orbit · scroll to zoom</span>
+                </div>
+              </section>
+              <section class="workbench panel">
+                <div class="panel-bar bench-bar">
+                  <div class="tabs bench-tabs">
+                    <button data-tab="inventory">
+                      <span>▧</span> Components
+                      <span id="deviceCount" class="count">0</span></button
+                    ><button data-tab="wiring"><span>⌁</span> Wiring</button
+                    ><button data-tab="code" class="selected"><span>⌘</span> Code editor</button
+                    ><button data-tab="tests"><span>✓</span> Mission tests</button
+                    ><button data-tab="circuit"><span>⌁</span> Live circuit</button
+                    ><button data-tab="faults"><span>⚒</span> Fault finding</button
+                    ><button data-tab="resources"><span>≋</span> Budgets</button
+                    ><button data-tab="export"><span>↓</span> Package</button>
+                  </div>
+                  <button class="text-btn" id="advancedTools">Advanced tools</button>
+                  <div class="bench-meta" hidden>
+                    YOUR WORKBENCH <span class="status-dot"></span>
+                  </div>
+                </div>
+                <div id="benchContent"></div>
+              </section>
+            </div>
+            <aside class="mission-column">
+              <section class="mission-card panel">
+                <div class="mission-top">
+                  <span class="pill">YOUR ACTIVE QUEST</span
+                  ><select id="difficultySelect" aria-label="Mission difficulty">
+                    <option value="beginner">Beginner</option>
+                    <option value="advanced">Advanced</option></select
+                  ><button class="text-btn" id="questList">All quests ↗</button>
+                </div>
+                <div class="mission-number" id="missionNumber">01 / 08 <span>BEGINNER</span></div>
+                <h2 id="missionTitle">Light the Path</h2>
+                <div class="quest-meta">
+                  <span id="missionArea">⌖ Garden path</span><span id="missionXp">✦ 100 XP</span>
+                </div>
+                <p id="missionBudget" class="mission-budget"></p>
+                <div class="resident-card">
+                  <div class="resident-avatar" id="residentAvatar">👩🏽‍🌾</div>
+                  <div>
+                    <strong id="residentName">Maya</strong
+                    ><small id="residentRole">The garden enthusiast</small>
+                  </div>
+                </div>
+                <p class="request" id="request"></p>
+                <div class="mission-steps" id="steps"></div>
+                <button class="primary mission-test" id="testMission">▶ Test your solution</button
+                ><button class="hint-btn" id="hintBtn">☼ Need a little hint?</button>
+                <div class="hint" id="hint" hidden></div>
+              </section>
+              <section class="regional-weather panel" id="regionalWeather">
+                <div class="section-heading">
+                  <h3>Local weather</h3>
+                  <select id="weatherModeSelect" aria-label="Weather mode">
+                    <option value="live">Live Weather</option>
+                    <option value="practice">Practice Weather</option>
+                  </select>
+                </div>
+                <div id="regionalWeatherDetails"></div>
+                <button class="text-btn weather-retry" id="weatherRetry">
+                  Refresh live weather</button
+                ><label class="practice-scenario-label" for="scenarioSelect"
+                  >Practice scenario</label
+                ><select id="scenarioSelect" aria-label="Practice weather scenario"></select
+                ><small id="weatherClockSource"></small>
+              </section>
+              <section class="environment panel">
+                <div class="section-heading">
+                  <h3>Change the conditions</h3>
+                  <span>≋</span>
+                </div>
+                <p id="conditionsNote">Try a different day in your world.</p>
+                <div id="envControls"></div>
+              </section>
+            </aside>
+          </div>
+          <footer class="app-footer">
+            <span>Built for curious minds. One connection at a time.</span
+            ><button id="exportBtn" class="text-btn">↓ Export project</button>
+          </footer>
+        </div>
+      </main>
+    </div>
+    <dialog id="modal" aria-labelledby="modalTitle">
+      <div class="dialog-top">
+        <h2 id="modalTitle"></h2>
+        <button id="closeModal" aria-label="Close dialog">×</button>
+      </div>
+      <div id="modalBody"></div>
+    </dialog>
+    <div id="toast" role="status" aria-live="polite"></div>
+    <script type="module" src="/game.js"></script>
+  </body>
+</html>

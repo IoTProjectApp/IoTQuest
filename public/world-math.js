@@ -1,0 +1,139 @@
+// Column-major WebGL matrices. Pure functions shared by the renderer and tests.
+export const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
+export function multiply(a, b) {
+  const r = new Float32Array(16);
+  for (let c = 0; c < 4; c++)
+    for (let row = 0; row < 4; row++)
+      for (let k = 0; k < 4; k++) r[c * 4 + row] += a[k * 4 + row] * b[c * 4 + k];
+  return r;
+}
+export function perspective(fov, aspect, near = 0.1, far = 160) {
+  const f = 1 / Math.tan(fov / 2),
+    r = new Float32Array(16);
+  r[0] = f / aspect;
+  r[5] = f;
+  r[10] = (far + near) / (near - far);
+  r[11] = -1;
+  r[14] = (2 * far * near) / (near - far);
+  return r;
+}
+function normalize(a) {
+  const l = Math.hypot(...a) || 1;
+  return a.map((v) => v / l);
+}
+function cross(a, b) {
+  return [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+}
+export function lookAt(eye, target) {
+  const z = normalize(eye.map((v, i) => v - target[i])),
+    x = normalize(cross([0, 1, 0], z)),
+    y = cross(z, x);
+  return new Float32Array([
+    x[0],
+    y[0],
+    z[0],
+    0,
+    x[1],
+    y[1],
+    z[1],
+    0,
+    x[2],
+    y[2],
+    z[2],
+    0,
+    -x.reduce((s, v, i) => s + v * eye[i], 0),
+    -y.reduce((s, v, i) => s + v * eye[i], 0),
+    -z.reduce((s, v, i) => s + v * eye[i], 0),
+    1,
+  ]);
+}
+export function modelMatrix(pos, size = [1, 1, 1], rotation = [0, 0, 0]) {
+  const [rx, ry, rz] = rotation,
+    cx = Math.cos(rx),
+    sx = Math.sin(rx),
+    cy = Math.cos(ry),
+    sy = Math.sin(ry),
+    cz = Math.cos(rz),
+    sz = Math.sin(rz);
+  const r = new Float32Array([
+    cy * cz,
+    cy * sz,
+    -sy,
+    0,
+    sx * sy * cz - cx * sz,
+    sx * sy * sz + cx * cz,
+    sx * cy,
+    0,
+    cx * sy * cz + sx * sz,
+    cx * sy * sz - sx * cz,
+    cx * cy,
+    0,
+    ...pos,
+    1,
+  ]);
+  for (let c = 0; c < 3; c++) for (let row = 0; row < 3; row++) r[c * 4 + row] *= size[c];
+  return r;
+}
+export function projectPoint(matrix, p, width, height) {
+  const v = [...p, 1],
+    r = [0, 0, 0, 0];
+  for (let i = 0; i < 4; i++) for (let k = 0; k < 4; k++) r[i] += matrix[k * 4 + i] * v[k];
+  if (r[3] <= 0) return { x: 0, y: 0, visible: false };
+  const x = r[0] / r[3],
+    y = r[1] / r[3],
+    z = r[2] / r[3];
+  return {
+    x: (x * 0.5 + 0.5) * width,
+    y: (-0.5 * y + 0.5) * height,
+    visible: z >= -1 && z <= 1 && Math.abs(x) < 1.15 && Math.abs(y) < 1.15,
+  };
+}
+export function toWorld(p) {
+  return [(p.x - 50) * 0.32, 0, (p.y - 50) * 0.26];
+}
+export function fromWorld(x, z) {
+  return { x: x / 0.32 + 50, y: z / 0.26 + 50 };
+}
+export function collides(x, z, colliders, radius = 0.23) {
+  return colliders.some(
+    (c) =>
+      !c.disabled && Math.abs(x - c.x) < c.w / 2 + radius && Math.abs(z - c.z) < c.d / 2 + radius,
+  );
+}
+export function resolveMove(player, dir, amount, yaw, colliders) {
+  const [x, , z] = toWorld(player),
+    f = (dir === 'up' ? -1 : dir === 'down' ? 1 : 0) * amount * 0.32,
+    r = (dir === 'right' ? 1 : dir === 'left' ? -1 : 0) * amount * 0.32;
+  const dx = Math.sin(yaw) * f + Math.cos(yaw) * r,
+    dz = Math.cos(yaw) * f - Math.sin(yaw) * r;
+  let nx = clamp(x + dx, -13.44, 14.08),
+    nz = clamp(z + dz, -10.4, 12.1);
+  if (collides(nx, z, colliders)) nx = x;
+  if (collides(nx, nz, colliders)) nz = z;
+  return fromWorld(nx, nz);
+}
+export function findFree(player, colliders) {
+  const p = toWorld(player);
+  if (!collides(p[0], p[2], colliders)) return player;
+  for (let radius = 0.4; radius < 4; radius += 0.35)
+    for (let a = 0; a < Math.PI * 2; a += Math.PI / 8) {
+      let x = p[0] + Math.cos(a) * radius,
+        z = p[2] + Math.sin(a) * radius;
+      if (x > -13.3 && x < 14 && z > -10.3 && z < 10.8 && !collides(x, z, colliders))
+        return fromWorld(x, z);
+    }
+  return { x: 48, y: 77 };
+}
+export function deviceState(device, outputs, env) {
+  const raw = Number(outputs[device.pin] || 0),
+    on = raw > 0;
+  return {
+    raw,
+    on,
+    brightness: raw === 1 ? 1 : clamp(raw / (raw > 255 ? 65535 : 255), 0, 1),
+    angle: device.id === 'gate' ? (on ? Math.PI / 2 : 0) : (clamp(raw, 0, 180) * Math.PI) / 180,
+    flow: ['pump', 'valve'].includes(device.id) && on && env.tank > 0,
+    water: clamp(env.tank / 100, 0, 1),
+    plant: env.soil < 30 ? 'dry' : env.soil > 85 ? 'wet' : 'healthy',
+  };
+}

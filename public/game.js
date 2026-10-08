@@ -1,0 +1,2783 @@
+import { components, missions, baseEnv, defaults, validate, program } from './missions.js';
+import { Runtime } from './runtime.js';
+import { World3D } from './world3d.js';
+import { toWorld } from './world-math.js';
+import { locations, locationById, adaptMissions, progressForLocation } from './locations.js';
+import { WeatherService, advanceEnvironment } from './weather.js';
+import { advancedMenu } from './advanced-tools.js';
+import {
+  createLabState,
+  simulateBatch,
+  residentRoutine,
+  updateResources,
+  faultCases,
+  scenarios,
+} from './lab.js';
+import {
+  renderLabPanel,
+  updateCircuit,
+  updateResourcesPanel,
+  scenarioOptions,
+} from './lab-panels.js';
+import { projectFiles, zipFiles } from './project-package.js';
+import { isLocationUnlocked, completedQuestCount } from './locations.js';
+import { setupTravel, weatherHTML } from './travel.js';
+import { esc, setHTML } from './html.js';
+import { sanitizeSaved } from './persistence.js';
+import { highlight } from './syntax-highlight.js';
+import { SerialPlotter, findThresholds, PLOT_LIMIT } from './plotter.js';
+import { diagnose } from './diagnostics.js';
+import { readProject, ImportError, IMPORT_LIMITS, PROJECT_FORMAT } from './project-import.js';
+import { formatCode as formatSource, FormatError, INDENT } from './code-format.js';
+const $ = (id) => document.getElementById(id);
+const STORAGE_KEY = 'iotquest-v1',
+  TICK_MS = 200,
+  ADC_SCALE = 40.95,
+  ADVANCED_COMPONENT_XP = 150,
+  EVIDENCE_LIMIT = 50;
+const areas = [
+  ['Bedroom', 19, 17],
+  ['Bathroom', 30, 15],
+  ['Kitchen', 35, 31],
+  ['Utility room', 48, 12],
+  ['Living room', 20, 35],
+  ['Garage', 50, 30],
+  ['Greenhouse', 80, 20],
+  ['Water tank', 91, 43],
+  ['Plant beds', 77, 64],
+  ['Garden path', 43, 60],
+  ['Entrance', 32, 51],
+];
+const baseAreas = areas.map((a) => [...a]);
+let saved = {};
+try {
+  saved = sanitizeSaved(JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}'));
+} catch {}
+let state = {
+  mission: 0,
+  language: 'cpp',
+  board: 'ESP32',
+  projects: {},
+  completed: {},
+  xp: 0,
+  env: { ...baseEnv },
+  name: 'Technician',
+  appearance: '🧑‍🔧',
+  color: '#547b5b',
+  reduced: matchMedia('(prefers-reduced-motion: reduce)').matches,
+  sound: false,
+  theme: 'system',
+  player: { x: 48, y: 77 },
+  ...saved,
+};
+state.env = { ...baseEnv, ...state.env };
+state.projects = state.projects || {};
+state.completed = state.completed || {};
+state.activeLocation = locationById(state.activeLocation) ? state.activeLocation : 'legacy';
+state.locationProgress = state.locationProgress || {};
+state.weatherByLocation = state.weatherByLocation || {};
+state.weatherMode = state.weatherMode || 'live';
+state.difficulty = state.difficulty || 'beginner';
+state.legacyMission = state.legacyMission ?? state.mission;
+state.legacyBoard = state.legacyBoard || state.board;
+state.legacyEnv = state.legacyEnv || { ...state.env };
+state.travelScreen = true;
+let travelController = null;
+let weatherRevision = 0,
+  weatherLoading = false;
+const weatherService = new WeatherService({
+  useProxy: true,
+  fetchImpl:
+    typeof fetch === 'function'
+      ? fetch
+      : async () => {
+          throw Error('Weather unavailable');
+        },
+  storage: localStorage,
+});
+const currentLocation = () => locationById(state.activeLocation);
+function locationProfile() {
+  if (state.activeLocation === 'legacy') return state;
+  return (state.locationProgress[state.activeLocation] ??= {
+    projects: {},
+    completed: {},
+    mission: 0,
+    board: state.board,
+    env: { ...baseEnv },
+  });
+}
+const currentCompletions = () => locationProfile().completed;
+const activeMissions = () => adaptMissions(missions, currentLocation(), state.difficulty);
+let activeFault = null,
+  selectedDevice = null,
+  lastInputs = {},
+  outputKinds = {},
+  inFlight = false,
+  requestEnv = null,
+  inspectionVariables = {};
+const labState = () => (project().lab ??= createLabState());
+let world3d = null;
+let allConditions = false;
+let tab = 'code',
+  free = false,
+  view = 'world',
+  focusArea = null,
+  zoom = 1,
+  speed = 1,
+  running = false,
+  worker = null,
+  timer = null,
+  watchdog = null,
+  outputs = {},
+  logs = [],
+  simTime = 0,
+  testResults = [],
+  currentPassed = false,
+  edited = false,
+  errorLine = null,
+  npcTime = 0;
+const mission = () =>
+  activeFault
+    ? {
+        ...missions[0],
+        title: activeFault.title,
+        quote: '“Find the fault, repair it, and show why the circuit works.”',
+        xp: 40,
+      }
+    : free
+      ? {
+          title: 'Your smart world',
+          area: 'House & garden',
+          resident: 'Maya',
+          role: 'Your creative companion',
+          quote:
+            '“What would you like to make smarter? Explore, try an idea, and see what happens. Your toolkit is open.”',
+          goal: 'Build your own connected home. Choose any components and use the language guide to program them.',
+          ids: [],
+          xp: 0,
+          badge: 'Maker',
+          learn: ['Experiment', 'Create', 'Debug'],
+          hint: 'Start with one sensor and one output. Install both, connect 3.3 V, GND and signal pins, then read the sensor and write to the output.',
+          conditions: ['light < 1800'],
+          scenarios: [],
+        }
+      : activeMissions()[state.mission];
+// Key for a quest's project and completion record in the current location profile.
+const missionKey = (index = state.mission) =>
+  (state.difficulty === 'advanced' && currentLocation() ? 'advanced:' : '') + index;
+const activeKey = () => (activeFault ? 'fault:' + activeFault.id : missionKey());
+const project = () => {
+  const key = !activeFault && free ? 'free' : activeKey();
+  const projects = locationProfile().projects;
+  if (!projects[key]) projects[key] = { devices: [], code: {} };
+  return projects[key];
+};
+const planned = () => defaults(mission().ids.length ? mission().ids : ['ldr', 'led'], state.board);
+const code = () => project().code[state.language] ?? program(mission(), state.language, planned());
+let saveTimer = null;
+// Coalesce saves during rapid input such as typing; flushed when the page is hidden.
+function saveSoon() {
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(save, 600);
+}
+window.addEventListener('pagehide', () => saveTimer && save());
+// Adopt simulation-owned fields from a worker/batch result without replacing the lab object,
+// so panels holding a reference keep writing to the saved state.
+function adoptSimulatedLab(next) {
+  const lab = labState();
+  lab.resources = next.resources;
+  lab.elapsedMs = next.elapsedMs;
+  if (next.stationSamples) lab.stationSamples = next.stationSamples;
+}
+// Record evidence; consecutive edits merge into one session entry, and test evidence
+// is capped separately so editing cannot evict it.
+function recordEvidence(entry) {
+  const lab = labState(),
+    last = lab.evidence.at(-1);
+  if (
+    entry.type === 'edit' &&
+    last?.type === 'edit' &&
+    last.owner === entry.owner &&
+    last.role === entry.role &&
+    Date.parse(entry.at) - Date.parse(last.lastAt || last.at) < 60000
+  ) {
+    last.lastAt = entry.at;
+    last.count = (last.count || 1) + 1;
+    return;
+  }
+  lab.evidence.push(entry);
+  const tests = lab.evidence.filter((e) => e.type === 'test').slice(-EVIDENCE_LIMIT),
+    other = lab.evidence.filter((e) => e.type !== 'test').slice(-EVIDENCE_LIMIT);
+  lab.evidence = lab.evidence.filter((e) => tests.includes(e) || other.includes(e));
+}
+function save() {
+  clearTimeout(saveTimer);
+  saveTimer = null;
+  if (state.activeLocation !== 'legacy') {
+    const p = locationProfile();
+    p.mission = state.mission;
+    p.board = state.board;
+    p.env = { ...state.env };
+  } else {
+    state.legacyMission = state.mission;
+    state.legacyBoard = state.board;
+    state.legacyEnv = { ...state.env };
+  }
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    $('saved').textContent = '✓ Progress saved locally';
+  } catch {
+    $('saved').textContent = 'Local saving unavailable';
+  }
+}
+function toast(text) {
+  $('toast').textContent = text;
+  $('toast').classList.add('visible');
+  clearTimeout(toast.timeout);
+  toast.timeout = setTimeout(() => $('toast').classList.remove('visible'), 4300);
+}
+function modal(title, html) {
+  $('modalTitle').textContent = title;
+  $('modalBody').innerHTML = html;
+  $('modal').showModal();
+}
+$('closeModal').onclick = () => $('modal').close();
+$('modal').addEventListener('click', (e) => {
+  if (e.target === $('modal')) {
+    const r = $('modal').getBoundingClientRect();
+    if (e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom)
+      $('modal').close();
+  }
+});
+function markEdited({ typing = false } = {}) {
+  labState().attempts++;
+  recordEvidence({
+    at: new Date().toISOString(),
+    type: 'edit',
+    owner: state.name,
+    role: labState().role,
+  });
+  currentPassed = false;
+  edited = true;
+  testResults = [];
+  errorLine = null;
+  renderSteps();
+  if (typing) saveSoon();
+  else save();
+}
+function renderMission() {
+  let m = mission();
+  $('missionTitle').textContent = m.title;
+  $('mapMission').textContent = m.title;
+  $('missionArea').textContent = '⌖ ' + m.area;
+  $('missionXp').textContent = '✦ ' + m.xp + ' XP';
+  $('missionBudget').textContent = free
+    ? 'Free build · lifetime estimates in Budgets'
+    : 'Assessment budget: ' +
+      (m.ids.includes('pump') ? 0.35 : 0.15) +
+      ' Wh · 45 L. Fixed test window.';
+  $('missionNumber').innerHTML = free
+    ? 'OPEN WORLD <span>EXPERIMENT</span>'
+    : String(state.mission + 1).padStart(2, '0') +
+      ' / ' +
+      String(activeMissions().length).padStart(2, '0') +
+      ' <span>' +
+      (state.mission < 3 ? 'BEGINNER' : 'LEVEL UP') +
+      '</span>';
+  $('residentName').textContent = m.resident;
+  $('residentRole').textContent = m.role;
+  $('residentAvatar').textContent =
+    m.resident === 'Maya' ? '👩🏽‍🌾' : m.resident === 'Alex' ? '🧑🏻' : '🧑🏾‍🍳';
+  $('request').textContent = m.quote;
+  $('hint').textContent = m.hint;
+  $('hint').hidden = true;
+  $('xp').textContent = state.xp;
+  $('testMission').textContent = free ? '▶ Run your creation' : '▶ Test your solution';
+  renderSteps();
+  renderAreas();
+  renderEnvironment();
+  renderBench();
+  renderEffects();
+}
+function renderSteps() {
+  let m = mission(),
+    ds = project().devices,
+    installed = m.ids.every((id) => ds.some((d) => d.id === id)) && ds.length > 0,
+    wired = installed && validate(ds, state.board).length === 0;
+  let checks = [installed, wired, running || currentPassed, currentPassed];
+  let active = checks.findIndex((x) => !x);
+  $('steps').innerHTML = [
+    'Install your components',
+    'Connect the circuit',
+    'Write & run your code',
+    'Test in different conditions',
+  ]
+    .map(
+      (s, i) =>
+        '<div class="step ' +
+        (checks[i] ? 'complete' : i === active ? 'current' : '') +
+        '"><i>' +
+        (checks[i] ? '✓' : i + 1) +
+        '</i><span>' +
+        s +
+        '</span></div>',
+    )
+    .join('');
+  $('deviceCount').textContent = ds.length;
+}
+const envMeta = {
+  light: ['☀', 'Sunlight', '%', 0, 100, 'Night', 'Day'],
+  soil: ['♧', 'Soil moisture', '%', 0, 100, 'Dry', 'Wet'],
+  tank: ['▥', 'Water tank', '%', 0, 100, 'Empty', 'Full'],
+  temp: ['♨', 'Temperature', '°C', 0, 45, 'Cold', 'Hot'],
+  outdoorTemp: ['♨', 'Outdoor temperature', '°C', -10, 45, 'Cold', 'Hot'],
+  wind: ['≋', 'Wind speed', ' km/h', 0, 80, 'Calm', 'Windy'],
+  cloud: ['☁', 'Cloud cover', '%', 0, 100, 'Clear', 'Overcast'],
+  rain: ['☂', 'Rain', '%', 0, 100, 'Clear', 'Downpour'],
+  distance: ['◍', 'Distance', 'cm', 0, 300, 'Near', 'Far'],
+  pot: ['◴', 'Potentiometer', '%', 0, 100, 'Minimum', 'Maximum'],
+  humidity: ['≋', 'Humidity', '%', 0, 100, 'Dry', 'Humid'],
+};
+function relevantSignals() {
+  return [
+    ...new Set([
+      ...planned()
+        .filter((d) => !d.output)
+        .map((d) => d.signal),
+      ...project()
+        .devices.filter((d) => !d.output)
+        .map((d) => d.signal),
+      ...(free || allConditions
+        ? [
+            'light',
+            'soil',
+            'tank',
+            'temp',
+            'rain',
+            'motion',
+            'door',
+            'armed',
+            'distance',
+            'pot',
+            'humidity',
+            'outdoorTemp',
+            'wind',
+            'cloud',
+          ]
+        : ['light']),
+    ]),
+  ];
+}
+function renderEnvironment() {
+  const signals = relevantSignals();
+  if (currentLocation())
+    for (const signal of ['outdoorTemp', 'wind', 'cloud', 'humidity', 'rain'])
+      if (!signals.includes(signal)) signals.push(signal);
+  $('conditionsNote').textContent = currentLocation()
+    ? state.weatherMode === 'live'
+      ? 'Simulated sensors · outdoor climate follows local weather.'
+      : 'Practice conditions · sliders control the simulated climate.'
+    : 'Try a different day in your world.';
+  $('envControls').innerHTML =
+    signals
+      .map((s) => {
+        if (['motion', 'door', 'armed', 'occupied'].includes(s))
+          return (
+            '<label class="toggle-row">' +
+            {
+              motion: 'Resident moving nearby',
+              door: 'Garage door open',
+              armed: 'Security armed',
+              occupied: 'Residents at home',
+            }[s] +
+            '<input type="checkbox" data-env="' +
+            s +
+            '" ' +
+            (state.env[s] ? 'checked' : '') +
+            '></label>'
+          );
+        let meta = envMeta[s];
+        if (!meta) return '';
+        return (
+          '<div class="env-row"><label for="env-' +
+          s +
+          '"><span>' +
+          meta[0] +
+          ' &nbsp; ' +
+          meta[1] +
+          '</span><strong id="value-' +
+          s +
+          '">' +
+          Math.round(state.env[s] ?? 0) +
+          meta[2] +
+          '</strong></label><input id="env-' +
+          s +
+          '" type="range" data-env="' +
+          s +
+          '" min="' +
+          meta[3] +
+          '" max="' +
+          meta[4] +
+          '" ' +
+          (currentLocation() &&
+          state.weatherMode === 'live' &&
+          ['light', 'rain', 'humidity', 'wind', 'cloud', 'outdoorTemp'].includes(s)
+            ? 'disabled'
+            : '') +
+          ' value="' +
+          (state.env[s] ?? 0) +
+          '"><div class="range-endpoints"><span>' +
+          meta[5] +
+          '</span><span>' +
+          meta[6] +
+          '</span></div></div>'
+        );
+      })
+      .join('') +
+    '<button class="text-btn more-conditions" id="moreConditions">' +
+    (allConditions ? 'Show quest conditions' : 'Explore all conditions') +
+    '</button>';
+  $('moreConditions').onclick = () => {
+    allConditions = !allConditions;
+    renderEnvironment();
+  };
+  document.querySelectorAll('[data-env]').forEach((el) =>
+    el.addEventListener('input', () => {
+      state.env[el.dataset.env] = el.type === 'checkbox' ? Number(el.checked) : Number(el.value);
+      updateReadings();
+      renderEffects();
+      save();
+    }),
+  );
+}
+function renderAreas() {
+  $('areas').innerHTML = areas
+    .map(
+      ([name, x, y]) =>
+        '<button class="area-marker ' +
+        (mission().area === name ? 'mission-area' : '') +
+        '" data-area="' +
+        esc(name) +
+        '" style="left:' +
+        x +
+        '%;top:' +
+        y +
+        '%">' +
+        esc(name) +
+        '</button>',
+    )
+    .join('');
+  document
+    .querySelectorAll('[data-area]')
+    .forEach((b) => (b.onclick = () => enterArea(b.dataset.area)));
+}
+function enterArea(name) {
+  let a = areas.find((a) => a[0] === name);
+  if (!a) return;
+  focusArea = a;
+  view = 'detail';
+  zoom = 1.9;
+  state.player = world3d?.findFree({ x: a[1], y: a[2] + 5 }) ?? { x: a[1], y: a[2] + 5 };
+  save();
+  $('worldTip').textContent = 'Press E to install devices here';
+  setMapView();
+  updatePlayer();
+  $('world').focus();
+}
+function setMapView() {
+  const a = focusArea,
+    tx = a ? (50 - a[1]) * zoom : 0,
+    ty = a ? (50 - a[2]) * zoom : 0;
+  $('mapLayer').style.transform = world3d
+    ? 'none'
+    : 'translate(' + tx + '%,' + ty + '%) scale(' + zoom + ')';
+  world3d?.setView(view, a, zoom);
+  if ($('followCamera')) $('followCamera').setAttribute?.('aria-pressed', 'false');
+  $('location').innerHTML =
+    '<span>⌖</span> ' +
+    esc(
+      a?.[0] ??
+        (view === 'house'
+          ? 'Inside the house'
+          : view === 'garden'
+            ? 'The garden'
+            : currentLocation()?.city || 'Willowbrook home'),
+    );
+  $('returnBtn').hidden = view === 'world';
+  const inside =
+    a && (a[0].includes('room') || ['Kitchen', 'Bathroom', 'Garage', 'Bedroom'].includes(a[0]));
+  document
+    .querySelectorAll('[data-view]')
+    .forEach((b) =>
+      b.classList.toggle(
+        'selected',
+        b.dataset.view === view ||
+          (view === 'detail' && b.dataset.view === (inside ? 'house' : 'garden')),
+      ),
+    );
+}
+function changeView(v) {
+  view = v;
+  focusArea = v === 'house' ? ['House', 34, 25] : v === 'garden' ? ['Garden', 74, 52] : null;
+  zoom = v === 'world' ? 1 : 1.5;
+  setMapView();
+}
+document
+  .querySelectorAll('[data-view]')
+  .forEach((b) => (b.onclick = () => changeView(b.dataset.view)));
+$('returnBtn').onclick = () => changeView('world');
+$('zoomIn').onclick = () => {
+  zoom = Math.min(3, zoom + 0.25);
+  setMapView();
+};
+$('zoomOut').onclick = () => {
+  zoom = Math.max(1, zoom - 0.25);
+  if (zoom === 1) {
+    view = 'world';
+    focusArea = null;
+  }
+  setMapView();
+};
+$('clockSpeed').onchange = () => setClockSpeed(Number($('clockSpeed').value));
+function updatePlayer() {
+  $('player').style.left = state.player.x + '%';
+  $('player').style.top = state.player.y + '%';
+  $('player').querySelector('.player-body').textContent = state.appearance;
+  $('player').querySelector('small').textContent = state.name === 'Technician' ? 'You' : state.name;
+  $('player').querySelector('small').style.background = state.color;
+  $('miniPlayer').style.left = state.player.x + '%';
+  $('miniPlayer').style.top = state.player.y + '%';
+}
+function move(dir, amount = 1.1) {
+  if (state.travelScreen || $('modal').open) return;
+  if (world3d) {
+    state.player = world3d.move(state.player, dir, amount);
+    updatePlayer();
+    return;
+  }
+  state.player.x = Math.max(
+    8,
+    Math.min(94, state.player.x + (dir === 'right' ? amount : dir === 'left' ? -amount : 0)),
+  );
+  state.player.y = Math.max(
+    10,
+    Math.min(92, state.player.y + (dir === 'down' ? amount : dir === 'up' ? -amount : 0)),
+  );
+  updatePlayer();
+}
+$('rotateLeft').onclick = () => {
+  if (world3d) world3d.yaw -= Math.PI / 6;
+};
+$('rotateRight').onclick = () => {
+  if (world3d) world3d.yaw += Math.PI / 6;
+};
+$('followCamera').onclick = () => {
+  if (!world3d) return;
+  world3d.setFollow(!world3d.follow);
+  $('followCamera').setAttribute('aria-pressed', String(world3d.follow));
+};
+$('expandWorld').onclick = () => {
+  if (document.fullscreenElement) document.exitFullscreen?.();
+  else
+    $('world')
+      .requestFullscreen?.()
+      .catch(() => toast('Fullscreen is unavailable in this browser.'));
+};
+let keys = new Set(),
+  moveFrame = 0;
+const directions = {
+  ArrowUp: 'up',
+  ArrowDown: 'down',
+  ArrowLeft: 'left',
+  ArrowRight: 'right',
+  w: 'up',
+  s: 'down',
+  a: 'left',
+  d: 'right',
+  W: 'up',
+  S: 'down',
+  A: 'left',
+  D: 'right',
+};
+document.addEventListener('keydown', (e) => {
+  if (
+    ['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName) ||
+    e.ctrlKey ||
+    e.metaKey ||
+    state.travelScreen
+  )
+    return;
+  if (directions[e.key]) {
+    e.preventDefault();
+    keys.add(directions[e.key]);
+  }
+  if (e.key.toLowerCase() === 'e' && !$('modal').open) {
+    e.preventDefault();
+    interact();
+  }
+});
+document.addEventListener('keyup', (e) => keys.delete(directions[e.key]));
+window.addEventListener('blur', () => keys.clear());
+function movementFrame(t) {
+  if (t - moveFrame > 30) {
+    for (const dir of keys) move(dir, 0.55);
+    moveFrame = t;
+  }
+  requestAnimationFrame(movementFrame);
+}
+requestAnimationFrame(movementFrame);
+document.querySelectorAll('[data-move]').forEach((b) => {
+  b.onpointerdown = (e) => {
+    e.preventDefault();
+    keys.add(b.dataset.move);
+    b.setPointerCapture(e.pointerId);
+  };
+  b.onpointerup = b.onpointercancel = () => keys.delete(b.dataset.move);
+});
+function interact() {
+  let near = areas.reduce(
+    (best, a) =>
+      Math.hypot(a[1] - state.player.x, a[2] - state.player.y) <
+      Math.hypot(best[1] - state.player.x, best[2] - state.player.y)
+        ? a
+        : best,
+    areas[0],
+  );
+  if (Math.hypot(near[1] - state.player.x, near[2] - state.player.y) > 13) {
+    toast('Walk closer to a room, garden bed, or installation point.');
+    return;
+  }
+  enterArea(near[0]);
+  switchTab('inventory');
+  toast('You’re at ' + near[0] + '. Choose a component to install.');
+}
+function switchTab(next) {
+  tab = next;
+  document
+    .querySelectorAll('[data-tab]')
+    .forEach((b) => b.classList.toggle('selected', b.dataset.tab === tab));
+  renderBench();
+}
+document
+  .querySelectorAll('[data-tab]')
+  .forEach((b) => (b.onclick = () => switchTab(b.dataset.tab)));
+function renderBench() {
+  if (['circuit', 'faults', 'resources', 'export'].includes(tab)) {
+    renderLabPanel(tab, labContext());
+    return;
+  }
+  if (tab === 'code') renderCode();
+  else if (tab === 'inventory') renderInventory();
+  else if (tab === 'wiring') renderWiring();
+  else renderTests();
+}
+function renderCode() {
+  $('benchContent').innerHTML =
+    '<div class="editor-layout"><div class="editor-main"><div class="editor-toolbar"><div class="select-group"><select id="languageSelect" aria-label="Programming language"><option value="cpp">Arduino C++</option><option value="python">MicroPython</option></select><select id="boardSelect" aria-label="Controller"><option>ESP32</option><option>Raspberry Pi Pico</option>' +
+    (completedQuestCount(state) >= 4 ||
+    state.freeExploration ||
+    state.board === 'Raspberry Pi Pico W'
+      ? '<option>Raspberry Pi Pico W</option>'
+      : '') +
+    '</select><button class="text-btn" id="exampleBtn">Worked example</button><button class="text-btn" id="languageHelp">Language guide</button></div><div class="editor-actions"><button id="formatBtn" title="Format code (Shift+Alt+F)" aria-keyshortcuts="Shift+Alt+F">Format</button><button id="resetCode" title="Reset starter code">↺ Reset</button><button id="stopBtn">■ Stop</button><button class="primary" id="runBtn">▶ Run</button></div></div><div class="editor-wrap"><div class="line-numbers" id="lineNumbers"></div><div class="code-scroll" id="codeScroll"><pre class="highlight" id="highlight" aria-hidden="true"></pre><textarea class="code-input" id="codeInput" spellcheck="false" autocapitalize="off" aria-label="Student program code. Press Escape, then Tab, to leave the editor."></textarea></div></div><div class="diag-panel" id="diagPanel" hidden><ul id="diagList" aria-label="Code checks"></ul></div><p class="diag-message" id="diagMessage" role="status" aria-live="polite" hidden></p><div class="editor-status"><span id="editorStatus">' +
+    (running ? 'Running · simulated devices connected' : 'Ready when you are') +
+    '</span><button class="diag-summary" id="diagSummary" aria-expanded="false" aria-controls="diagPanel" hidden></button><span id="cursorPos">Ln 1, Col 1</span></div>' +
+    SerialPlotter.markup() +
+    '</div><aside class="live-panel"><div class="live-title"><span>Live readings</span><span id="liveTime">0.0 s</span></div><p>Watch your code come to life.</p><div id="liveReadings"></div><div class="serial"><div class="serial-title"><span>Serial monitor</span><button id="clearSerial">Clear</button></div><pre id="serialText"></pre></div></aside></div>';
+  $('languageSelect').value = state.language;
+  $('boardSelect').value = state.board;
+  $('codeInput').value = code();
+  $('codeInput').readOnly = labState().coopEnabled && labState().role !== 'Programmer';
+  updateHighlight();
+  updateReadings();
+  $('codeInput').addEventListener('input', () => {
+    if (!canEdit('Programmer')) {
+      $('codeInput').value = code();
+      return;
+    }
+    project().code[state.language] = $('codeInput').value;
+    stop(false);
+    markEdited({ typing: true });
+    updateHighlight();
+  });
+  // Tab indents; Escape releases it so keyboard users can leave the editor (WCAG 2.1.2).
+  let tabReleased = false;
+  $('codeInput').addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+      tabReleased = true;
+      $('editorStatus').textContent = 'Tab now moves focus. Type to resume indenting.';
+      return;
+    }
+    if (e.key === 'Tab' && (tabReleased || e.ctrlKey || e.metaKey || e.altKey)) return;
+    if (e.key !== 'Tab' && e.key !== 'Shift') tabReleased = false;
+    if (e.isComposing) return;
+    const el = e.target,
+      unit = INDENT[state.language] || '    ',
+      start = el.selectionStart,
+      lineStart = el.value.lastIndexOf('\n', start - 1) + 1,
+      before = el.value.slice(lineStart, start);
+    if (e.key === 'F8') {
+      e.preventDefault();
+      nextDiagnostic();
+    } else if (e.key.toLowerCase() === 'f' && e.shiftKey && e.altKey) {
+      e.preventDefault();
+      formatCode();
+    } else if (e.key === 'Tab' && e.shiftKey) {
+      // Shift+Tab removes one indentation unit from the current line.
+      e.preventDefault();
+      const remove = el.value.slice(lineStart).match(/^ */)[0].length;
+      if (!remove) return;
+      const width = Math.min(remove, unit.length);
+      el.setRangeText('', lineStart, lineStart + width, 'preserve');
+      el.selectionStart = el.selectionEnd = Math.max(lineStart, start - width);
+      el.dispatchEvent(new Event('input'));
+    } else if (e.key === 'Tab') {
+      e.preventDefault();
+      el.setRangeText(unit, start, el.selectionEnd, 'end');
+      el.dispatchEvent(new Event('input'));
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      let indent = before.match(/^ */)[0];
+      const opens = /[{:]\s*$/.test(before),
+        closesNext = state.language === 'cpp' && el.value[el.selectionEnd] === '}';
+      if (opens) indent += unit;
+      // Between a pair of braces, put the closing brace on its own line.
+      const tail = opens && closesNext ? '\n' + indent.slice(unit.length) : '';
+      el.setRangeText('\n' + indent + tail, start, el.selectionEnd, 'end');
+      el.selectionStart = el.selectionEnd = start + 1 + indent.length;
+      el.dispatchEvent(new Event('input'));
+    } else if (e.key === '}' && state.language === 'cpp' && /^ +$/.test(before)) {
+      // A closing brace typed on an indentation-only line steps back one level.
+      e.preventDefault();
+      const width = Math.min(before.length, unit.length);
+      el.setRangeText('}', start - width, el.selectionEnd, 'end');
+      el.dispatchEvent(new Event('input'));
+    }
+  });
+  $('codeInput').addEventListener('blur', () => (tabReleased = false));
+  $('codeInput').addEventListener('click', updateCursor);
+  $('codeInput').addEventListener('keyup', updateCursor);
+  $('codeInput').addEventListener('focus', updateCursor);
+  $('codeScroll').onscroll = () => {
+    $('lineNumbers').scrollTop = $('codeScroll').scrollTop;
+  };
+  $('languageSelect').onchange = () => {
+    stop(false);
+    state.language = $('languageSelect').value;
+    currentPassed = false;
+    testResults = [];
+    save();
+    renderCode();
+    renderSteps();
+    toast('Language changed. Your installed components and wiring are preserved.');
+  };
+  $('boardSelect').onchange = () => changeBoard($('boardSelect').value);
+  $('exampleBtn').onclick = loadExample;
+  $('languageHelp').onclick = languageGuide;
+  $('formatBtn').onclick = formatCode;
+  $('resetCode').onclick = () => {
+    if (!canEdit('Programmer')) return;
+    stop(false);
+    project().code[state.language] = program(mission(), state.language, planned());
+    markEdited();
+    renderCode();
+    toast('Starter code restored. Components and wiring are preserved.');
+  };
+  $('runBtn').onclick = run;
+  $('stopBtn').onclick = () => stop(true);
+  $('clearSerial').onclick = () => {
+    logs = [];
+    updateReadings();
+  };
+  $('diagSummary').onclick = () => {
+    const open = $('diagPanel').hidden;
+    $('diagPanel').hidden = !open;
+    $('diagSummary').setAttribute('aria-expanded', String(open));
+  };
+  diagnosticsKey = '';
+  renderHighlight();
+  plotter ??= new SerialPlotter({
+    onDownload: (csv) => download('iot-quest-plot.csv', csv, 'text/csv'),
+  });
+  plotter.attach({
+    onClear: () => {
+      plotSamples = [];
+      refreshPlot();
+    },
+  });
+  refreshPlot();
+}
+// Serial plotter state: samples survive Stop and tab switches, and reset when a run starts.
+let plotter = null,
+  plotSamples = [],
+  plotPrinted = 0,
+  plotThresholds = { key: null, list: [] };
+function recordPlot(data) {
+  let samples = data.trace;
+  if (!samples) {
+    const fresh = Math.min((data.printed || 0) - plotPrinted, data.logs?.length || 0);
+    samples = [
+      {
+        t: data.time,
+        inputs: data.inputs || {},
+        outputs: data.outputs || {},
+        lines: fresh > 0 ? data.logs.slice(-fresh) : [],
+      },
+    ];
+  }
+  plotPrinted = data.printed || 0;
+  plotSamples.push(...samples);
+  if (plotSamples.length > PLOT_LIMIT) plotSamples.splice(0, plotSamples.length - PLOT_LIMIT);
+  refreshPlot();
+}
+function refreshPlot() {
+  if (!plotter || tab !== 'code' || !$('plotLegend')) return;
+  const devices = project().devices,
+    source = code(),
+    key = state.language + '\0' + JSON.stringify(devices.map((d) => d.pin)) + '\0' + source;
+  if (plotThresholds.key !== key)
+    plotThresholds = { key, list: findThresholds(source, state.language, devices) };
+  plotter.update({ samples: plotSamples, devices, thresholds: plotThresholds.list, speed });
+}
+function updateHighlight() {
+  let el = $('codeInput');
+  if (!el) return;
+  renderHighlight();
+  $('lineNumbers').textContent = Array.from(
+    { length: el.value.split('\n').length + 1 },
+    (_, i) => i + 1,
+  ).join('\n');
+  el.style.height = Math.max(280, (el.value.split('\n').length + 2) * 21) + 'px';
+  $('highlight').style.minWidth = el.scrollWidth + 'px';
+  updateCursor();
+}
+let highlightedKey = '';
+// Redraw the highlight overlay; the caret drives the current-line and bracket-match marks.
+let diagnostics = [],
+  diagnosticsKey = '';
+// Re-run the code checks when the source, language or wiring changes.
+function refreshDiagnostics(source) {
+  const devices = project().devices,
+    key = [
+      state.language,
+      JSON.stringify(devices.map((d) => [d.id, d.pin, d.output, d.signal])),
+      source,
+    ].join('\0');
+  if (key === diagnosticsKey) return false;
+  diagnosticsKey = key;
+  diagnostics = diagnose(source, state.language, devices);
+  return true;
+}
+function renderHighlight() {
+  const el = $('codeInput');
+  if (!el || !$('highlight')) return;
+  const changed = refreshDiagnostics(el.value),
+    caret = el.selectionStart === el.selectionEnd ? el.selectionStart : null,
+    key = [state.language, caret, errorLine, diagnosticsKey, el.value].join('\0');
+  if (changed) renderDiagnosticList();
+  updateDiagnosticMessage();
+  if (key === highlightedKey && $('highlight').innerHTML) return;
+  highlightedKey = key;
+  $('highlight').innerHTML =
+    highlight(el.value, state.language, { caret, errorLine, diagnostics }) + '\n';
+}
+const diagIcon = (d) => (d.severity === 'warning' ? '⚠' : 'ⓘ');
+function renderDiagnosticList() {
+  const summary = $('diagSummary');
+  if (!summary) return;
+  const warnings = diagnostics.filter((d) => d.severity === 'warning').length,
+    tips = diagnostics.length - warnings;
+  summary.hidden = !diagnostics.length;
+  summary.className = 'diag-summary' + (warnings ? ' has-warnings' : '');
+  summary.textContent = [
+    warnings ? '⚠ ' + warnings + (warnings === 1 ? ' warning' : ' warnings') : '',
+    tips ? 'ⓘ ' + tips + (tips === 1 ? ' tip' : ' tips') : '',
+  ]
+    .filter(Boolean)
+    .join(' · ');
+  summary.title = 'Show code checks (F8 jumps to the next one)';
+  if (!diagnostics.length) {
+    $('diagPanel').hidden = true;
+    summary.setAttribute('aria-expanded', 'false');
+  }
+  $('diagList').innerHTML = diagnostics
+    .map(
+      (d, i) =>
+        '<li><button class="diag-item ' +
+        d.severity +
+        '" data-diag="' +
+        i +
+        '"><span>' +
+        diagIcon(d) +
+        ' Ln ' +
+        d.line +
+        '</span>' +
+        esc(d.message) +
+        '</button></li>',
+    )
+    .join('');
+  document
+    .querySelectorAll('[data-diag]')
+    .forEach((b) => (b.onclick = () => jumpToDiagnostic(Number(b.dataset.diag))));
+}
+// Show the check for the caret's line under the editor, so it is readable without hovering.
+function updateDiagnosticMessage() {
+  const el = $('codeInput'),
+    message = $('diagMessage');
+  if (!el || !message) return;
+  const line = el.value.slice(0, el.selectionStart).split('\n').length,
+    here = diagnostics.find((d) => d.line === line);
+  message.hidden = !here;
+  message.className = 'diag-message ' + (here?.severity || '');
+  message.textContent = here ? diagIcon(here) + ' Ln ' + here.line + ': ' + here.message : '';
+}
+function jumpToDiagnostic(index) {
+  const d = diagnostics[index],
+    el = $('codeInput');
+  if (!d || !el) return;
+  el.focus();
+  el.selectionStart = d.start;
+  el.selectionEnd = d.end;
+  updateCursor();
+}
+function nextDiagnostic() {
+  if (!diagnostics.length) return;
+  const caret = $('codeInput').selectionEnd,
+    next = diagnostics.findIndex((d) => d.start >= caret);
+  jumpToDiagnostic(next < 0 ? 0 : next);
+}
+function updateCursor() {
+  if (!$('codeInput')) return;
+  let before = $('codeInput').value.slice(0, $('codeInput').selectionStart),
+    lines = before.split('\n');
+  $('cursorPos').textContent = 'Ln ' + lines.length + ', Col ' + (lines.at(-1).length + 1);
+  renderHighlight();
+}
+function loadExample() {
+  if (!canEdit('Programmer')) return;
+  let ds = project().devices.length ? project().devices : planned();
+  project().code[state.language] = program(mission(), state.language, ds, true);
+  stop(false);
+  markEdited();
+  renderCode();
+  toast('Worked example loaded. Run it, change a threshold, then test again.');
+}
+function formatCode() {
+  if (!canEdit('Programmer')) return;
+  let formatted;
+  try {
+    formatted = formatSource(code(), state.language);
+  } catch (e) {
+    if (!(e instanceof FormatError)) throw e;
+    toast('Not formatted: ' + e.message);
+    return;
+  }
+  // The formatter normalises the final newline; ignore that alone when deciding if code changed.
+  const changed = formatted.trimEnd() !== code().trimEnd();
+  if (changed) {
+    stop(false);
+    project().code[state.language] = formatted;
+    markEdited();
+  }
+  renderCode();
+  $('codeInput')?.focus?.();
+  toast(changed ? 'Code formatted. Spacing and indentation tidied.' : 'Code is already formatted.');
+}
+function changeBoard(board) {
+  if (!canEdit('Installer')) {
+    renderBench();
+    return;
+  }
+  stop(false);
+  state.board = board;
+  const plannedDevices = defaults(
+    project().devices.map((d) => d.id),
+    board,
+  );
+  project().devices = project().devices.map((d, i) => ({ ...d, pin: plannedDevices[i].pin }));
+  project().code = {};
+  markEdited();
+  renderBench();
+  toast('Controller changed. Pins were remapped and starter code reloaded for ' + board + '.');
+}
+function renderInventory() {
+  let required = mission().ids,
+    ds = project().devices;
+  let sorted = [...components].sort(
+    (a, b) => Number(required.includes(b.id)) - Number(required.includes(a.id)),
+  );
+  $('benchContent').innerHTML =
+    '<div class="inventory-panel"><div class="bench-heading"><div><h3>Your component toolkit</h3><p>Explore a location, choose a device, and install it. Mission components are highlighted.</p></div><button class="outline" id="goWiring">Open wiring</button></div><div class="component-grid">' +
+    sorted
+      .map((c) => {
+        let installed = ds.some((d) => d.id === c.id),
+          unlocked =
+            free ||
+            required.includes(c.id) ||
+            state.xp >= ADVANCED_COMPONENT_XP ||
+            ['ldr', 'led', 'pir', 'porch', 'soil', 'pump', 'level'].includes(c.id);
+        return (
+          '<article class="component-card ' +
+          (required.includes(c.id) ? 'required' : '') +
+          '">' +
+          (installed ? '<span class="installed-badge">✓ Installed</span>' : '') +
+          '<div class="component-icon">' +
+          esc(c.icon) +
+          '</div><h4>' +
+          esc(c.name) +
+          '</h4><div class="component-label">' +
+          (c.output ? 'Actuator · OUT' : c.analog ? 'Sensor · ADC' : 'Sensor · IN') +
+          (required.includes(c.id) ? ' · QUEST' : '') +
+          '</div><p>' +
+          esc(c.desc) +
+          '</p><button data-install="' +
+          esc(c.id) +
+          '" ' +
+          (installed || !unlocked ? 'disabled' : '') +
+          '>' +
+          (installed
+            ? 'Installed'
+            : unlocked
+              ? '＋ Install component'
+              : 'Unlock at ' + ADVANCED_COMPONENT_XP + ' XP') +
+          '</button></article>'
+        );
+      })
+      .join('') +
+    '</div></div>';
+  $('goWiring').onclick = () => switchTab('wiring');
+  document
+    .querySelectorAll('[data-install]')
+    .forEach((b) => (b.onclick = () => installDialog(b.dataset.install)));
+}
+function installDialog(id) {
+  if (!canEdit('Installer')) return;
+  let c = components.find((c) => c.id === id);
+  let valid = free
+    ? areas.map((a) => a[0])
+    : [mission().area === 'Greenhouse' ? 'Greenhouse' : c.area];
+  modal(
+    'Install ' + c.name,
+    '<div class="install-dialog"><div class="component-icon">' +
+      esc(c.icon) +
+      '</div><p>' +
+      esc(c.desc) +
+      '</p><label for="installArea">Installation point</label><select id="installArea">' +
+      valid.map((a) => '<option>' + esc(a) + '</option>').join('') +
+      '</select><p>Signal → GPIO &nbsp; · &nbsp; VCC → 3.3 V &nbsp; · &nbsp; GND → GND' +
+      (c.resistor ? '<br>Include a ' + esc(c.resistor) + ' resistor.' : '') +
+      '</p><button class="primary" id="confirmInstall">Walk here & install</button></div>',
+  );
+  $('confirmInstall').onclick = () => {
+    const area = $('installArea').value;
+    let base =
+      planned().find((d) => d.id === id) ||
+      defaults([...project().devices.map((d) => d.id), id], state.board).at(-1);
+    project().devices.push({
+      ...base,
+      area,
+      power: false,
+      ground: false,
+      resistorConnected: false,
+    });
+    enterArea(area);
+    $('modal').close();
+    markEdited();
+    renderBench();
+    renderSteps();
+    renderEffects();
+    save();
+    toast(c.name + ' installed in ' + area + '. Connect it in Wiring.');
+  };
+}
+function renderWiring() {
+  let ds = project().devices,
+    errors = validate(ds, state.board);
+  $('benchContent').innerHTML =
+    '<div class="wiring-panel"><div class="bench-heading"><div><h3>Make the connections</h3><p>Assign each signal to a GPIO. Connect power and ground; add the indicated resistor.</p></div><select class="board-select" id="wireBoard" aria-label="Controller"><option>ESP32</option><option>Raspberry Pi Pico</option>' +
+    (completedQuestCount(state) >= 4 ||
+    state.freeExploration ||
+    state.board === 'Raspberry Pi Pico W'
+      ? '<option>Raspberry Pi Pico W</option>'
+      : '') +
+    '</select></div><div class="wiring-layout"><div class="board-card"><div class="board-graphic"><strong>' +
+    esc(state.board) +
+    '</strong><div class="board-chip">MCU</div><small>3.3 V &nbsp; GND &nbsp; GPIO</small></div><p>' +
+    (state.board === 'ESP32'
+      ? 'ADC: 32, 33, 34, 35, 36, 39.<br>34–39 are input-only.<br>GPIO 6–11 are reserved for flash.'
+      : 'ADC: 26, 27, 28.<br>Digital I/O and PWM: 0–28.<br>GPIO 29 is not exposed.') +
+    '<br>All signals use 3.3 V logic.</p></div><div>' +
+    (!ds.length
+      ? '<div class="empty-bench">No components installed yet. Open Components and install the devices for your quest.</div>'
+      : ds
+          .map(
+            (d) =>
+              '<div class="wiring-row"><div><strong>' +
+              esc(d.icon) +
+              ' ' +
+              esc(d.name) +
+              '</strong><small>' +
+              esc(d.area) +
+              ' · ' +
+              (d.output ? 'OUT / PWM' : d.analog ? 'ADC input' : 'Digital input') +
+              '</small></div><label>Signal pin<input type="number" min="0" max="39" data-pin="' +
+              esc(d.id) +
+              '" value="' +
+              esc(d.pin) +
+              '" aria-label="' +
+              esc(d.name) +
+              ' signal pin"></label><label><input type="checkbox" data-wire="' +
+              esc(d.id) +
+              '" data-field="power" ' +
+              (d.power ? 'checked' : '') +
+              '> 3.3 V</label><label><input type="checkbox" data-wire="' +
+              esc(d.id) +
+              '" data-field="ground" ' +
+              (d.ground ? 'checked' : '') +
+              '> GND</label><label class="resistor-label">' +
+              (d.resistor
+                ? '<input type="checkbox" data-wire="' +
+                  esc(d.id) +
+                  '" data-field="resistorConnected" ' +
+                  (d.resistorConnected ? 'checked' : '') +
+                  '> ' +
+                  esc(d.resistor)
+                : 'Driver<br>included') +
+              '</label><button class="remove" data-remove="' +
+              esc(d.id) +
+              '" aria-label="Remove ' +
+              esc(d.name) +
+              '">×</button></div>',
+          )
+          .join('')) +
+    '<div id="wireErrors">' +
+    (errors.length
+      ? '<div class="wire-error">' + errors.map(esc).join('<br>') + '</div>'
+      : ds.length
+        ? '<div class="wire-good">✓ All connections are valid. GPIO numbers in your code must match this panel.</div>'
+        : '') +
+    '</div><div class="bench-heading" style="margin-top:20px"><button class="outline" id="connectAll">Connect recommended circuit</button><button class="primary" id="goCode">Open code editor</button></div></div></div></div>';
+  $('wireBoard').value = state.board;
+  $('wireBoard').onchange = () => changeBoard($('wireBoard').value);
+  $('connectAll').onclick = () => {
+    if (!canEdit('Installer')) return;
+    const defs = defaults(
+      ds.map((d) => d.id),
+      state.board,
+    );
+    ds.forEach((d, i) => {
+      d.pin = defs[i].pin;
+      d.power = true;
+      d.ground = true;
+      d.resistorConnected = !!d.resistor;
+    });
+    stop(false);
+    markEdited();
+    renderWiring();
+    renderSteps();
+    toast('Power, ground, and resistors connected. Review the signal pins before running.');
+  };
+  $('goCode').onclick = () => switchTab('code');
+  document.querySelectorAll('[data-pin]').forEach(
+    (el) =>
+      (el.onchange = () => {
+        if (!canEdit('Installer')) {
+          renderWiring();
+          return;
+        }
+        let d = ds.find((d) => d.id === el.dataset.pin);
+        d.pin = Number(el.value);
+        stop(false);
+        markEdited();
+        renderWiring();
+      }),
+  );
+  document.querySelectorAll('[data-wire]').forEach(
+    (el) =>
+      (el.onchange = () => {
+        if (!canEdit('Installer')) {
+          renderWiring();
+          return;
+        }
+        let d = ds.find((d) => d.id === el.dataset.wire);
+        d[el.dataset.field] = el.checked;
+        stop(false);
+        markEdited();
+        renderWiring();
+      }),
+  );
+  document.querySelectorAll('[data-remove]').forEach(
+    (el) =>
+      (el.onclick = () => {
+        if (!canEdit('Installer')) return;
+        stop(false);
+        project().devices = ds.filter((d) => d.id !== el.dataset.remove);
+        markEdited();
+        renderWiring();
+        renderEffects();
+      }),
+  );
+}
+function prerequisites() {
+  let ds = project().devices;
+  let missing = mission().ids.filter((id) => !ds.some((d) => d.id === id));
+  if (missing.length)
+    return [
+      'Install ' + missing.map((id) => components.find((c) => c.id === id).name).join(', ') + '.',
+    ];
+  if (!ds.length) return ['Install at least one component first.'];
+  return validate(ds, state.board);
+}
+function run() {
+  if (!canEdit('Tester')) return;
+  state.debugPaused = false;
+  stop(false);
+  labState().paused = false;
+  if (speed === 0) setClockSpeed(1);
+  let errors = prerequisites();
+  if (errors.length) {
+    logs = errors.map((e) => 'Connection: ' + e);
+    switchTab('wiring');
+    toast(errors[0]);
+    return;
+  }
+  running = true;
+  errorLine = null;
+  plotSamples = [];
+  plotPrinted = 0;
+  renderHighlight();
+  logs = ['Controller connected. Program started.'];
+  simTime = 0;
+  worker = new Worker('/sim-worker.js', { type: 'module' });
+  worker.onmessage = ({ data }) => {
+    clearTimeout(watchdog);
+    inFlight = false;
+    if (data.type === 'error') {
+      logs.push('Error' + (data.line ? ' at line ' + data.line : '') + ': ' + data.message);
+      errorLine = data.line || null;
+      renderHighlight();
+      stop(false);
+      toast(data.message);
+      updateReadings();
+      return;
+    }
+    outputs = data.outputs;
+    simTime = data.time;
+    lastInputs = data.inputs || {};
+    outputKinds = data.outputKinds || {};
+    inspectionVariables = data.variables || {};
+    if (data.env) {
+      const changes = requestEnv
+        ? Object.fromEntries(
+            Object.entries(state.env).filter(([key, value]) => !Object.is(value, requestEnv[key])),
+          )
+        : {};
+      state.env = { ...data.env, ...changes };
+    }
+    if (data.lab) {
+      adoptSimulatedLab(data.lab);
+      labState().paused = !!state.debugPaused || speed === 0;
+    }
+    if (data.tickComplete) {
+      const lab = labState();
+      lab.resources = updateResources(
+        lab.resources,
+        project().devices,
+        outputs,
+        state.env,
+        0.2,
+        lab.upgrades,
+      );
+      state.env = advanceEnvironment(state.env, project().devices, outputs, 0.2, {
+        mode: state.weatherMode,
+        weather: state.weatherByLocation[state.activeLocation],
+        location: currentLocation(),
+      });
+      lab.elapsedMs += 200;
+    }
+    refreshDebugView(data.line);
+    updateLabViews();
+    recordPlot(data);
+    logs = [
+      state.debugPaused
+        ? 'Controller paused. Step to advance actual execution.'
+        : 'Program running on ' + state.board + '.',
+      ...data.logs,
+      ...(data.pendingLine ? [data.pendingLine] : []),
+    ];
+    renderEffects();
+    updateReadings();
+  };
+  worker.onerror = (e) => {
+    logs.push('Error: ' + e.message);
+    stop(false);
+    updateReadings();
+  };
+  inFlight = true;
+  requestEnv = { ...state.env };
+  worker.postMessage({
+    type: 'start',
+    code: code(),
+    language: state.language,
+    devices: project().devices,
+    board: state.board,
+    env: state.env,
+    ms: 200,
+    ...batchOptions(1),
+    trace: true,
+  });
+  watchdog = setTimeout(() => {
+    logs.push('Error: execution timed out.');
+    stop(false);
+    updateReadings();
+  }, 1500);
+  renderSteps();
+  updateReadings();
+  toast('Your program is running. Try changing the conditions.');
+}
+function batchOptions(count = speed) {
+  return {
+    env: state.env,
+    lab: labState(),
+    devices: project().devices,
+    mode: currentLocation() ? state.weatherMode : 'practice',
+    weather: state.weatherByLocation[state.activeLocation] || null,
+    location: currentLocation(),
+    count,
+    dtMs: 200,
+    routines: !!state.routinesEnabled,
+  };
+}
+function advanceWorld() {
+  if (labState().paused || speed === 0) return;
+  const passive = {
+    outputs: {},
+    logs: [],
+    time: labState().elapsedMs,
+    step(env, ms) {
+      this.time += ms;
+      return { outputs: {}, logs: [], time: this.time };
+    },
+  };
+  const result = simulateBatch(passive, batchOptions());
+  state.env = result.env;
+  adoptSimulatedLab(result.lab);
+  updateReadings();
+  renderEffects();
+  updateLabViews();
+}
+function tick() {
+  if (!worker || !running || inFlight || labState().paused || speed === 0) return;
+  inFlight = true;
+  requestEnv = { ...state.env };
+  worker.postMessage({ type: 'tick', ...batchOptions(), trace: true });
+  watchdog = setTimeout(() => {
+    logs.push('Error: execution timed out.');
+    stop(false);
+    updateReadings();
+  }, 3000);
+}
+
+function stop(notify = false) {
+  clearInterval(timer);
+  clearTimeout(watchdog);
+  worker?.terminate();
+  worker = null;
+  running = false;
+  inFlight = false;
+  requestEnv = null;
+  outputs = {};
+  lastInputs = {};
+  outputKinds = {};
+  renderEffects();
+  renderSteps();
+  updateReadings();
+  if (notify) {
+    logs.push('Stopped. Outputs reset to OFF.');
+    updateReadings();
+    toast('Simulation stopped. All outputs are off.');
+  }
+}
+function updateReadings() {
+  const dark =
+    currentLocation() && state.weatherMode === 'live' && typeof state.env.isDay === 'boolean'
+      ? !state.env.isDay
+      : state.env.light < 44;
+  $('dayLabel').textContent = dark ? 'Nighttime' : 'Daytime';
+  $('dayIcon').textContent = dark ? '☾' : '☀';
+  for (const [signal, meta] of Object.entries(envMeta)) {
+    if ($('value-' + signal))
+      $('value-' + signal).textContent = Math.round(state.env[signal]) + meta[2];
+    let range = $('env-' + signal);
+    if (range && document.activeElement !== range) range.value = state.env[signal];
+  }
+  if (!$('liveReadings')) return;
+  let inputs = project().devices.filter((d) => !d.output),
+    outs = project().devices.filter((d) => d.output);
+  let readings = inputs.length ? inputs : planned().filter((d) => !d.output);
+  setHTML(
+    $('liveReadings'),
+    readings
+      .map((d) => {
+        let raw =
+          lastInputs[d.pin] ??
+          (d.analog && ['light', 'soil', 'tank', 'rain', 'pot', 'pond'].includes(d.signal)
+            ? Math.round(state.env[d.signal] * ADC_SCALE)
+            : state.env[d.signal]);
+        return (
+          '<div class="live-reading"><span>' +
+          esc(d.icon) +
+          ' &nbsp; ' +
+          esc(d.name) +
+          '</span><strong>' +
+          esc(raw) +
+          (d.signal === 'temp' ? '°' : '') +
+          '</strong></div>'
+        );
+      })
+      .join('') +
+      outs
+        .map(
+          (d) =>
+            '<div class="live-reading"><span>' +
+            esc(d.icon) +
+            ' &nbsp; ' +
+            esc(d.name) +
+            '</span><strong class="output-state ' +
+            ((outputs[d.pin] || 0) > 0 ? 'on' : '') +
+            '">' +
+            ((outputs[d.pin] || 0) > 0 ? 'ON' : 'OFF') +
+            '</strong></div>',
+        )
+        .join(''),
+  );
+  $('liveTime').textContent = (simTime / 1000).toFixed(1) + ' s';
+  $('serialText').textContent = logs.length
+    ? logs.slice(-12).join('\n')
+    : project().devices.length
+      ? 'Ready. Run your code to connect the controller.'
+      : 'Install your devices, then connect the circuit in Wiring.';
+  $('serialText').classList.toggle(
+    'error',
+    logs.some((x) => /^Error(?: at line \d+)?:/.test(x)),
+  );
+  if ($('editorStatus'))
+    $('editorStatus').textContent = running
+      ? state.debugPaused || labState().paused
+        ? 'Paused · inspect or step your program'
+        : 'Running · ' + state.board + ' connected'
+      : logs.some((x) => /^Error(?: at line \d+)?:/.test(x))
+        ? 'Stopped · program error. See Serial monitor.'
+        : 'Ready when you are';
+}
+function renderEffects() {
+  $('nightShade').style.opacity = String(Math.max(0, (44 - state.env.light) / 60));
+  $('rainEffect').style.opacity = String(state.env.rain / 100);
+  let html = '';
+  for (const d of project().devices) {
+    const area =
+      areas.find((a) => a[0] === d.area) || areas.find((a) => a[0] === d.area) || areas[9];
+    let x = area[1],
+      y = area[2],
+      on = (outputs[d.pin] || 0) > 0;
+    const peers = project().devices.filter((p) => p.area === d.area),
+      index = peers.indexOf(d);
+    x += (index % 3) * 3 - 2;
+    y += Math.floor(index / 3) * 4 + 4;
+    let effect = '';
+    if (['led', 'porch', 'rgb'].includes(d.id) && on)
+      effect =
+        '<div class="lamp-glow" style="' +
+        (d.id === 'rgb'
+          ? 'background:radial-gradient(circle,' + esc(state.color) + 'bb,transparent 68%);'
+          : '') +
+        'opacity:' +
+        (outputs[d.pin] === 1 ? 1 : Math.min(1, outputs[d.pin] / 255)) +
+        '"></div>';
+    if (d.id === 'fan')
+      effect =
+        '<span class="fan-rotor ' +
+        (on ? 'spinning' : '') +
+        '" style="animation-duration:' +
+        Math.max(0.15, 1 / Math.max(1, outputs[d.pin] / 50)) +
+        's">✣</span>';
+    if (['pump', 'valve'].includes(d.id) && on && state.env.tank > 0)
+      effect = '<div class="water-flow"></div>';
+    if (d.id === 'buzzer' && on) effect = '<span class="buzzer-alert">◉</span>';
+    if (['servo', 'gate'].includes(d.id))
+      effect =
+        '<span class="servo-door" style="transform:rotate(' +
+        (d.id === 'gate' && on ? 90 : Math.min(180, outputs[d.pin] || 0)) +
+        'deg)"></span>';
+    if (d.id === 'level')
+      effect = '<div class="tank-meter"><i style="height:' + state.env.tank + '%"></i></div>';
+    if (d.id === 'soil')
+      effect =
+        '<span class="plant-status ' +
+        (state.env.soil < 30 ? 'dry' : state.env.soil > 85 ? 'wet' : '') +
+        '">' +
+        (state.env.soil < 30
+          ? 'Dry plants'
+          : state.env.soil > 85
+            ? 'Overwatered'
+            : 'Healthy plants') +
+        '</span>';
+    if (d.id === 'ac' && on) effect = '<span class="buzzer-alert" style="color:#b0d5ee">❄</span>';
+    html +=
+      '<div class="device-effect" style="left:' +
+      x +
+      '%;top:' +
+      y +
+      '%">' +
+      effect +
+      '<span class="device-label ' +
+      (on ? 'on' : '') +
+      '">' +
+      esc(d.icon) +
+      ' ' +
+      (d.output ? (on ? 'ON' : 'OFF') : 'GPIO ' + esc(d.pin)) +
+      '</span></div>';
+  }
+  if (project().devices.some((d) => d.id === 'led' && (outputs[d.pin] || 0) > 0)) {
+    for (const [x, y] of [
+      [35, 51],
+      [44, 49],
+      [39, 69],
+      [53, 73],
+      [58, 69],
+    ])
+      html +=
+        '<div class="device-effect" style="left:' +
+        x +
+        '%;top:' +
+        y +
+        '%"><div class="lamp-glow"></div></div>';
+  }
+  setHTML($('deviceEffects'), html);
+  if (state.sound && project().devices.some((d) => d.id === 'buzzer' && (outputs[d.pin] || 0) > 0))
+    beep();
+}
+let audio,
+  lastBeep = 0;
+function beep() {
+  if (Date.now() - lastBeep < 1500) return;
+  lastBeep = Date.now();
+  try {
+    audio ??= new (window.AudioContext || window.webkitAudioContext)();
+    const o = audio.createOscillator(),
+      g = audio.createGain();
+    o.frequency.value = 620;
+    g.gain.value = 0.035;
+    o.connect(g);
+    g.connect(audio.destination);
+    o.start();
+    o.stop(audio.currentTime + 0.15);
+  } catch {}
+}
+function testSolution() {
+  if (!canEdit('Tester')) return;
+  labState().testAttempts = (labState().testAttempts || 0) + 1;
+  if (currentLocation() && state.weatherMode === 'live') {
+    setWeatherMode('practice');
+    toast('Mission tests use repeatable Practice Weather scenarios.');
+  }
+  if (free) {
+    run();
+    return;
+  }
+  stop(false);
+  const errors = prerequisites();
+  if (errors.length) {
+    testResults = [{ name: 'Circuit validation', pass: false, detail: errors.join(' ') }];
+    currentPassed = false;
+    switchTab('tests');
+    toast('Finish the circuit before running mission tests.');
+    return;
+  }
+  testResults = [];
+  const m = mission(),
+    ds = project().devices,
+    outs = ds.filter((d) => d.output);
+  let assessment = createLabState().resources;
+  try {
+    const runtime = new Runtime(code(), state.language, ds, state.board);
+    for (const [name, env, expected] of m.scenarios) {
+      let result;
+      for (let i = 0; i < 25; i++) {
+        result = runtime.step({ ...baseEnv, ...env });
+        assessment = updateResources(assessment, ds, result.outputs, { ...baseEnv, ...env }, 0.2);
+      }
+      let actual = m.ids
+        .map((id) => ds.find((d) => d.id === id))
+        .filter((d) => d.output)
+        .map((d) => ((result.outputs[d.pin] || 0) > 0 ? 1 : 0));
+      let pass = expected.every((v, i) => v === actual[i]);
+      testResults.push({
+        name,
+        pass,
+        detail:
+          'Expected ' +
+          expected.map((v) => (v ? 'ON' : 'OFF')).join(', ') +
+          ' · observed ' +
+          actual.map((v) => (v ? 'ON' : 'OFF')).join(', '),
+        env,
+      });
+    }
+    if (!activeFault && state.mission === 2) {
+      const dynamic = new Runtime(code(), state.language, ds, state.board);
+      let env = { ...baseEnv, soil: 20, tank: 80 },
+        first = false,
+        reached = false,
+        stopped = false;
+      const pump = ds.find((d) => d.id === 'pump');
+      for (let i = 0; i < 220; i++) {
+        let r = dynamic.step(env);
+        assessment = updateResources(assessment, ds, r.outputs, env, 0.2);
+        let on = (r.outputs[pump.pin] || 0) > 0;
+        if (i === 0) first = on;
+        if (on && env.tank > 0) {
+          env.soil += 0.5;
+          env.tank -= 0.2;
+        }
+        if (Math.round(env.soil * ADC_SCALE) >= 2400) {
+          reached = true;
+          if (!on) stopped = true;
+        }
+      }
+      testResults.push({
+        name: 'Water reaches target and stops',
+        pass: first && reached && stopped && env.soil < 65,
+        detail:
+          'Final soil: ' +
+          env.soil.toFixed(1) +
+          '%. Pump must start dry, reach the target, and switch off before overwatering.',
+      });
+    }
+  } catch (e) {
+    testResults.push({ name: 'Program execution', pass: false, detail: e.message });
+  }
+  const budget = { wh: m.ids.includes('pump') ? 0.35 : 0.15, litres: 45 };
+  testResults.push({
+    name: 'Energy and water budget',
+    pass: assessment.wh <= budget.wh && assessment.litres <= budget.litres,
+    detail:
+      assessment.wh.toFixed(3) +
+      ' / ' +
+      budget.wh +
+      ' Wh · ' +
+      assessment.litres.toFixed(2) +
+      ' / ' +
+      budget.litres +
+      ' L across 5-second scenarios and the irrigation feedback test',
+  });
+  labState().assessment = { budget, consumption: assessment };
+  currentPassed = testResults.length > 0 && testResults.every((r) => r.pass);
+  if (currentPassed) {
+    if (!currentCompletions()[activeKey()]) {
+      state.xp += m.xp;
+      currentCompletions()[activeKey()] = {
+        badge: m.badge,
+        xp: m.xp,
+        date: new Date().toISOString(),
+        language: state.language,
+        board: state.board,
+        code: code(),
+        devices: structuredClone(ds),
+        results: structuredClone(testResults),
+        // Passing code that arrived by import (and has not been edited since) is flagged.
+        imported: importedUnedited(),
+      };
+    }
+    logs = [m.resident + ': Great work! ' + m.title + ' is complete.'];
+    toast('✦ Quest complete! ' + m.badge + ' badge · ' + m.xp + ' XP');
+  } else {
+    logs = ['Tests found something to improve. Review the failed scenarios.'];
+    toast('Some scenarios failed. Check the conditions and try again.');
+  }
+  recordEvidence({
+    at: new Date().toISOString(),
+    type: 'test',
+    passed: currentPassed,
+    results: structuredClone(testResults),
+    code: code(),
+    devices: structuredClone(ds),
+    board: state.board,
+  });
+  if (currentPassed && activeFault) logs.push(activeFault.explain);
+  save();
+  $('xp').textContent = state.xp;
+  renderSteps();
+  switchTab('tests');
+}
+$('testMission').onclick = testSolution;
+function renderTests() {
+  let m = mission();
+  $('benchContent').innerHTML =
+    '<div class="tests-panel"><div class="bench-heading"><div><h3>' +
+    esc(m.title) +
+    ' · mission tests</h3><p>' +
+    esc(m.goal) +
+    '</p></div><button class="primary" id="testAgain">▶ Run all tests</button></div>' +
+    (!testResults.length
+      ? '<div class="empty-bench">Your solution is tested against normal conditions, exact thresholds, and relevant failures. Install and wire the components, then test your code.</div>'
+      : testResults
+          .map(
+            (r) =>
+              '<div class="test-row"><div><strong>' +
+              esc(r.name) +
+              '</strong><small>' +
+              esc(r.detail) +
+              '</small></div><span class="' +
+              (r.pass ? 'passed' : 'failed') +
+              '">' +
+              (r.pass ? '✓ Passed' : '× Failed') +
+              '</span></div>',
+          )
+          .join('') +
+        '<div class="test-summary ' +
+        (currentPassed ? '' : 'fail') +
+        '">' +
+        (currentPassed
+          ? '✓ All scenarios passed. ' +
+            esc(m.resident) +
+            ' says: “That’s exactly what I needed!” Your ' +
+            esc(m.badge) +
+            ' badge is saved.'
+          : 'Keep going: ' +
+            testResults.filter((r) => r.pass).length +
+            ' of ' +
+            testResults.length +
+            ' tests passed. ' +
+            esc(m.hint)) +
+        '</div>') +
+    (currentPassed && activeFault
+      ? '<p class="repair-explanation">' + esc(activeFault.explain) + '</p>'
+      : '') +
+    '<div class="bench-heading"><button class="outline" id="backCode">Back to code</button>' +
+    (currentPassed && !activeFault && state.mission < activeMissions().length - 1
+      ? '<button class="primary" id="nextMission">Next quest</button>'
+      : '<button class="outline" id="debugBtn">Try a debugging challenge</button>') +
+    '</div></div>';
+  $('testAgain').onclick = testSolution;
+  $('backCode').onclick = () => switchTab('code');
+  if ($('nextMission')) $('nextMission').onclick = () => selectMission(state.mission + 1);
+  if ($('debugBtn')) $('debugBtn').onclick = debugChallenge;
+}
+function debugChallenge() {
+  const m = mission();
+  project().code[state.language] = program(
+    m,
+    state.language,
+    project().devices.length ? project().devices : planned(),
+    true,
+  ).replace(
+    state.language === 'cpp' ? 'HIGH' : 'value(1)',
+    state.language === 'cpp' ? 'LOW' : 'value(0)',
+  );
+  markEdited();
+  switchTab('code');
+  toast('Debug challenge: one output command is wrong. Use mission tests to find and fix it.');
+}
+function selectMission(index) {
+  stop(false);
+  activeFault = null;
+  state.travelScreen = false;
+  $('travelScreen').hidden = true;
+  $('adventureScreen').hidden = false;
+  free = false;
+  state.mission = index;
+  currentPassed = false;
+  testResults = [];
+  edited = false;
+  outputs = {};
+  state.env = { ...baseEnv, ...(currentLocation()?.practice || {}), temp: 24 };
+  $('modal').close();
+  changeView('world');
+  save();
+  renderMission();
+  toast('New quest: ' + mission().title + '. Start by installing the highlighted components.');
+}
+function questList() {
+  modal(
+    'Your neighborhood quests',
+    activeMissions()
+      .map(
+        (m, i) =>
+          '<button class="quest-option ' +
+          (!free && state.mission === i ? 'selected' : '') +
+          '" data-quest="' +
+          i +
+          '"><span>' +
+          String(i + 1).padStart(2, '0') +
+          '</span><div><strong>' +
+          esc(m.title) +
+          '</strong><small>' +
+          esc(m.area) +
+          ' · ' +
+          esc(m.learn.join(' · ')) +
+          '</small></div><em>' +
+          (currentCompletions()[missionKey(i)] ? '✓ Complete' : m.xp + ' XP') +
+          '</em></button>',
+      )
+      .join(''),
+  );
+  document
+    .querySelectorAll('[data-quest]')
+    .forEach((b) => (b.onclick = () => selectMission(Number(b.dataset.quest))));
+}
+$('questList').onclick = questList;
+$('hintBtn').onclick = () => {
+  $('hint').hidden = !$('hint').hidden;
+};
+$('freeBtn').onclick = () => {
+  stop(false);
+  free = !free;
+  currentPassed = false;
+  testResults = [];
+  $('freeBtn').textContent = free ? '⚑ Back to quests' : '◇ Free build';
+  renderMission();
+  toast(free ? 'Free build unlocked: every component is available.' : 'Back to your active quest.');
+};
+function progress() {
+  modal(
+    'Your technician journey',
+    '<div class="guide"><p>You’ve earned <strong>' +
+      state.xp +
+      ' XP</strong> and completed <strong>' +
+      activeMissions().filter((_, i) => currentCompletions()[missionKey(i)]).length +
+      ' of ' +
+      activeMissions().length +
+      '</strong> ' +
+      (state.difficulty === 'advanced' && currentLocation() ? 'advanced ' : '') +
+      'neighborhood quests.</p></div><div class="badges">' +
+      activeMissions()
+        .map(
+          (m, i) =>
+            '<div class="badge ' +
+            (currentCompletions()[missionKey(i)] ? '' : 'locked') +
+            '"><span class="badge-icon">' +
+            ['☾', '⌂', '♧', '❄', '◈', '≋', '☀', '✧'][i] +
+            '</span><strong>' +
+            esc(m.badge) +
+            '</strong><small>' +
+            (currentCompletions()[missionKey(i)]
+              ? 'Earned · ' + m.xp + ' XP'
+              : 'Complete ' + esc(m.title)) +
+            '</small></div>',
+        )
+        .join('') +
+      '</div><p class="unlock-note">' +
+      (state.xp >= ADVANCED_COMPONENT_XP
+        ? 'Your advanced components are unlocked.'
+        : 'Earn ' +
+          ADVANCED_COMPONENT_XP +
+          ' XP to unlock advanced components. All components are available in free build.') +
+      '</p>',
+  );
+}
+$('progressBtn').onclick = progress;
+const themeMedia = matchMedia('(prefers-color-scheme: dark)');
+function setTheme(preference, persist = true) {
+  state.theme = ['light', 'dark', 'system'].includes(preference) ? preference : 'system';
+  const dark = state.theme === 'dark' || (state.theme === 'system' && themeMedia.matches);
+  document.documentElement.dataset.theme = dark ? 'dark' : 'light';
+  document.documentElement.style.colorScheme = dark ? 'dark' : 'light';
+  const toggle = $('themeToggle'),
+    label = dark ? 'Switch to light mode' : 'Switch to dark mode';
+  toggle.textContent = dark ? '☀' : '☾';
+  toggle.setAttribute('aria-label', label);
+  toggle.setAttribute('title', label);
+  toggle.setAttribute('aria-pressed', String(dark));
+  if ($('themeSetting')) $('themeSetting').value = state.theme;
+  if (persist) save();
+}
+$('themeToggle').onclick = () =>
+  setTheme(document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark');
+themeMedia.addEventListener?.('change', () => {
+  if (state.theme === 'system') setTheme('system', false);
+});
+setTheme(state.theme, false);
+function settings() {
+  modal(
+    'Make yourself comfortable',
+    '<label class="setting-row"><span>Appearance<small>Choose a theme or follow your device settings.</small></span><select id="themeSetting" aria-label="Appearance theme"><option value="system">System default</option><option value="light">Light</option><option value="dark">Dark</option></select></label><label class="setting-row"><span>Reduced motion<small>Keep effects visible without looping animations.</small></span><input id="reducedSetting" type="checkbox" ' +
+      (state.reduced ? 'checked' : '') +
+      '></label><label class="setting-row"><span>Sound effects<small>Optional buzzer alerts. Sound is off by default.</small></span><input id="soundSetting" type="checkbox" ' +
+      (state.sound ? 'checked' : '') +
+      '></label><div class="guide"><p>Progress is stored in this browser. Export your project to keep a portable copy.</p></div><div class="bench-actions"><button class="outline" id="exportSettings">Export project</button><button class="outline" id="importSettings">Import project…</button></div><button class="outline" id="resetProgress">Reset local progress…</button>',
+  );
+  $('resetProgress').onclick = () => {
+    if (!confirm('Delete all saved progress, projects and badges in this browser?')) return;
+    try {
+      localStorage.removeItem(STORAGE_KEY);
+    } catch {}
+    window.location.reload();
+  };
+  $('themeSetting').value = state.theme;
+  $('themeSetting').onchange = () => setTheme($('themeSetting').value);
+  $('reducedSetting').onchange = () => {
+    state.reduced = $('reducedSetting').checked;
+    document.body.classList.toggle('reduced-motion', state.reduced);
+    save();
+  };
+  $('soundSetting').onchange = () => {
+    state.sound = $('soundSetting').checked;
+    save();
+  };
+  $('exportSettings').onclick = exportProject;
+  $('importSettings').onclick = chooseImportFile;
+}
+$('settingsBtn').onclick = settings;
+$('characterBtn').onclick = () => {
+  modal(
+    'Your IoT technician',
+    '<label class="setting-row"><span>Technician name</span><input id="nameSetting" type="text" maxlength="18" value="' +
+      esc(state.name) +
+      '"></label><label class="setting-row"><span>Character appearance</span><select id="appearanceSetting" class="board-select" aria-label="Character appearance"><option value="🧑‍🔧">Technician</option><option value="👩🏽‍🔧">Garden engineer</option><option value="👨🏻‍🔧">Home engineer</option></select></label><label class="setting-row"><span>Toolkit colour</span><input id="colorSetting" type="color" value="' +
+      esc(state.color) +
+      '"></label><div class="guide"><p>Your toolkit grows as you solve residents’ requests. Use WASD, the arrow keys, or the on-screen controls to explore.</p></div>',
+  );
+  $('appearanceSetting').value = state.appearance;
+  $('appearanceSetting').onchange = () => {
+    state.appearance = $('appearanceSetting').value;
+    updatePlayer();
+    save();
+  };
+  $('nameSetting').oninput = () => {
+    state.name = $('nameSetting').value || 'Technician';
+    $('characterBtn').textContent = state.name[0].toUpperCase();
+    updatePlayer();
+    save();
+  };
+  $('colorSetting').oninput = () => {
+    state.color = $('colorSetting').value;
+    updatePlayer();
+    save();
+  };
+};
+function languageGuide() {
+  modal(
+    'Your programming field guide',
+    '<div class="guide"><h3>Two languages. One connected world.</h3><p>Arduino runs <code>setup()</code> once and <code>loop()</code> every simulation tick. MicroPython creates its pin objects once, then runs a <code>while True:</code> loop. Switch languages to load its starter without losing devices or wires.</p><h3>Supported language subset</h3><p>Numbers, booleans, strings, variables, arithmetic (+ − * / %), comparisons, logical operators, assignments, if/else (and Python elif), while loops, functions with parameters and return values. Use <code>delay(ms)</code> or <code>time.sleep_ms(ms)</code> to pause until the next tick. Integer C variables drop decimals, so <code>7 / 2</code> is 3; Python has <code>//</code> and <code>global</code>. Blocks use braces in Arduino and exactly four spaces per level in Python.</p><p>Arduino: <code>pinMode</code>, <code>digitalRead</code>, <code>digitalWrite</code>, <code>analogRead</code>, <code>analogWrite</code>, <code>servoWrite</code>, <code>millis</code>, <code>delay</code>, <code>Serial.begin/print/println</code> (<code>print</code> continues a line; <code>println</code> ends it). Print <code>label:value</code> pairs, e.g. <code>Serial.print("light:"); Serial.println(light);</code>, to graph them in the Serial plotter.</p><p>MicroPython: <code>Pin</code>, <code>ADC</code>, <code>PWM</code>; <code>value</code>, <code>on/off</code>, <code>read</code>, <code>read_u16</code>, <code>duty/duty_u16</code>, <code>freq</code>; <code>time.ticks_ms</code>, <code>time.sleep/sleep_ms</code>, <code>print</code>. Helpers: <code>abs/min/max/int</code>.</p><h3>Virtual device readings</h3><p>Light, moisture, rain, tank and potentiometer: 0–4095, or 0–65520 with <code>read_u16()</code>. Temperature is a calibrated Celsius channel; distance is centimetres. These virtual channels replace physical sensor libraries for beginner exercises. <code>digitalWrite</code> values are 0/1. PWM uses 0–255 or 0–65535; <code>servoWrite</code> uses 0–180 degrees.</p><h3>Timing & sandbox limits</h3><p>One tick is 200 ms at 1× speed. A delay suspends the program until the next tick and resumes on the following line; its argument does not schedule a real sleep. Use <code>millis()</code> or <code>time.ticks_ms()</code> for accurate simulated timing. Every tick has a 20,000-operation budget and runs in an isolated worker. Infinite loops produce a useful error.</p><h3>Unsupported features</h3><p>This is a teaching interpreter, not a complete compiler. Arrays, lists, dictionaries, classes, pointers, for loops, comprehensions, external libraries, #include, hardware interrupts, network access, dynamic code, and file access are unsupported. Unsupported syntax stops the program with an error. Motors and pumps use virtual driver modules.</p></div>',
+  );
+}
+function help() {
+  modal(
+    'Welcome to Willowbrook',
+    '<div class="guide"><p>You’re the neighborhood IoT technician. A little observation and a little code can make this home smarter.</p><ol><li><strong>Explore in 3D:</strong> drag to orbit the camera, scroll to zoom, and click a room or garden area for a detailed view, or walk there and press E.</li><li><strong>Install:</strong> open Components and select the highlighted devices. Choose their installation point.</li><li><strong>Wire:</strong> assign GPIOs and connect power, ground, and resistors. The recommended circuit can help you get started.</li><li><strong>Program:</strong> pick Arduino C++ or MicroPython, then replace the starter’s false conditions. Hints explain the logic. Worked examples are optional.</li><li><strong>Run:</strong> change sunlight, motion, or moisture and watch your outputs change.</li><li><strong>Test:</strong> pass every scenario to earn XP and a badge. Failed tests show what to improve.</li></ol><p>Keyboard: WASD / arrow keys walk relative to your camera; E interacts. Drag the world to orbit, scroll to zoom, or use the camera buttons. Follow technician gives a close camera view. On-screen arrows work on touch devices. Use Return to world to leave a detailed area.</p><button class="primary" id="guideLang">Open language guide</button></div>',
+  );
+  $('guideLang').onclick = () => {
+    $('modal').close();
+    languageGuide();
+  };
+}
+document.querySelectorAll('[data-nav]').forEach(
+  (b) =>
+    (b.onclick = () => {
+      document.querySelectorAll('[data-nav]').forEach((n) => n.classList.toggle('active', n === b));
+      let v = b.dataset.nav;
+      if (v === 'world') {
+        returnToGlobe();
+      } else if (v === 'missions') questList();
+      else if (v === 'inventory') {
+        switchTab('inventory');
+        $('benchContent').scrollIntoView({
+          behavior: state.reduced ? 'auto' : 'smooth',
+          block: 'center',
+        });
+      } else if (v === 'progress') progress();
+      else help();
+    }),
+);
+function exportManifest() {
+  return {
+    format: PROJECT_FORMAT,
+    version: 1,
+    exportedAt: new Date().toISOString(),
+    technician: state.name,
+    locationId: state.activeLocation,
+    slot: activeFault ? 'fault' : free ? 'free' : 'mission',
+    missionIndex: activeFault || free ? null : state.mission,
+    difficulty: state.difficulty,
+    missionTitle: mission().title,
+    board: state.board,
+    language: state.language,
+    code: { ...project().code, [state.language]: code() },
+    devices: structuredClone(project().devices),
+    results: testResults.length ? testResults : currentCompletions()[activeKey()]?.results || [],
+    lab: { evidence: labState().evidence },
+  };
+}
+function exportProject() {
+  const files = projectFiles({
+      manifest: exportManifest(),
+      name: state.name,
+      language: state.language,
+      board: state.board,
+      code: code(),
+      devices: structuredClone(project().devices),
+      mission: mission(),
+      // In-memory results are lost on reload; fall back to the saved completion record.
+      results: testResults.length ? testResults : currentCompletions()[activeKey()]?.results || [],
+      lab: labState(),
+      location: currentLocation()
+        ? currentLocation().city + ', ' + currentLocation().country
+        : 'Original home',
+    }),
+    bytes = zipFiles(files),
+    blob = new Blob([bytes], { type: 'application/zip' }),
+    url = URL.createObjectURL(blob),
+    a = document.createElement('a');
+  a.href = url;
+  a.download = 'iot-quest-' + state.activeLocation + '-project.zip';
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  toast('Project ZIP exported with source, wiring and assessment evidence.');
+}
+
+function chooseImportFile() {
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = '.zip,application/zip';
+  input.onchange = async () => {
+    const file = input.files?.[0];
+    if (!file) return;
+    if (file.size > IMPORT_LIMITS.zipBytes) {
+      toast('That file is larger than 4 MB, so it is not an IoT Quest project.');
+      return;
+    }
+    previewImport(new Uint8Array(await file.arrayBuffer()), file.name);
+  };
+  input.click();
+}
+// Validate an exported project ZIP and show what it contains before anything changes.
+async function previewImport(bytes, fileName) {
+  let plan;
+  try {
+    plan = await readProject(bytes, fileName);
+  } catch (e) {
+    if (!(e instanceof ImportError)) throw e;
+    modal('Project not imported', '<div class="guide"><p>' + esc(e.message) + '</p></div>');
+    return null;
+  }
+  const location = locationById(plan.locationId),
+    target = targetProfile(plan),
+    key = plan.slot === 'free' ? 'free' : importKey(plan),
+    existing = target?.projects?.[key],
+    occupied = !!(
+      existing &&
+      (existing.devices?.length || Object.keys(existing.code || {}).length)
+    ),
+    passed = plan.results.filter((r) => r.pass).length,
+    wiring = validate(plan.devices, plan.board);
+  const row = (term, value) => '<dt>' + term + '</dt><dd>' + value + '</dd>';
+  modal(
+    'Import project',
+    '<dl class="import-summary">' +
+      row('File', esc(plan.fileName)) +
+      row('Technician', esc(plan.technician || 'Not recorded')) +
+      (plan.exportedAt ? row('Exported', esc(new Date(plan.exportedAt).toLocaleString())) : '') +
+      row(
+        'Mission',
+        plan.slot === 'free'
+          ? 'Free build'
+          : esc(plan.missionTitle) + (plan.difficulty === 'advanced' ? ' · advanced' : ''),
+      ) +
+      row(
+        'Destination',
+        esc(location ? location.city + ', ' + location.country : 'Original home'),
+      ) +
+      row(
+        'Controller',
+        esc(plan.board) + ' · ' + (plan.language === 'cpp' ? 'Arduino C++' : 'MicroPython'),
+      ) +
+      row(
+        'Components',
+        plan.devices.length
+          ? plan.devices.map((d) => esc(d.name) + ' (GPIO ' + d.pin + ')').join(', ')
+          : 'None installed',
+      ) +
+      row(
+        'Exported tests',
+        plan.results.length ? passed + ' of ' + plan.results.length + ' passed' : 'Not run',
+      ) +
+      '</dl>' +
+      (plan.warnings.length || wiring.length
+        ? '<div class="import-warnings">' +
+          [...plan.warnings, ...wiring.map((w) => 'Wiring: ' + w)]
+            .map((w) => '<p>' + esc(w) + '</p>')
+            .join('') +
+          '</div>'
+        : '') +
+      '<div class="guide"><p>' +
+      (occupied
+        ? 'This replaces your current work on this mission. Your version is kept as a backup in the Teacher dashboard.'
+        : 'The project opens in its mission slot.') +
+      ' Badges and XP are not imported: run the tests here to earn them.</p></div>' +
+      '<div class="bench-actions"><button class="outline" id="cancelImport">Cancel</button><button class="primary" id="confirmImport">Open project</button></div>',
+  );
+  $('cancelImport').onclick = () => $('modal').close();
+  $('confirmImport').onclick = () => {
+    $('modal').close();
+    applyImport(plan);
+  };
+  return plan;
+}
+function importedUnedited() {
+  const evidence = labState().evidence,
+    last = evidence.findLastIndex((e) => e.type === 'import');
+  return last >= 0 && !evidence.slice(last + 1).some((e) => e.type === 'edit');
+}
+const importKey = (plan) =>
+  (plan.difficulty === 'advanced' && plan.locationId !== 'legacy' ? 'advanced:' : '') +
+  plan.missionIndex;
+const targetProfile = (plan) =>
+  plan.locationId === 'legacy' ? state : state.locationProgress[plan.locationId];
+function applyImport(plan) {
+  stop(false);
+  state.difficulty = plan.difficulty;
+  $('difficultySelect').value = state.difficulty;
+  // Imported work opens its destination even if it is still locked for this player.
+  if (plan.locationId === 'legacy') {
+    state.legacyMission = plan.missionIndex ?? state.legacyMission;
+    state.legacyBoard = plan.board;
+    resumeLegacy();
+  } else {
+    const profile = (state.locationProgress[plan.locationId] ??= {
+      projects: {},
+      completed: {},
+      mission: 0,
+      board: plan.board,
+      env: { ...baseEnv },
+    });
+    if (plan.missionIndex !== null) profile.mission = plan.missionIndex;
+    profile.board = plan.board;
+    enterLocation(plan.locationId);
+  }
+  free = plan.slot === 'free';
+  $('freeBtn').textContent = free ? '⚑ Back to quests' : '◇ Free build';
+  const projects = locationProfile().projects,
+    key = free ? 'free' : missionKey(),
+    existing = projects[key];
+  if (existing && (existing.devices?.length || Object.keys(existing.code || {}).length))
+    projects[key + '~backup-' + new Date().toISOString().slice(0, 19)] = existing;
+  projects[key] = {
+    devices: plan.devices,
+    code: plan.code,
+    lab: { ...createLabState(), evidence: plan.evidence },
+  };
+  state.board = plan.board;
+  state.language = plan.language;
+  recordEvidence({
+    at: new Date().toISOString(),
+    type: 'import',
+    file: plan.fileName,
+    technician: plan.technician,
+    exportedAt: plan.exportedAt,
+    mission: plan.missionTitle,
+    exportedResults: plan.results,
+  });
+  currentPassed = false;
+  testResults = [];
+  renderMission();
+  switchTab('code');
+  save();
+  toast('Imported ' + plan.fileName + '. Run the tests to check it here.');
+}
+
+$('exportBtn').onclick = exportProject;
+document.querySelectorAll('[data-npc]').forEach(
+  (n) =>
+    (n.onclick = () => {
+      const key = n.dataset.npc,
+        resident = currentLocation()?.names[key] || key;
+      modal(
+        'A chat with ' + resident,
+        '<div class="guide"><p>' +
+          esc(activeMissions().find((m) => m.resident === resident).quote) +
+          '</p><p>“Bring your toolkit over, install the devices, and show me what your code can do.”</p></div>' +
+          activeMissions()
+            .map((m, i) =>
+              m.resident === resident
+                ? '<button class="quest-option" data-chat-quest="' +
+                  i +
+                  '"><span>⚑</span><div><strong>' +
+                  esc(m.title) +
+                  '</strong><small>' +
+                  esc(m.area) +
+                  ' · ' +
+                  m.xp +
+                  ' XP</small></div></button>'
+                : '',
+            )
+            .join(''),
+      );
+      document
+        .querySelectorAll('[data-chat-quest]')
+        .forEach((b) => (b.onclick = () => selectMission(Number(b.dataset.chatQuest))));
+    }),
+);
+document.body.classList.toggle('reduced-motion', state.reduced);
+$('characterBtn').textContent = state.name[0].toUpperCase();
+$('resident').style.left = '70%';
+$('resident').style.top = '51%';
+renderMission();
+updatePlayer();
+setMapView();
+save();
+function canEdit(role) {
+  if (!labState().coopEnabled || labState().role === role) return true;
+  toast('Local role mode: ' + role + ' owns this action. Switch roles in Advanced tools.');
+  return false;
+}
+function download(name, text, type = 'text/plain') {
+  const url = URL.createObjectURL(new Blob([text], { type })),
+    a = document.createElement('a');
+  a.href = url;
+  a.download = name;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+function pauseExecution() {
+  if (!state.debugPaused) {
+    labState().debugAttempts = (labState().debugAttempts || 0) + 1;
+  }
+  if (!worker) run();
+  state.debugPaused = true;
+  labState().paused = true;
+  save();
+}
+function resumeExecution() {
+  state.debugPaused = false;
+  labState().paused = false;
+  if (speed === 0) speed = 1;
+  if (!worker) run();
+  save();
+}
+function stepExecution() {
+  labState().debugSteps = (labState().debugSteps || 0) + 1;
+  if (inFlight) {
+    toast('Wait for the current controller tick to finish.');
+    return;
+  }
+  if (!worker) {
+    run();
+    pauseExecution();
+    return;
+  }
+  state.debugPaused = true;
+  labState().paused = true;
+  inFlight = true;
+  worker.postMessage({ type: 'debugStep', env: state.env, ms: 200 });
+}
+function refreshDebugView(line = null) {
+  if ($('debugLocation'))
+    $('debugLocation').textContent =
+      'Controller ' +
+      (simTime / 1000).toFixed(1) +
+      ' s · ' +
+      (line ? 'last executed line ' + line : 'paused at the tick boundary');
+  if ($('debugVariables'))
+    $('debugVariables').textContent = JSON.stringify(
+      { variables: inspectionVariables, GPIO: outputs, inputs: lastInputs },
+      null,
+      2,
+    );
+}
+$('advancedTools').onclick = () =>
+  advancedMenu({
+    state,
+    lab: labState,
+    recordEvidence,
+    modal,
+    save,
+    missions: activeMissions(),
+    completed: () => completedQuestCount(state),
+    pause: pauseExecution,
+    resume: resumeExecution,
+    debugStep: stepExecution,
+    refreshDebug: refreshDebugView,
+    refresh: renderBench,
+    download,
+    applyAssignment: (index, difficulty, scenario) => {
+      setDifficulty(difficulty);
+      selectMission(index);
+      setScenario(scenario);
+      labState().assignment = {
+        mission: index,
+        difficulty,
+        scenario,
+        assignedAt: new Date().toISOString(),
+        mode: 'local demonstration',
+      };
+      save();
+    },
+  });
+function labContext() {
+  return {
+    lab: labState(),
+    labState,
+    devices: project().devices,
+    outputs,
+    inputs: lastInputs,
+    kinds: outputKinds,
+    env: state.env,
+    selected: selectedDevice,
+    code: code(),
+    board: state.board,
+    fault: activeFault,
+    switchTab,
+    selectDevice,
+    startFault,
+    exitFault,
+    test: testSolution,
+    save,
+    modal,
+    exportProject,
+    importProject: chooseImportFile,
+    repairSensor: (id) => {
+      stop(false);
+      const d = project().devices.find((d) => d.id === id);
+      delete d.faultValue;
+      markEdited();
+      switchTab('circuit');
+      toast('Simulated sensor replaced. Test the repaired circuit.');
+    },
+  };
+}
+function updateLabViews() {
+  if (tab === 'circuit') updateCircuit(labContext());
+  if (tab === 'resources') updateResourcesPanel(labContext());
+}
+function selectDevice(id) {
+  selectedDevice = id;
+  switchTab('circuit');
+  $('benchContent').scrollIntoView({
+    behavior: state.reduced ? 'auto' : 'smooth',
+    block: 'nearest',
+  });
+}
+function startFault(id) {
+  stop(false);
+  activeFault = faultCases.find((f) => f.id === id);
+  if (!activeFault) return;
+  const key = 'fault:' + id,
+    profile = locationProfile();
+  if (!profile.projects[key]) {
+    const devices = defaults(missions[0].ids, state.board),
+      source = {
+        cpp: program(missions[0], 'cpp', devices, true),
+        python: program(missions[0], 'python', devices, true),
+      };
+    if (id === 'ground') devices[1].ground = false;
+    if (id === 'pin') devices[0].pin = devices[1].pin;
+    if (id === 'sensor') devices[0].faultValue = 100;
+    if (id === 'code')
+      for (const lang of ['cpp', 'python'])
+        source[lang] = source[lang].replace('light < 1800', 'light > 1800');
+    profile.projects[key] = { devices, code: source };
+  }
+  currentPassed = false;
+  testResults = [];
+  renderMission();
+  switchTab('faults');
+  save();
+}
+function exitFault() {
+  stop(false);
+  activeFault = null;
+  currentPassed = false;
+  testResults = [];
+  renderMission();
+  switchTab('code');
+}
+function setClockSpeed(value) {
+  speed = [0, 1, 4, 60, 360].includes(value) ? value : 1;
+  labState().paused = speed === 0;
+  labState().dailyCycle = speed >= 60;
+  if (speed >= 60) {
+    setWeatherMode('practice');
+    toast('Accelerated time uses a simulated daily practice scenario, not future live weather.');
+  }
+  $('clockSpeed').value = String(speed);
+  updateClockLabel();
+  save();
+}
+function updateClockLabel() {
+  const lab = labState(),
+    hours = (lab.startHour + lab.elapsedMs / 3600000) % 24;
+  $('simClock').textContent =
+    String(Math.floor(hours)).padStart(2, '0') +
+    ':' +
+    String(Math.floor((hours % 1) * 60)).padStart(2, '0') +
+    ' simulated';
+  $('weatherClockSource').textContent =
+    state.weatherMode === 'live'
+      ? 'Weather: current API conditions, held between updates.'
+      : 'Weather: simulated ' +
+        (lab.dailyCycle ? 'daily cycle · ' : 'practice · ') +
+        (scenarios[lab.scenario]?.name || 'normal');
+}
+function setScenario(id) {
+  if (!scenarios[id]) return;
+  stop(false);
+  setWeatherMode('practice');
+  labState().scenario = id;
+  const s = scenarios[id];
+  state.env = {
+    ...state.env,
+    outdoorTemp: s.temp,
+    temp: s.temp,
+    rain: s.rain,
+    humidity: s.humidity,
+    wind: s.wind,
+    cloud: s.cloud,
+    soil: s.soil ?? state.env.soil,
+    tank: s.tank ?? state.env.tank,
+  };
+  renderEnvironment();
+  renderRegionalWeather();
+  updateClockLabel();
+  save();
+}
+function setDifficulty(value) {
+  stop(false);
+  activeFault = null;
+  state.difficulty = value === 'advanced' ? 'advanced' : 'beginner';
+  currentPassed = false;
+  testResults = [];
+  renderMission();
+  save();
+}
+$('clockSpeed').value = String(speed);
+$('difficultySelect').value = state.difficulty;
+$('difficultySelect').onchange = () => setDifficulty($('difficultySelect').value);
+$('scenarioSelect').innerHTML = scenarioOptions();
+$('scenarioSelect').onchange = () => setScenario($('scenarioSelect').value);
+function updateRoofToggle() {
+  $('roofToggle').textContent = state.roofsVisible ? 'Roof: visible' : 'Roof: cutaway';
+  $('roofToggle').setAttribute('aria-pressed', String(!!state.roofsVisible));
+}
+$('roofToggle').onclick = () => {
+  state.roofsVisible = !state.roofsVisible;
+  updateRoofToggle();
+  save();
+};
+updateRoofToggle();
+$('freeExploration').onclick = () => {
+  state.freeExploration = !state.freeExploration;
+  $('freeExploration').textContent = state.freeExploration
+    ? 'Free exploration enabled · all destinations'
+    : 'Free exploration · all destinations';
+  travelController?.refresh();
+  save();
+};
+function applyLocalWeather(weather) {
+  if (weather.locationId !== state.activeLocation) return;
+  state.weatherByLocation[weather.locationId] = weather;
+  renderRegionalWeather();
+  save();
+}
+function renderRegionalWeather() {
+  const location = currentLocation();
+  $('regionalWeather').hidden = !location;
+  if (!location) return;
+  $('weatherModeSelect').value = state.weatherMode;
+  $('weatherRetry').hidden = state.weatherMode !== 'live';
+  $('weatherRetry').disabled = weatherLoading;
+  $('weatherRetry').textContent = weatherLoading
+    ? 'Connecting…'
+    : state.weatherByLocation[location.id]?.status === 'live'
+      ? 'Refresh live weather'
+      : 'Retry live weather';
+  $('regionalWeatherDetails').innerHTML =
+    weatherHTML(state.weatherByLocation[location.id], location, state.weatherMode, state.env) +
+    '<div class="weather-readings-note">' +
+    (state.weatherMode === 'live' && state.weatherByLocation[location.id]?.status === 'live'
+      ? 'API outdoor climate above.'
+      : 'Simulated outdoor climate above.') +
+    '<br>Simulated: indoor ' +
+    state.env.temp.toFixed(1) +
+    '°C · soil ' +
+    Math.round(state.env.soil) +
+    '% · tank ' +
+    Math.round(state.env.tank) +
+    '%.</div>';
+}
+$('weatherRetry').onclick = () => refreshWeather(true);
+async function refreshWeather(refresh = false) {
+  const location = currentLocation(),
+    revision = ++weatherRevision;
+  if (!location || state.weatherMode !== 'live') return;
+  weatherLoading = true;
+  renderRegionalWeather();
+  const weather = await weatherService.get(location, { refresh });
+  if (revision === weatherRevision && state.activeLocation === location.id) {
+    weatherLoading = false;
+    applyLocalWeather(weather);
+  }
+}
+function setWeatherMode(mode) {
+  state.weatherMode = mode === 'live' ? 'live' : 'practice';
+  weatherRevision++;
+  weatherLoading = false;
+  if (mode === 'practice') {
+    const p = currentLocation()?.practice || {};
+    state.env = { ...state.env, ...p, isDay: true, precipitation: 0 };
+  } else refreshWeather();
+  renderEnvironment();
+  renderRegionalWeather();
+  save();
+}
+function returnToGlobe() {
+  save();
+  stop(false);
+  state.travelScreen = true;
+  $('travelScreen').hidden = false;
+  $('adventureScreen').hidden = true;
+  keys.clear();
+  travelController?.refresh();
+  save();
+}
+function showLocation() {
+  state.travelScreen = false;
+  $('travelScreen').hidden = true;
+  $('adventureScreen').hidden = false;
+  const location = currentLocation();
+  world3d?.setRegion(state.activeLocation);
+  for (let i = 0; i < areas.length; i++) {
+    const base = baseAreas[i],
+      override = world3d?.model.areaOverrides?.[base[0]] || location?.areaOverrides?.[base[0]];
+    areas[i] = [base[0], ...(override || base.slice(1))];
+  }
+  $('regionHeading').textContent = location ? location.title : 'Make yourself at home.';
+  $('regionSubtitle').textContent = location
+    ? location.city + ', ' + location.country + ' · ' + location.architecture
+    : 'Your original Willowbrook home · saved progress preserved';
+  for (const [id, key] of [
+    ['resident', 'Maya'],
+    ['alexNpc', 'Alex'],
+    ['samNpc', 'Sam'],
+  ])
+    $(id).querySelector('small').textContent = location?.names[key] || key;
+  state.player = world3d?.findFree({ x: 48, y: 77 }) ?? { x: 48, y: 77 };
+  changeView('world');
+  renderMission();
+  renderRegionalWeather();
+  updatePlayer();
+  save();
+}
+async function enterLocation(id, weather = null) {
+  const location = locationById(id);
+  if (!location) return;
+  if (!isLocationUnlocked(state, location)) {
+    toast(
+      'Complete ' +
+        location.unlockAfter +
+        ' quests to unlock this destination, or choose Free exploration.',
+    );
+    return;
+  }
+  save();
+  stop(false);
+  weatherRevision++;
+  weatherLoading = false;
+  free = false;
+  activeFault = null;
+  state.activeLocation = id;
+  const profile = locationProfile();
+  state.mission = profile.mission || 0;
+  state.board = profile.board || 'ESP32';
+  state.env = { ...baseEnv, ...location.practice, ...profile.env, temp: profile.env?.temp ?? 24 };
+  currentPassed = false;
+  testResults = [];
+  if (state.weatherMode === 'live' && labState().elapsedMs === 0) {
+    const parts = new Intl.DateTimeFormat('en-GB', {
+      timeZone: location.timezone,
+      hour: '2-digit',
+      minute: '2-digit',
+      hourCycle: 'h23',
+    }).formatToParts(new Date());
+    labState().startHour =
+      Number(parts.find((p) => p.type === 'hour').value) +
+      Number(parts.find((p) => p.type === 'minute').value) / 60;
+  }
+  showLocation();
+  if (weather) {
+    applyLocalWeather(weather);
+    if (weather.status !== 'live' && state.weatherMode === 'live') await refreshWeather();
+  } else await refreshWeather();
+}
+function resumeLegacy() {
+  save();
+  stop(false);
+  free = false;
+  activeFault = null;
+  state.activeLocation = 'legacy';
+  state.mission = state.legacyMission || 0;
+  state.board = state.legacyBoard || 'ESP32';
+  state.env = { ...baseEnv, ...state.legacyEnv };
+  currentPassed = false;
+  testResults = [];
+  showLocation();
+}
+$('backToGlobe').onclick = returnToGlobe;
+$('resumeLegacy').onclick = resumeLegacy;
+$('weatherModeSelect').onchange = () => setWeatherMode($('weatherModeSelect').value);
+setInterval(() => {
+  if (state.travelScreen) return;
+  if (running) tick();
+  else advanceWorld();
+  updateClockLabel();
+}, TICK_MS);
+setInterval(() => {
+  if (state.travelScreen) travelController?.refreshWeather();
+  else {
+    renderRegionalWeather();
+    if (state.weatherMode === 'live') refreshWeather();
+  }
+}, 60000);
+if (typeof fetch === 'function' && typeof $('globeCanvas')?.getContext === 'function')
+  setupTravel({
+    getState: () => state,
+    onEnter: enterLocation,
+    onLegacy: resumeLegacy,
+    onWeather: applyLocalWeather,
+    onMode: setWeatherMode,
+    onSave: save,
+    modal,
+    missions,
+    weatherService,
+  }).then((controller) => {
+    travelController = controller;
+  });
+renderRegionalWeather();
+function projectWorldLabels(engine) {
+  const place = (el, p) => {
+    if (!el) return;
+    const v = engine.project(p);
+    el.style.left = v.x + 'px';
+    el.style.top = v.y + 'px';
+    el.style.visibility = v.visible ? 'visible' : 'hidden';
+  };
+  for (const el of document.querySelectorAll('[data-area]')) {
+    const a = areas.find((a) => a[0] === el.dataset.area);
+    const p = toWorld({ x: a[1], y: a[2] });
+    p[1] = 1.65 + (engine.model.floorHeight?.(p[0], p[2]) || 0);
+    place(el, p);
+  }
+  const targets = world3d?.deviceObjects || [];
+  if ($('deviceWorldTargets').dataset.signature !== targets.map((r) => r.device.id).join(',')) {
+    $('deviceWorldTargets').dataset.signature = targets.map((r) => r.device.id).join(',');
+    $('deviceWorldTargets').innerHTML = targets
+      .map(
+        (r) =>
+          '<button class="world-device-target" data-world-device="' +
+          esc(r.device.id) +
+          '" id="world-target-' +
+          esc(r.device.id) +
+          '">' +
+          esc(r.device.name) +
+          '</button>',
+      )
+      .join('');
+    document
+      .querySelectorAll('[data-world-device]')
+      .forEach((b) => (b.onclick = () => selectDevice(b.dataset.worldDevice)));
+  }
+  for (const r of targets)
+    place($('world-target-' + r.device.id), [r.face.pos[0], r.face.pos[1] + 0.2, r.face.pos[2]]);
+  const p = toWorld(state.player);
+  p[1] = 1.95 + (engine.model.floorHeight?.(p[0], p[2]) || 0);
+  place($('player'), p);
+  for (const actor of engine.model.actors) {
+    if (actor.id === 'player') continue;
+    const part = actor.parts.find((p) => p.shape === 'sphere' && p.local[1] === 1.27);
+    place($(actor.id === 'Maya' ? 'resident' : actor.id === 'Alex' ? 'alexNpc' : 'samNpc'), [
+      part.pos[0],
+      part.pos[1] + 0.58,
+      part.pos[2],
+    ]);
+  }
+}
+if (typeof $('worldCanvas')?.getContext === 'function') {
+  try {
+    world3d = new World3D($('worldCanvas'), {
+      getState: () => ({
+        devices: project().devices,
+        env: state.env,
+        outputs,
+        player: state.player,
+        color: state.color,
+        appearance: state.appearance,
+        reduced: state.reduced,
+        speed,
+        areas,
+        locationId: state.activeLocation,
+        visible: !state.travelScreen,
+        upgrades: labState().upgrades,
+        batteryWh: labState().resources.batteryWh,
+        roofsVisible: state.roofsVisible,
+        simClockMs: labState().elapsedMs,
+        paused: labState().paused,
+        routine: state.routinesEnabled
+          ? residentRoutine(labState().elapsedMs, labState().startHour)
+          : null,
+      }),
+      onFrame: projectWorldLabels,
+      onError: (message) => {
+        $('graphicsMessage').textContent = message;
+        $('graphicsMessage').hidden = false;
+      },
+      onRecover: () => {
+        $('graphicsMessage').hidden = true;
+      },
+    });
+    $('world').classList.add('is-3d');
+    state.player = world3d.findFree(state.player);
+    setMapView();
+    updatePlayer();
+  } catch (e) {
+    $('graphicsMessage').textContent = e.message;
+    $('graphicsMessage').hidden = false;
+  }
+}
+// Structured, local WebMCP tools for the game’s primary learning journey.
+if (navigator.modelContext?.registerTool) {
+  navigator.modelContext.registerTool({
+    name: 'iot_quest_read_state',
+    description: 'Read current mission, controller, wiring, student code and simulated conditions.',
+    inputSchema: { type: 'object', properties: {} },
+    execute: async () => ({
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify({
+            mission: mission(),
+            board: state.board,
+            language: state.language,
+            devices: project().devices,
+            code: code(),
+            environment: state.env,
+            outputs,
+            tests: testResults,
+          }),
+        },
+      ],
+    }),
+  });
+  navigator.modelContext.registerTool({
+    name: 'iot_quest_test_solution',
+    description:
+      'Run all deterministic tests for the active student mission; reports each scenario.',
+    inputSchema: { type: 'object', properties: {} },
+    execute: async () => {
+      testSolution();
+      return {
+        content: [
+          { type: 'text', text: JSON.stringify({ passed: currentPassed, results: testResults }) },
+        ],
+      };
+    },
+  });
+}

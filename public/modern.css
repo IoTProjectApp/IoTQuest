@@ -1,0 +1,2050 @@
+/* Connected World visual theme. Existing game IDs and interactions are retained. */
+:root {
+  --ink: #17243b;
+  --muted: #617189;
+  --green: #5260df;
+  --green-dark: #3e49bb;
+  --sage: #eef0ff;
+  --line: #e1e7f0;
+  --cream: #f3f6fb;
+  --orange: #b87929;
+  --mono: 'IBM Plex Mono', ui-monospace, monospace;
+}
+body {
+  background: radial-gradient(ellipse at 65% 0%, #e9edff 0, transparent 42%), #f3f6fb;
+  color: var(--ink);
+  font-size: 14px;
+}
+button {
+  transition:
+    background 0.18s,
+    border-color 0.18s,
+    box-shadow 0.18s,
+    transform 0.18s;
+}
+button:hover {
+  filter: none;
+}
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+[tabindex]:focus-visible {
+  outline-color: #7384f0;
+}
+button:disabled {
+  opacity: 0.55;
+}
+header {
+  height: 80px;
+  padding: 0 32px;
+  gap: 20px;
+  border-bottom: 1px solid #e5eaf3;
+  background: #ffffffed;
+}
+.brand {
+  gap: 11px;
+  font-size: 25px;
+  color: #17243b;
+  letter-spacing: -1px;
+}
+.brand-quest {
+  color: #5260df;
+}
+.brand-mark {
+  width: 43px;
+  height: 43px;
+  border-radius: 13px;
+  background: linear-gradient(140deg, #6475ed, #434cbd);
+  display: grid;
+  place-items: center;
+  color: white;
+  box-shadow: 0 5px 14px #5260df26;
+}
+.brand-mark svg {
+  width: 26px;
+  height: 26px;
+}
+.brand small {
+  color: #7d8ca4;
+  font-size: 8px;
+  letter-spacing: 2.4px;
+  margin-top: 4px;
+}
+.chapter {
+  font-size: 12px;
+  color: #74829a;
+}
+.tiny-leaf {
+  color: #5260df;
+}
+.header-actions {
+  gap: 14px;
+}
+.saved {
+  font-size: 11px;
+  color: #557768;
+}
+.xp {
+  padding: 10px 14px;
+  border: 1px solid #e1e5fb;
+  border-radius: 10px;
+  background: #f0f2ff;
+  color: #5260d3;
+  font-size: 12px;
+}
+.avatar {
+  width: 38px;
+  height: 38px;
+  color: #5260d3;
+  background: #edf0ff;
+  border: 2px solid white;
+  box-shadow: 0 0 0 1px #dfe4f2;
+}
+.icon-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  color: #718097;
+}
+.icon-btn:hover {
+  background: #f0f3fa;
+}
+.app-shell {
+  min-height: calc(100vh - 80px);
+}
+.rail {
+  width: 88px;
+  padding: 26px 10px;
+  gap: 12px;
+  background: #ffffffb3;
+  border-color: #e5eaf3;
+}
+.rail-item {
+  width: 66px;
+  min-height: 66px;
+  border-radius: 13px;
+  gap: 7px;
+  color: #7c89a0;
+  font-size: 10px;
+  font-weight: 500;
+}
+.rail-item > span {
+  font-size: 22px;
+}
+.rail-item svg {
+  width: 21px;
+  height: 21px;
+  display: block;
+}
+.rail-item.active {
+  background: #edf0ff;
+  color: #5260df;
+}
+.rail-item:hover {
+  background: #f0f3fa;
+  color: #5260df;
+}
+.version {
+  color: #94a0b3;
+  font-size: 9px;
+}
+main {
+  width: calc(100% - 88px);
+  max-width: 1660px;
+  padding: 32px 32px 0;
+}
+h1,
+h2,
+h3 {
+  color: #17243b;
+}
+h1 {
+  letter-spacing: -1.3px;
+}
+h1 > span {
+  color: #6673e7;
+}
+.eyebrow {
+  color: #6a78a4;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 1.8px;
+}
+.travel-heading {
+  margin: 0 0 24px;
+  align-items: center;
+  gap: 12px;
+}
+.travel-heading > div:first-child {
+  flex: 1;
+}
+.travel-heading h1 {
+  font-size: clamp(30px, 3vw, 44px);
+  line-height: 1.12;
+  font-weight: 800;
+  margin: 13px 0;
+}
+.travel-heading p,
+.page-heading p {
+  color: #748198;
+  font-size: 13px;
+  line-height: 1.7;
+  margin: 8px 0 0;
+}
+.outline {
+  padding: 11px 15px;
+  min-height: 40px;
+  border-color: #dce3ef;
+  border-radius: 10px;
+  background: #ffffffbd;
+  color: #53627b;
+  font-size: 11px;
+  font-weight: 500;
+}
+.outline:hover {
+  border-color: #acb5ee;
+  background: #eef0ff;
+  color: #4857c4;
+}
+#freeExploration {
+  background: #5260df;
+  color: white;
+  border-color: #5260df;
+  box-shadow: 0 4px 10px #5260df1c;
+}
+#freeExploration:hover {
+  background: #434fc5;
+}
+.travel-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 9px;
+  margin: 0 0 24px;
+}
+.travel-summary > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border: 1px solid #e1e7f1;
+  border-radius: 8px;
+  background: #ffffffa6;
+  color: #76839a;
+  font-size: 11px;
+}
+.travel-summary strong {
+  color: #43516d;
+  font-weight: 600;
+}
+.summary-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #37aa97;
+  box-shadow: 0 0 0 3px #37aa9714;
+}
+.travel-layout {
+  grid-template-columns: minmax(0, 1fr) 350px;
+  gap: 24px;
+  align-items: start;
+}
+.panel {
+  border: 1px solid #e2e7f0;
+  border-radius: 16px;
+  background: #fff;
+  box-shadow: 0 3px 16px #25345204;
+  overflow: hidden;
+}
+.atlas-panel {
+  border-radius: 18px;
+  background: radial-gradient(ellipse at 48% 38%, #173c50, #101f35 65%, #101b2d);
+  box-shadow: 0 12px 28px #172e4819;
+  border: 1px solid #21394f;
+}
+.atlas-top {
+  height: 59px;
+  color: #8faabd;
+  border-color: #9ab4cc18;
+  font-size: 10px;
+  letter-spacing: 1.8px;
+}
+.atlas-top > span::before {
+  content: '';
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-right: 9px;
+  border-radius: 50%;
+  background: #70d8b9;
+  box-shadow: 0 0 9px #70d8b950;
+}
+.atlas-top button {
+  padding: 8px 11px;
+  border: 1px solid #95b8d42b;
+  border-radius: 8px;
+  font-size: 10px;
+  color: #c0d1e2;
+  background: #ffffff05;
+}
+.atlas-top button:hover {
+  background: #ffffff12;
+}
+.globe-stage {
+  height: 520px;
+  background-size: 25px 25px;
+  background-image: radial-gradient(#97b6d41a 1px, transparent 1px);
+}
+.globe-caption {
+  color: #96b8c4;
+  font-size: 9px;
+}
+.globe-controls {
+  gap: 6px;
+}
+.globe-controls button {
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  border-color: #8bb8dc33;
+  background: #ffffff08;
+  color: #d0e0ec;
+}
+.globe-controls button:hover {
+  background: #ffffff1a;
+}
+.atlas-footer {
+  height: 45px;
+  color: #90a5bb;
+  font-size: 10px;
+  border-color: #9ab4cc18;
+}
+.atlas-footer a {
+  color: #b2c7d9;
+}
+.globe-city {
+  background: #152f47eb;
+  color: #e1ecf5;
+  border-color: #76b9c573;
+  border-radius: 8px;
+}
+.destination-panel {
+  padding: 25px;
+}
+.destination-panel > .eyebrow {
+  font-size: 9px;
+  color: #7380aa;
+  margin-bottom: 20px;
+}
+.travel-label {
+  font-size: 11px;
+  color: #6e7c93;
+  font-weight: 500;
+}
+.travel-select {
+  padding: 12px;
+  border-color: #e0e6f0;
+  border-radius: 9px;
+  background: #f7f9fc;
+  color: #34465f;
+  font-size: 13px;
+}
+.location-choice {
+  border-radius: 10px;
+  border-color: #dce1fb;
+  background: #f0f3ff;
+  color: #4f5bc4;
+  padding: 13px;
+}
+.location-choice:hover {
+  background: #e8edff;
+}
+.location-choice strong {
+  font-size: 13px;
+}
+.location-choice small {
+  color: #7281a2;
+  font-size: 11px;
+  line-height: 1.5;
+}
+.location-choice > span {
+  color: #6d7be2;
+}
+.destination-detail h2 {
+  color: #1b2e46;
+  font-size: 23px;
+  margin: 22px 0 8px;
+  letter-spacing: -0.6px;
+}
+.architecture-label {
+  color: #7b7193;
+  font-size: 11px;
+  line-height: 1.6;
+}
+.destination-description {
+  color: #6f7e95;
+  font-size: 12px;
+  line-height: 1.8;
+}
+.destination-weather {
+  border-color: #e8edf4;
+}
+.weather-title,
+.destination-weather .weather-title {
+  color: #6d7e96;
+  font-size: 11px;
+}
+.weather-main strong,
+.regional-weather .weather-main strong {
+  color: #253c59;
+  font-size: 31px;
+  font-weight: 700;
+}
+.weather-main small,
+.weather-main > span {
+  color: #7a8aa1;
+  font-size: 11px;
+}
+.weather-metrics,
+.regional-weather .weather-metrics {
+  color: #75859c;
+  font-size: 11px;
+  gap: 11px;
+}
+.weather-metrics strong {
+  color: #415876;
+}
+.weather-source,
+.regional-weather .weather-source {
+  color: #7d8aa0;
+  font-size: 10px;
+  line-height: 1.7;
+}
+.weather-source a {
+  color: #6376d4;
+}
+.weather-source.fallback {
+  background: #fff7e9;
+  color: #957239;
+  border: 1px solid #f0e1c3;
+  border-radius: 8px;
+}
+.region-progress {
+  font-size: 11px;
+  color: #72829a;
+  margin: 18px 0 13px;
+}
+.region-progress progress {
+  accent-color: #6978e3;
+}
+.primary {
+  background: #5260df;
+  color: white;
+  padding: 11px 16px;
+  border-radius: 9px;
+  font-size: 12px;
+  box-shadow: 0 3px 8px #5260df14;
+}
+.primary:hover {
+  background: #424fc6;
+}
+.enter-location {
+  min-height: 42px;
+}
+.destination-missions {
+  color: #75839b;
+  font-size: 11px;
+}
+.journey-note {
+  background: #eef1ff;
+  border-color: #dfe5f9;
+  border-radius: 13px;
+  margin: 24px 0 28px;
+  padding: 19px 22px;
+}
+.journey-note > span {
+  color: #7482d9;
+}
+.journey-note strong {
+  color: #56668c;
+  font-weight: 600;
+}
+.journey-note p {
+  color: #7a87a1;
+  font-size: 11px;
+}
+.text-btn {
+  color: #6a7b98;
+  font-size: 11px;
+}
+.text-btn:hover {
+  color: #5260df;
+}
+.page-heading {
+  margin-bottom: 25px;
+}
+.page-heading h1 {
+  font-size: 30px;
+  margin: 10px 0;
+}
+.play-layout {
+  grid-template-columns: minmax(0, 1fr) 335px;
+  gap: 22px;
+}
+.panel-bar {
+  min-height: 55px;
+  padding: 0 18px;
+  border-color: #e6ebf3;
+}
+.tabs button {
+  color: #7a89a1;
+  font-size: 12px;
+  font-weight: 500;
+}
+.world-tabs button.selected {
+  background: #eef1ff;
+  color: #5260df;
+  border-radius: 8px;
+}
+.world-status {
+  color: #8493a8;
+  font-size: 10px;
+}
+#dayIcon {
+  color: #c8974b;
+}
+#clockSpeed,
+#difficultySelect,
+.regional-weather select {
+  color: #607392;
+  background: #f7f9fc;
+  border-color: #e0e6f0;
+  padding: 6px;
+  border-radius: 7px;
+}
+.sim-clock {
+  color: #7f8fa6;
+}
+.world {
+  background: #dbe5df;
+}
+.quest-locator {
+  border: 1px solid #ffffffad;
+  background: #ffffffef;
+  border-radius: 11px;
+  box-shadow: 0 5px 20px #1c354516;
+  padding: 12px 15px;
+}
+.quest-locator small {
+  color: #8494ab;
+  letter-spacing: 1px;
+}
+.quest-locator strong {
+  color: #364962;
+  font-size: 12px;
+}
+.locator-icon {
+  color: #6476d8;
+  background: #edf0ff;
+  border-radius: 8px;
+}
+.camera-bar,
+.map-tools,
+.return-btn,
+.map-location {
+  border-radius: 9px;
+  border-color: #dee6efd9;
+  color: #5c708a;
+  background: #fffffff0;
+}
+.camera-bar button {
+  color: #5c708a;
+}
+.three-d-badge {
+  color: #6576cb;
+  background: #eef1ff;
+  font-size: 9px;
+}
+.map-tools button {
+  min-width: 30px;
+  min-height: 30px;
+  color: #60718a;
+}
+.world-footer {
+  padding: 13px 18px;
+  color: #8594aa;
+  font-size: 10px;
+  border-color: #e8edf4;
+}
+kbd {
+  color: #6c7f9a;
+  border-color: #dce4ef;
+  background: #f5f8fc;
+  border-radius: 4px;
+}
+.area-marker,
+.world-device-target {
+  background: #ffffffed;
+  color: #526680;
+  border-color: #ccd7e8;
+  border-radius: 6px;
+}
+.world-device-target:hover {
+  background: #edf0ff;
+}
+.mission-card {
+  padding: 22px;
+}
+.mission-top {
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.pill {
+  font-size: 8px;
+  letter-spacing: 1px;
+  background: #edf1ff;
+  color: #6a7ace;
+  padding: 6px 8px;
+  border-radius: 6px;
+}
+.mission-number {
+  color: #a0abc0;
+  font-size: 10px;
+  margin-top: 20px;
+}
+.mission-number span {
+  color: #7f91b2;
+}
+.mission-card h2 {
+  font-size: 24px;
+  line-height: 1.25;
+  letter-spacing: -0.8px;
+  margin: 10px 0;
+}
+.quest-meta {
+  color: #7e8ea5;
+  border-color: #e9edf4;
+  font-size: 11px;
+}
+.quest-meta > span:last-child {
+  color: #a28753;
+}
+.mission-budget {
+  color: #7689a3;
+  font-size: 10px;
+  line-height: 1.6;
+}
+.resident-avatar {
+  background: #f3efe8;
+}
+.resident-card strong {
+  color: #405573;
+  font-size: 12px;
+}
+.resident-card small {
+  color: #8b9ab0;
+  font-size: 10px;
+}
+.request {
+  color: #6f8099;
+  font-size: 12px;
+  line-height: 1.8;
+}
+.mission-steps {
+  border-color: #e7edf5;
+  gap: 13px;
+}
+.step {
+  font-size: 12px;
+  color: #8493aa;
+}
+.step i {
+  border-color: #dce3f0;
+  color: #95a1b8;
+  width: 23px;
+  height: 23px;
+}
+.step.current {
+  color: #5165ba;
+}
+.step.current i {
+  background: #6172dd;
+  border-color: #6172dd;
+  color: #fff;
+}
+.step.complete {
+  color: #409584;
+}
+.step.complete i {
+  color: #409584;
+  background: #e6f5ef;
+  border-color: #e6f5ef;
+}
+.mission-test {
+  height: 42px;
+}
+.hint-btn {
+  color: #7d8aa5;
+  font-size: 11px;
+}
+.hint {
+  color: #937139;
+  background: #fff7e8;
+  border: 1px solid #f1e3c8;
+  border-radius: 9px;
+}
+.environment,
+.regional-weather {
+  padding: 20px 22px;
+  margin-top: 18px;
+}
+.section-heading h3 {
+  font-size: 13px;
+  color: #415572;
+}
+.environment > p {
+  color: #8d9bb0;
+  font-size: 11px;
+  line-height: 1.5;
+}
+.env-row {
+  margin: 16px 0;
+}
+.env-row label,
+.toggle-row {
+  color: #6f819a;
+  font-size: 12px;
+}
+.env-row label strong {
+  color: #5b72a2;
+  font-size: 11px;
+}
+.env-row input[type='range'] {
+  accent-color: #7586e5;
+  height: 4px;
+}
+.range-endpoints {
+  color: #9ba8bc;
+  font-size: 9px;
+}
+input[type='checkbox'] {
+  accent-color: #6475dc;
+}
+.weather-readings-note {
+  color: #7c8ea6;
+  border-color: #e5ebf5;
+}
+.practice-scenario-label,
+#weatherClockSource {
+  color: #8a97af;
+}
+.workbench {
+  margin-top: 25px;
+}
+.bench-bar {
+  padding: 0 16px;
+  gap: 14px;
+}
+.bench-tabs {
+  display: flex;
+  overflow-x: auto;
+  white-space: nowrap;
+  gap: 5px;
+  scrollbar-width: thin;
+  flex: 1;
+  min-width: 0;
+}
+.bench-tabs button {
+  min-height: 56px;
+  padding: 0 10px;
+  flex-shrink: 0;
+  font-size: 11px;
+}
+.bench-tabs button.selected {
+  border-bottom-color: #6575dd;
+  color: #5263c7;
+}
+.bench-tabs .count {
+  background: #edf0ff;
+  color: #7988cd;
+}
+#advancedTools {
+  flex-shrink: 0;
+  padding: 8px 10px;
+  border: 1px solid #e1e6f1;
+  border-radius: 7px;
+  font-size: 10px;
+  color: #7886a1;
+}
+.editor-layout {
+  grid-template-columns: minmax(0, 1fr) 280px;
+}
+.editor-main {
+  background: #151e30;
+  border-color: #e3e8f1;
+}
+.editor-toolbar {
+  min-height: 53px;
+  height: auto;
+  padding: 10px 16px;
+  gap: 10px;
+  background: #1b2539;
+  border-color: #ffffff0b;
+}
+.editor-toolbar select {
+  border-color: #ffffff16;
+  color: #b6c3de;
+  background: #242f45;
+  padding: 7px 9px;
+  font-size: 10px;
+  border-radius: 7px;
+}
+.editor-toolbar .text-btn {
+  color: #9fafd1;
+}
+.editor-actions button {
+  padding: 7px 10px;
+  color: #aebbd3;
+  border-radius: 7px;
+  font-size: 10px;
+}
+.editor-actions button:hover {
+  background: #ffffff0a;
+}
+.editor-actions .primary {
+  color: white;
+  background: #6879e8;
+  padding: 8px 15px;
+  box-shadow: none;
+}
+.editor-actions .primary:hover {
+  background: #7d8ef4;
+}
+.editor-wrap {
+  height: 340px;
+  background: #151e30;
+}
+.line-numbers {
+  color: #566780;
+  background: #151e30;
+  border-color: #ffffff05;
+  padding-top: 18px;
+  font-size: 12px;
+}
+.highlight,
+.code-input {
+  padding: 18px 20px;
+  font-size: 13px;
+  line-height: 21px;
+}
+.highlight {
+  color: #c0cde2;
+}
+.code-input {
+  color: transparent;
+  caret-color: #b1baff;
+}
+.code-input::selection {
+  background: #7c8df452;
+}
+.syn-comment {
+  color: #71869c;
+}
+.syn-keyword {
+  color: #bfabf8;
+}
+.syn-number {
+  color: #f0c17a;
+}
+.syn-string {
+  color: #8dd7be;
+}
+.syn-type {
+  color: #7fb7f5;
+}
+.syn-builtin {
+  color: #f2a38b;
+}
+.syn-function {
+  color: #e7d58a;
+}
+.syn-constant {
+  color: #f58fb3;
+}
+.syn-operator {
+  color: #9aa9c2;
+}
+/* One block per source line keeps the overlay aligned with the textarea's 21px lines. */
+.code-line {
+  display: block;
+  min-height: 21px;
+  border-radius: 3px;
+}
+.code-line.current-line {
+  background: #ffffff0d;
+}
+.code-line.error-line {
+  background: #ff6b6b2b;
+  box-shadow: inset 3px 0 0 #ff6b6b;
+}
+.syn-match {
+  outline: 1px solid #b1baff99;
+  border-radius: 2px;
+  background: #7c8df433;
+}
+.syn-unmatched {
+  outline: 1px solid #ff6b6b;
+  border-radius: 2px;
+}
+.editor-status {
+  color: #7e91b1;
+  background: #1b2539;
+  border-color: #ffffff08;
+  height: 30px;
+  padding: 8px 16px;
+  font-size: 10px;
+}
+.live-panel {
+  padding: 23px 22px;
+  background: #fbfcff;
+}
+.live-title {
+  color: #465b79;
+  font-size: 12px;
+}
+.live-title > span:last-child {
+  color: #8599b5;
+  font-family: var(--mono);
+  font-size: 10px;
+}
+.live-panel > p {
+  color: #8c9bb1;
+  font-size: 11px;
+}
+.live-reading {
+  color: #7a8aa3;
+  font-size: 12px;
+  margin: 17px 0;
+}
+.live-reading strong {
+  color: #466599;
+  font-size: 14px;
+}
+.output-state {
+  background: #edf1f7;
+  color: #8898b1 !important;
+  padding: 5px 8px;
+  border-radius: 5px;
+}
+.output-state.on {
+  color: #3e9884 !important;
+  background: #e2f4ec;
+}
+.serial {
+  border-color: #e4eaf4;
+  padding-top: 17px;
+}
+.serial-title {
+  color: #657b9b;
+  font-size: 11px;
+}
+.serial pre {
+  color: #7c90af;
+  font-size: 10px;
+  max-height: 130px;
+  line-height: 1.8;
+}
+.serial pre.error {
+  color: #c06c5b;
+}
+.inventory-panel,
+.wiring-panel,
+.tests-panel,
+.lab-panel {
+  padding: 25px;
+}
+.bench-heading h3 {
+  color: #344d70;
+  font-size: 17px;
+}
+.bench-heading p {
+  color: #8593aa;
+  font-size: 12px;
+}
+.component-grid {
+  gap: 14px;
+}
+.component-card {
+  border-color: #e1e8f2;
+  border-radius: 12px;
+  padding: 17px;
+}
+.component-card.required {
+  border-color: #d2dcfa;
+  background: #fafbff;
+}
+.component-icon {
+  color: #6e84d6;
+  background: #edf1ff;
+  border-radius: 11px;
+}
+.component-card h4 {
+  color: #405575;
+  font-size: 13px;
+}
+.component-card p {
+  color: #8091aa;
+  font-size: 11px;
+  line-height: 1.7;
+}
+.component-card .component-label {
+  color: #8c9dc0;
+  font-size: 9px;
+}
+.component-card button {
+  color: #6278c2;
+  background: #edf1ff;
+  border-radius: 7px;
+  min-height: 34px;
+  font-size: 11px;
+}
+.component-card button:hover {
+  background: #e2e9ff;
+}
+.installed-badge {
+  color: #50a08b;
+}
+.board-card {
+  background: #f2f5fb;
+  border-radius: 12px;
+}
+.board-card p {
+  color: #7f91ac;
+  font-size: 11px;
+}
+.board-select,
+.wiring-row input[type='number'] {
+  border-color: #dce5f2;
+  color: #5c75a1;
+  background: #f8faff;
+  border-radius: 7px;
+}
+.wiring-row {
+  border-color: #e7edf6;
+}
+.wiring-row strong {
+  color: #465e7d;
+}
+.wiring-row small,
+.wiring-row label {
+  color: #8a9bb4;
+}
+.wire-good {
+  color: #509a87;
+}
+.wire-error,
+.test-summary.fail {
+  color: #b47745;
+  background: #fff5eb;
+  border-radius: 9px;
+}
+.test-summary {
+  background: #eaf6f0;
+  color: #4c917d;
+  border-radius: 9px;
+}
+.test-row {
+  border-color: #e6edf5;
+}
+.test-row small {
+  color: #8b9db8;
+}
+.test-row .passed {
+  color: #519e89;
+  background: #e8f6ef;
+}
+.test-row .failed {
+  color: #b57749;
+  background: #fff2e8;
+}
+.empty-bench {
+  color: #8a9bb5;
+}
+.fault-card {
+  border-color: #e0e7f3;
+  background: #f6f8fe;
+  border-radius: 11px;
+  padding: 20px;
+}
+.fault-card:hover {
+  border-color: #a9b9f1;
+  background: #eef2ff;
+}
+.fault-card strong {
+  color: #5f77b0;
+}
+.fault-card small {
+  color: #91a1bd;
+}
+.circuit-row {
+  border-color: #e2eaf6;
+  color: #7890ad;
+  padding: 17px 12px;
+}
+.circuit-row.selected {
+  background: #eef2ff;
+  border-radius: 9px;
+}
+.circuit-row strong {
+  color: #536f94;
+}
+.circuit-row code {
+  color: #608bd1;
+}
+.circuit-node.on {
+  background: #69bea4;
+  box-shadow: 0 0 8px #69bea442;
+}
+.circuit-selection {
+  color: #7a90b0;
+}
+.circuit-selection pre,
+.guide pre,
+#networkStatus,
+#debugVariables {
+  background: #f1f5fc;
+  color: #6d87ad;
+  border-radius: 10px;
+}
+.resource-totals > div {
+  border-color: #e0e8f5;
+  border-radius: 11px;
+  padding: 21px;
+  background: #fafbff;
+}
+.resource-totals small {
+  color: #8da1be;
+}
+.resource-totals strong {
+  color: #5f7daf;
+  font-size: 25px;
+}
+.export-contents {
+  color: #7c94b8;
+}
+.tools-grid button {
+  background: #f0f4fd;
+  color: #6c86b0;
+  border-radius: 9px;
+}
+.advanced-form label {
+  color: #91a1bc;
+}
+.advanced-form select,
+.advanced-form input,
+.network-editors textarea {
+  color: #7590b6;
+  border-color: #dae4f6;
+  background: #f7f9fe;
+  border-radius: 8px;
+}
+.local-mode-note {
+  color: #aa8a57;
+  background: #fff7e7;
+  border-radius: 9px;
+}
+.app-footer {
+  padding: 22px 4px;
+  color: #95a3bb;
+  font-size: 10px;
+}
+dialog {
+  padding: 28px;
+  border-radius: 18px;
+  border-color: #dbe3f0;
+  color: #536c8d;
+  box-shadow: 0 25px 90px #182e4b30;
+}
+dialog::backdrop {
+  background: #17243b70;
+  backdrop-filter: blur(5px);
+}
+.dialog-top h2 {
+  color: #354e70;
+  font-size: 22px;
+}
+.dialog-top button {
+  color: #8b9fba;
+}
+.guide {
+  color: #7b91b0;
+  font-size: 13px;
+}
+.guide h3 {
+  color: #526f9a;
+}
+.guide code {
+  background: #eef3fc;
+  color: #6c86b0;
+}
+.quest-option {
+  border-color: #e2eaf6;
+}
+.quest-option.selected {
+  background: #f0f4fd;
+  border-radius: 9px;
+}
+.quest-option strong {
+  color: #5a77a1;
+}
+.quest-option small,
+.setting-row small {
+  color: #94a7c5;
+}
+.badge {
+  background: #f2f5fc;
+  border-radius: 12px;
+  color: #6e88b2;
+}
+.badge small {
+  color: #9aaeca;
+}
+.setting-row {
+  border-color: #e3ebf7;
+}
+.setting-row input[type='text'],
+.install-dialog select {
+  color: #7590b6;
+  border-color: #dce6f6;
+  background: #f8faff;
+  border-radius: 8px;
+}
+.install-dialog p {
+  color: #879dbb;
+}
+#toast {
+  background: #243650;
+  color: #e8f0ff;
+  border: 1px solid #ffffff1c;
+  border-radius: 12px;
+  box-shadow: 0 9px 35px #1b315826;
+}
+
+@media (min-width: 1500px) {
+  main {
+    padding: 38px 40px 0;
+  }
+  .travel-layout {
+    grid-template-columns: minmax(0, 1fr) 370px;
+  }
+  .globe-stage {
+    height: 570px;
+  }
+  .play-layout {
+    grid-template-columns: minmax(0, 1fr) 355px;
+  }
+}
+@media (max-width: 1150px) {
+  header {
+    padding: 0 24px;
+  }
+  main {
+    padding: 26px 22px 0;
+  }
+  .chapter {
+    display: none;
+  }
+  .travel-layout {
+    grid-template-columns: minmax(0, 1fr) 310px;
+    gap: 18px;
+  }
+  .travel-heading {
+    flex-wrap: wrap;
+  }
+  .travel-heading > div:first-child {
+    flex-basis: 100%;
+  }
+  .travel-heading h1 br {
+    display: none;
+  }
+  .travel-heading h1 br::after {
+    content: ' ';
+  }
+  .globe-stage {
+    height: 510px;
+  }
+  .play-layout {
+    grid-template-columns: minmax(0, 1fr) 300px;
+    gap: 18px;
+  }
+  .world-status {
+    flex-wrap: wrap;
+    justify-content: end;
+  }
+  .editor-layout {
+    grid-template-columns: minmax(0, 1fr) 245px;
+  }
+  .editor-toolbar {
+    flex-wrap: wrap;
+  }
+  .editor-toolbar .text-btn {
+    display: none;
+  }
+}
+@media (max-width: 850px) {
+  .rail {
+    width: 72px;
+    padding: 20px 7px;
+  }
+  .rail-item {
+    width: 57px;
+  }
+  main {
+    width: calc(100% - 72px);
+    padding: 24px 18px 0;
+  }
+  .saved {
+    display: none;
+  }
+  .travel-layout,
+  .play-layout {
+    grid-template-columns: 1fr;
+  }
+  .globe-stage {
+    height: 430px;
+  }
+  .travel-heading h1 {
+    font-size: 31px;
+  }
+  .destination-panel {
+    padding: 25px;
+  }
+  .mission-column {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 18px;
+  }
+  .mission-card {
+    grid-row: span 2;
+  }
+  .regional-weather,
+  .environment {
+    margin: 0;
+    grid-column: 2;
+  }
+  .world {
+    aspect-ratio: 1.5;
+  }
+  .journey-note {
+    flex-wrap: wrap;
+  }
+  .journey-note button {
+    margin-left: 0;
+  }
+  .editor-layout {
+    grid-template-columns: minmax(0, 1fr) 235px;
+  }
+}
+@media (max-width: 600px) {
+  body {
+    padding-bottom: 74px;
+  }
+  header {
+    height: 70px;
+    padding: 0 16px;
+    gap: 10px;
+  }
+  .brand {
+    font-size: 23px;
+    gap: 9px;
+  }
+  .brand-mark {
+    width: 36px;
+    height: 36px;
+    border-radius: 11px;
+  }
+  .brand-mark svg {
+    width: 23px;
+    height: 23px;
+  }
+  .header-actions {
+    gap: 7px;
+  }
+  .xp {
+    padding: 8px 10px;
+    font-size: 10px;
+  }
+  .avatar {
+    width: 31px;
+    height: 31px;
+  }
+  .icon-btn {
+    width: 29px;
+    height: 29px;
+  }
+  .app-shell {
+    display: block;
+    min-height: calc(100vh - 70px);
+  }
+  .rail {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    z-index: 40;
+    width: 100%;
+    height: 66px;
+    padding: 5px 10px;
+    flex-direction: row;
+    gap: 4px;
+    justify-content: space-around;
+    background: #fffffff5;
+    backdrop-filter: blur(12px);
+    border: 0;
+    border-top: 1px solid #dfe6f1;
+  }
+  .rail-item {
+    width: 58px;
+    min-height: 53px;
+    gap: 4px;
+    font-size: 9px;
+    border-radius: 10px;
+  }
+  .rail-item svg {
+    width: 20px;
+    height: 20px;
+  }
+  .rail-bottom {
+    margin: 0;
+    padding: 0;
+  }
+  .version {
+    display: none;
+  }
+  main {
+    width: 100%;
+    padding: 25px 16px 0;
+  }
+  .eyebrow {
+    font-size: 9px;
+    letter-spacing: 1.4px;
+  }
+  .travel-heading {
+    margin-bottom: 18px;
+    gap: 9px;
+  }
+  .travel-heading h1 {
+    font-size: 28px !important;
+    margin: 12px 0;
+  }
+  .travel-heading p {
+    font-size: 12px;
+  }
+  .travel-heading > .outline {
+    max-width: none;
+    padding: 10px 12px;
+    font-size: 10px;
+    white-space: nowrap;
+  }
+  .travel-summary {
+    gap: 6px;
+    margin-bottom: 20px;
+  }
+  .travel-summary > span {
+    padding: 7px 9px;
+    font-size: 10px;
+  }
+  .travel-layout {
+    gap: 18px;
+  }
+  .atlas-panel {
+    border-radius: 14px;
+  }
+  .atlas-top {
+    padding: 0 15px;
+    height: 53px;
+    font-size: 8px;
+  }
+  .atlas-top button {
+    font-size: 9px;
+    padding: 7px 9px;
+  }
+  .globe-stage {
+    height: 360px;
+  }
+  .globe-caption {
+    font-size: 8px;
+    left: 15px;
+    bottom: 70px;
+  }
+  .globe-controls {
+    left: 15px;
+    bottom: 20px;
+    gap: 5px;
+  }
+  .globe-controls button {
+    width: 34px;
+    height: 34px;
+  }
+  .atlas-footer {
+    height: auto;
+    padding: 13px 15px;
+    gap: 12px;
+    font-size: 9px;
+    line-height: 1.6;
+  }
+  .destination-panel {
+    padding: 22px;
+  }
+  .journey-note {
+    padding: 18px;
+    gap: 12px;
+  }
+  .journey-note p {
+    font-size: 11px;
+  }
+  .page-heading {
+    flex-wrap: wrap;
+    gap: 16px;
+  }
+  .page-heading h1 {
+    font-size: 25px !important;
+  }
+  .adventure-heading-actions {
+    justify-content: start;
+  }
+  .adventure-heading-actions .outline {
+    font-size: 10px;
+    padding: 10px;
+  }
+  .mission-column {
+    grid-template-columns: 1fr;
+  }
+  .mission-card {
+    grid-row: auto;
+  }
+  .regional-weather,
+  .environment {
+    grid-column: auto;
+    padding: 22px;
+  }
+  .world {
+    aspect-ratio: 1.12;
+  }
+  .world-panel .panel-bar {
+    flex-wrap: wrap;
+    padding: 8px 12px;
+    gap: 8px;
+    height: auto;
+  }
+  .world-tabs button {
+    padding: 9px 10px;
+    font-size: 11px;
+  }
+  .world-status {
+    width: 100%;
+    justify-content: space-between;
+    padding: 2px;
+  }
+  .world-status .sim-clock {
+    display: inline;
+    font-size: 9px;
+  }
+  .world-footer {
+    font-size: 9px;
+    padding: 12px;
+  }
+  .quest-locator {
+    padding: 9px 11px;
+    top: 12px;
+    left: 12px;
+  }
+  .quest-locator strong {
+    font-size: 11px;
+  }
+  .camera-bar {
+    padding: 5px;
+  }
+  .camera-bar button {
+    font-size: 9px;
+  }
+  .bench-bar {
+    flex-wrap: wrap;
+    padding: 0 12px 10px;
+    gap: 0;
+    height: auto;
+  }
+  .bench-tabs {
+    display: flex;
+    width: 100%;
+    flex-basis: 100%;
+    overflow-x: auto;
+    white-space: nowrap;
+  }
+  .bench-tabs button {
+    padding: 0 10px;
+    min-height: 51px;
+    font-size: 10px;
+  }
+  .bench-tabs button > span:first-child {
+    display: inline;
+    margin-right: 4px;
+    font-size: 13px;
+  }
+  #advancedTools {
+    margin-top: 8px;
+  }
+  .editor-layout {
+    grid-template-columns: 1fr;
+  }
+  .editor-toolbar {
+    padding: 11px 12px;
+    gap: 10px;
+  }
+  .editor-toolbar select {
+    font-size: 10px;
+  }
+  .editor-actions button {
+    font-size: 10px;
+    padding: 7px 9px;
+  }
+  .editor-wrap {
+    height: 320px;
+  }
+  .highlight,
+  .code-input {
+    font-size: 12px;
+    padding: 18px 12px;
+  }
+  .line-numbers {
+    width: 35px;
+    font-size: 11px;
+  }
+  .code-scroll {
+    left: 35px;
+  }
+  .editor-status {
+    font-size: 9px;
+    padding-left: 12px;
+    padding-right: 12px;
+  }
+  .live-panel {
+    padding: 22px;
+  }
+  .inventory-panel,
+  .wiring-panel,
+  .tests-panel,
+  .lab-panel {
+    padding: 20px;
+  }
+  .component-card {
+    padding: 13px;
+  }
+  .component-card h4 {
+    font-size: 12px;
+  }
+  .fault-grid,
+  .resource-totals {
+    gap: 10px;
+  }
+  .resource-totals > div {
+    padding: 16px;
+  }
+  .resource-totals strong {
+    font-size: 21px;
+  }
+  dialog {
+    padding: 23px;
+    border-radius: 15px;
+  }
+  #toast {
+    bottom: 85px;
+    padding: 12px 17px;
+    font-size: 12px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  button {
+    transition: none;
+  }
+}
+/* Keep instructional text readable against the brighter surfaces. */
+.destination-description,
+.request,
+.guide,
+.component-card p,
+.bench-heading p,
+.weather-readings-note,
+.destination-missions,
+.environment > p,
+.journey-note p,
+.install-dialog p,
+.weather-source,
+.regional-weather .weather-source {
+  color: #617189;
+}
+.request {
+  font-size: 13px;
+}
+.travel-label,
+.env-row label,
+.toggle-row,
+.weather-metrics,
+.regional-weather .weather-metrics,
+.live-reading,
+.wiring-row label,
+.wiring-row small {
+  color: #617189;
+}
+.line-numbers {
+  color: #7a8ca6;
+}
+.syn-comment {
+  color: #8d9fb4;
+}
+@media (max-width: 380px) {
+  .header-actions {
+    gap: 4px;
+  }
+  .brand {
+    font-size: 21px;
+  }
+  .xp {
+    padding: 8px;
+  }
+  .rail {
+    padding-left: 4px;
+    padding-right: 4px;
+  }
+  .rail-item {
+    width: 53px;
+  }
+  .world-status .sim-clock {
+    display: none;
+  }
+}
+
+/* Keep the workbench next to the world, independent of sidebar height. */
+.play-layout {
+  align-items: start;
+}
+.simulation-column {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  min-width: 0;
+}
+.simulation-column > .workbench {
+  margin-top: 0;
+}
+.simulation-column .editor-layout {
+  grid-template-columns: minmax(0, 1fr) 230px;
+}
+.simulation-column .bench-bar {
+  flex-wrap: wrap;
+  padding-bottom: 10px;
+  height: auto;
+}
+.simulation-column .bench-tabs {
+  flex-basis: 100%;
+}
+.simulation-column .editor-toolbar {
+  flex-wrap: wrap;
+}
+@media (max-width: 1150px) {
+  .simulation-column .editor-layout {
+    grid-template-columns: 1fr;
+  }
+  .simulation-column .editor-main {
+    border-right: 0;
+  }
+  .simulation-column .live-panel {
+    border-top: 1px solid #e4eaf4;
+  }
+}
+@media (max-width: 850px) and (min-width: 601px) {
+  .simulation-column .editor-layout {
+    grid-template-columns: minmax(0, 1fr) 230px;
+  }
+  .simulation-column .editor-main {
+    border-right: 1px solid #e3e8f1;
+  }
+  .simulation-column .live-panel {
+    border-top: 0;
+  }
+}
+@media (max-width: 600px) {
+  .simulation-column {
+    gap: 14px;
+  }
+}
+.weather-retry {
+  display: inline-flex;
+  align-items: center;
+  margin-top: 10px;
+  min-height: 32px;
+  padding: 7px 10px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  font-size: 11px;
+}
+
+/* Serial plotter. Series colours are the validated categorical order (dark steps here,
+   light steps in themes.css); text never uses series colours. */
+.plotter {
+  --plot-1: #3987e5;
+  --plot-2: #d95926;
+  --plot-3: #199e70;
+  --plot-4: #c98500;
+  --plot-5: #d55181;
+  --plot-6: #008300;
+  --plot-7: #9085e9;
+  --plot-8: #e66767;
+  --plot-surface: #151e30;
+  --plot-text: #c0cde2;
+  --plot-muted: #7e91b1;
+  --plot-grid: #ffffff14;
+  --plot-track: #ffffff0a;
+  --plot-threshold: #c0cde2b3;
+  --plot-crosshair: #c0cde266;
+  --plot-on: #b1baff;
+  --plot-input: #7f93b5;
+  border-top: 1px solid #ffffff0d;
+  background: var(--plot-surface);
+  padding: 10px 14px 12px;
+  color: var(--plot-text);
+}
+.plotter-head {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+  margin-bottom: 8px;
+  font-size: 12px;
+}
+.plotter-note {
+  color: var(--plot-muted);
+}
+.plotter-actions {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--plot-muted);
+}
+.plotter-actions select {
+  margin-left: 4px;
+  font: inherit;
+  color: var(--plot-text);
+  background: transparent;
+  border: 1px solid var(--plot-grid);
+  border-radius: 5px;
+  padding: 2px 4px;
+}
+.plotter-actions .text-btn {
+  color: var(--plot-text);
+  padding: 3px 6px;
+  border-radius: 5px;
+}
+.plotter-actions .text-btn[aria-pressed='true'] {
+  background: var(--plot-grid);
+}
+.plotter-body {
+  position: relative;
+  min-height: 60px;
+}
+.plotter-body canvas {
+  display: block;
+  width: 100%;
+  height: 0;
+  touch-action: pan-y;
+}
+.plot-empty {
+  margin: 0;
+  padding: 14px 0;
+  font-size: 12px;
+  color: var(--plot-muted);
+}
+.plot-tooltip {
+  position: absolute;
+  top: 6px;
+  min-width: 150px;
+  padding: 7px 9px;
+  font-size: 11px;
+  line-height: 1.6;
+  color: var(--plot-text);
+  background: color-mix(in srgb, var(--plot-surface) 92%, #fff);
+  border: 1px solid var(--plot-grid);
+  border-radius: 6px;
+  box-shadow: 0 6px 18px #0006;
+  pointer-events: none;
+}
+.plot-tooltip div,
+.plot-key {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.plot-tooltip b {
+  margin-left: auto;
+  padding-left: 10px;
+  font-variant-numeric: tabular-nums;
+}
+.plot-tooltip i,
+.plot-key i {
+  width: 12px;
+  height: 3px;
+  border-radius: 2px;
+  flex: none;
+}
+.plot-tooltip i.strip {
+  height: 8px;
+  width: 8px;
+  background: var(--plot-on);
+}
+.plot-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  margin-top: 6px;
+  font-size: 11px;
+}
+.plot-key {
+  padding: 2px 4px;
+  color: var(--plot-text);
+  background: none;
+  border: 0;
+  border-radius: 4px;
+  font: inherit;
+  cursor: pointer;
+}
+.plot-key.off {
+  color: var(--plot-muted);
+  text-decoration: line-through;
+}
+.plot-key.off i {
+  opacity: 0.3;
+}
+.plot-key-note {
+  color: var(--plot-muted);
+}
+
+/* Code checks: warnings and tips always pair colour with an icon and text. */
+.editor-main {
+  --diag-warning: #e0a23b;
+  --diag-info: #7aa7f0;
+}
+.diag-warning,
+.diag-info {
+  text-decoration-line: underline;
+  text-decoration-thickness: 1.5px;
+  text-underline-offset: 3px;
+}
+.diag-warning {
+  text-decoration-style: wavy;
+  text-decoration-color: var(--diag-warning);
+}
+.diag-info {
+  text-decoration-style: dotted;
+  text-decoration-color: var(--diag-info);
+}
+.code-line.diag-line-warning:not(.error-line) {
+  box-shadow: inset 3px 0 0 var(--diag-warning);
+}
+.code-line.diag-line-info:not(.error-line) {
+  box-shadow: inset 3px 0 0 var(--diag-info);
+}
+.diag-message {
+  margin: 0;
+  padding: 6px 14px;
+  font-size: 12px;
+  line-height: 1.45;
+  color: #c0cde2;
+  background: #1b2539;
+  border-top: 1px solid #ffffff0d;
+  border-left: 3px solid var(--diag-warning);
+}
+.diag-message.info {
+  border-left-color: var(--diag-info);
+}
+.diag-summary {
+  align-self: center;
+  margin: -4px 12px -4px auto;
+  height: 20px;
+  padding: 0 9px;
+  line-height: 18px;
+  white-space: nowrap;
+  font: inherit;
+  font-size: 11px;
+  color: inherit;
+  background: none;
+  border: 1px solid #ffffff1f;
+  border-radius: 10px;
+  cursor: pointer;
+}
+.diag-summary.has-warnings {
+  border-color: var(--diag-warning);
+}
+.diag-panel {
+  max-height: 150px;
+  overflow: auto;
+  background: #1b2539;
+  border-top: 1px solid #ffffff0d;
+}
+.diag-panel ul {
+  margin: 0;
+  padding: 4px 0;
+  list-style: none;
+}
+.diag-item {
+  display: flex;
+  gap: 10px;
+  width: 100%;
+  padding: 5px 14px;
+  font: inherit;
+  font-size: 12px;
+  text-align: left;
+  color: #c0cde2;
+  background: none;
+  border: 0;
+  cursor: pointer;
+}
+.diag-item:hover,
+.diag-item:focus-visible {
+  background: #ffffff0d;
+}
+.diag-item span {
+  flex: none;
+  min-width: 58px;
+  color: #7e91b1;
+  font-variant-numeric: tabular-nums;
+}
+.bench-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.import-summary {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 6px 16px;
+  margin: 0 0 14px;
+  font-size: 13px;
+}
+.import-summary dt {
+  color: var(--muted, #7e91b1);
+}
+.import-summary dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.import-warnings {
+  margin: 0 0 14px;
+  padding: 8px 12px;
+  font-size: 12px;
+  border-left: 3px solid var(--diag-warning, #e0a23b);
+  background: #e0a23b14;
+}
+.import-warnings p {
+  margin: 0;
+}

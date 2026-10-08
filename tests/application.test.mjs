@@ -1,0 +1,1121 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import vm from 'node:vm';
+import { readFile, access } from 'node:fs/promises';
+import { execFileSync } from 'node:child_process';
+import { Runtime } from '../public/runtime.js';
+import { components, missions, baseEnv, defaults, validate, program } from '../public/missions.js';
+import {
+  locations,
+  locationById,
+  adaptMissions,
+  progressForLocation,
+} from '../public/locations.js';
+import { WeatherService, advanceEnvironment, fallbackWeather } from '../public/weather.js';
+import {
+  createLabState,
+  simulateBatch,
+  residentRoutine,
+  updateResources,
+  faultCases,
+  scenarios,
+} from '../public/lab.js';
+import {
+  renderLabPanel,
+  updateCircuit,
+  updateResourcesPanel,
+  scenarioOptions,
+} from '../public/lab-panels.js';
+import { projectFiles, zipFiles } from '../public/project-package.js';
+import { isLocationUnlocked, completedQuestCount } from '../public/locations.js';
+import { advancedMenu } from '../public/advanced-tools.js';
+import { weatherHTML } from '../public/travel.js';
+import { esc, setHTML } from '../public/html.js';
+import { sanitizeSaved } from '../public/persistence.js';
+import { highlight } from '../public/syntax-highlight.js';
+import { SerialPlotter, findThresholds, PLOT_LIMIT } from '../public/plotter.js';
+import { diagnose } from '../public/diagnostics.js';
+import {
+  readProject,
+  ImportError,
+  IMPORT_LIMITS,
+  PROJECT_FORMAT,
+} from '../public/project-import.js';
+import { formatCode as formatSource, FormatError, INDENT } from '../public/code-format.js';
+const html = await readFile('public/game.html', 'utf8'),
+  source = await readFile('public/game.js', 'utf8');
+class Element {
+  constructor(doc, attrs = {}, tag = 'DIV') {
+    this.doc = doc;
+    this.tagName = tag.toUpperCase();
+    this.dataset = {};
+    this.style = {};
+    this.attrs = attrs;
+    this.id = attrs.id;
+    this.hidden = false;
+    this.checked = 'checked' in attrs;
+    this.value = attrs.value || '';
+    this.type = attrs.type || '';
+    this.listeners = {};
+    this.children = [];
+    this.selectionStart = 0;
+    this.selectionEnd = 0;
+    this.scrollWidth = 500;
+    this.scrollTop = 0;
+    this.textContent = '';
+    this.open = false;
+    this.classes = new Set((attrs.class || '').split(' '));
+    this.classList = {
+      add: (x) => this.classes.add(x),
+      remove: (x) => this.classes.delete(x),
+      toggle: (x, force) => {
+        if (force === undefined) force = !this.classes.has(x);
+        if (force) this.classes.add(x);
+        else this.classes.delete(x);
+      },
+      contains: (x) => this.classes.has(x),
+    };
+    for (const [k, v] of Object.entries(attrs))
+      if (k.startsWith('data-'))
+        this.dataset[k.slice(5).replace(/-([a-z])/g, (_, c) => c.toUpperCase())] = v;
+  }
+  set innerHTML(s) {
+    this._html = s;
+    this.doc.removeOwned(this);
+    this.doc.parse(s, this);
+  }
+  get innerHTML() {
+    return this._html || '';
+  }
+  querySelector(selector) {
+    this.childMap ??= {};
+    return (this.childMap[selector] ??= new Element(this.doc, {}, selector));
+  }
+  addEventListener(name, fn) {
+    (this.listeners[name] ??= []).push(fn);
+  }
+  dispatchEvent(e) {
+    e.target = this;
+    for (const fn of this.listeners[e.type] || []) fn(e);
+  }
+  setAttribute(k, v) {
+    this.attrs[k] = v;
+  }
+  focus() {
+    this.doc.activeElement = this;
+  }
+  showModal() {
+    this.open = true;
+  }
+  close() {
+    this.open = false;
+  }
+  scrollIntoView() {}
+  setPointerCapture() {}
+  click() {
+    return this.onclick?.({ target: this });
+  }
+  getBoundingClientRect() {
+    return { left: 0, right: 700, top: 0, bottom: 600 };
+  }
+  setRangeText(t, start, end, mode) {
+    this.value = this.value.slice(0, start) + t + this.value.slice(end);
+    this.selectionStart = this.selectionEnd = start + t.length;
+  }
+}
+class Document {
+  constructor() {
+    this.nodes = [];
+    this.body = new Element(this);
+    this.documentElement = new Element(this);
+    this.activeElement = this.body;
+    this.listeners = {};
+    this.parse(html);
+  }
+  parse(s, owner) {
+    for (const m of s.matchAll(/<([a-zA-Z][\w-]*)([^>]*?)>/g)) {
+      let attrs = {};
+      for (const a of m[2].matchAll(/([\w-]+)(?:="([^"]*)")?/g)) attrs[a[1]] = a[2] ?? '';
+      if (attrs.id || Object.keys(attrs).some((a) => a.startsWith('data-'))) {
+        const el = new Element(this, attrs, m[1]);
+        if (m[1].toLowerCase() === 'select') {
+          const opt = s.slice(m.index).match(/<option(?: value="([^"]*)")?[^>]*>([^<]*)<\/option>/);
+          if (opt) el.value = opt[1] ?? opt[2];
+        }
+        el.owner = owner;
+        this.nodes.push(el);
+      }
+    }
+  }
+  removeOwned(owner) {
+    const remove = new Set(this.nodes.filter((n) => n.owner === owner));
+    let changed = true;
+    while (changed) {
+      changed = false;
+      for (const n of this.nodes)
+        if (remove.has(n.owner) && !remove.has(n)) {
+          remove.add(n);
+          changed = true;
+        }
+    }
+    this.nodes = this.nodes.filter((n) => !remove.has(n));
+  }
+  getElementById(id) {
+    return this.nodes.findLast((n) => n.id === id) || null;
+  }
+  querySelectorAll(q) {
+    let m = q.match(/^\[([^\]]+)\]$/);
+    return m ? this.nodes.filter((n) => Object.hasOwn(n.attrs, m[1])) : [];
+  }
+  addEventListener(t, fn) {
+    this.listeners[t] = fn;
+  }
+  createElement(tag) {
+    return new Element(this, {}, tag);
+  }
+}
+function harness(
+  initialSaved = null,
+  { deferWorker = false, darkPreference = false, weatherFetch = undefined } = {},
+) {
+  const pending = [],
+    intervals = [];
+  const document = new Document(),
+    storage = new Map(initialSaved ? [['iotquest-v1', JSON.stringify(initialSaved)]] : []);
+  globalThis.document = document;
+  class Worker {
+    constructor() {
+      this.rt = null;
+      this.terminated = false;
+    }
+    postMessage(message) {
+      const data = structuredClone(message);
+      const deliver = () => {
+        if (this.terminated) return;
+        try {
+          if (data.type === 'start' || data.type === 'debugStart')
+            this.rt = new Runtime(data.code, data.language, data.devices, data.board);
+          const result =
+            data.type === 'debugStep' || data.type === 'debugStart'
+              ? this.rt.debugStep(data.env, data.ms || 200)
+              : data.lab
+                ? simulateBatch(this.rt, {
+                    ...data,
+                    count: data.type === 'start' ? 1 : data.count || 1,
+                  })
+                : this.rt.step(data.env, data.ms);
+          this.onmessage?.({ data: { type: 'state', ...result } });
+        } catch (e) {
+          this.onmessage?.({
+            data: {
+              type: 'error',
+              message: e.message,
+              line: e.line || this.rt?.currentLine || null,
+            },
+          });
+        }
+      };
+      if (deferWorker) pending.push(deliver);
+      else deliver();
+    }
+    terminate() {
+      this.terminated = true;
+    }
+  }
+  const themeListeners = [],
+    themeMedia = {
+      matches: darkPreference,
+      addEventListener: (type, listener) => themeListeners.push(listener),
+    };
+  const ctx = vm.createContext({
+    document,
+    fetch: weatherFetch,
+    window: { addEventListener() {} },
+    navigator: {},
+    matchMedia: (query) => (query.includes('color-scheme') ? themeMedia : { matches: false }),
+    localStorage: { getItem: (k) => storage.get(k), setItem: (k, v) => storage.set(k, v) },
+    components,
+    missions,
+    baseEnv,
+    defaults,
+    validate,
+    program,
+    Runtime,
+    Worker,
+    locations,
+    locationById,
+    adaptMissions,
+    progressForLocation,
+    WeatherService,
+    advanceEnvironment,
+    weatherHTML,
+    createLabState,
+    simulateBatch,
+    residentRoutine,
+    updateResources,
+    faultCases,
+    scenarios,
+    renderLabPanel,
+    updateCircuit,
+    updateResourcesPanel,
+    scenarioOptions,
+    projectFiles,
+    zipFiles,
+    isLocationUnlocked,
+    completedQuestCount,
+    advancedMenu,
+    esc,
+    setHTML,
+    sanitizeSaved,
+    highlight,
+    formatSource,
+    SerialPlotter,
+    diagnose,
+    readProject,
+    ImportError,
+    IMPORT_LIMITS,
+    PROJECT_FORMAT,
+    findThresholds,
+    PLOT_LIMIT,
+    FormatError,
+    INDENT,
+    structuredClone,
+    Blob,
+    URL,
+    Event: class {
+      constructor(type) {
+        this.type = type;
+      }
+    },
+    setTimeout: () => 1,
+    clearTimeout() {},
+    setInterval: (fn, ms) => {
+      intervals.push({ fn, ms });
+      return intervals.length;
+    },
+    clearInterval() {},
+    requestAnimationFrame() {},
+    console,
+  });
+  vm.runInContext(
+    source.replace(/^import [^;]*;\n/gm, '') +
+      '\nglobalThis.api={state,project,mission,selectMission,installDialog,switchTab,testSolution,run,stop,tick,changeBoard,move,code,loadExample,renderCode,renderMission,getOutputs:()=>outputs,getTests:()=>testResults,getPassed:()=>currentPassed,getRunning:()=>running,labState,startFault,exitFault,setClockSpeed,setDifficulty,pauseExecution,stepExecution,resumeExecution,enterLocation,resumeLegacy,returnToGlobe,applyLocalWeather,setWeatherMode,advanceWorld,refreshWeather,missionKey,getPlotSamples:()=>plotSamples,previewImport,exportManifest,labContext,exportProject};',
+    ctx,
+  );
+  return {
+    api: ctx.api,
+    document,
+    storage,
+    flushWorker: () => pending.shift()?.(),
+    advanceTimer: () => intervals.find((i) => i.ms === 200).fn(),
+    changeSystemTheme: (dark) => {
+      themeMedia.matches = dark;
+      themeListeners.forEach((fn) => fn());
+    },
+  };
+}
+function installAndWire(h, index) {
+  h.api.selectMission(index);
+  h.api.switchTab('inventory');
+  for (const id of missions[index].ids) {
+    h.api.installDialog(id);
+    h.document.getElementById('confirmInstall').click();
+  }
+  h.api.switchTab('wiring');
+  h.document.getElementById('connectAll').click();
+}
+test('all referenced local assets exist and module scripts parse', async () => {
+  for (const path of [
+    'game.css',
+    'game.js',
+    'world.png',
+    'sim-worker.js',
+    'runtime.js',
+    'missions.js',
+    'favicon.svg',
+    'world3d.js',
+    'world-model.js',
+    'world-math.js',
+  ])
+    await access('public/' + path);
+  for (const path of [
+    'game.js',
+    'sim-worker.js',
+    'runtime.js',
+    'missions.js',
+    'world3d.js',
+    'world-model.js',
+    'world-math.js',
+  ])
+    execFileSync(process.execPath, ['--check', 'public/' + path]);
+  assert.ok(html.includes('aria-label="Student') === false);
+  assert.match(source, /aria-label=\\?"Student program code/);
+});
+test('game initializes, shows first quest, and saves locally', () => {
+  const h = harness();
+  assert.equal(h.document.getElementById('missionTitle').textContent, 'Light the Path');
+  assert.equal(h.api.project().devices.length, 0);
+  assert.ok(h.storage.has('iotquest-v1'));
+  assert.match(h.document.getElementById('highlight').innerHTML, /false/);
+});
+test('install → wire → example → test completes first mission and awards XP once', () => {
+  const h = harness();
+  installAndWire(h, 0);
+  assert.equal(h.api.project().devices.length, 2);
+  assert.deepEqual(validate(h.api.project().devices, 'ESP32'), []);
+  h.api.switchTab('code');
+  h.api.loadExample();
+  h.api.testSolution();
+  assert.equal(h.api.getPassed(), true);
+  assert.equal(h.api.state.xp, 100);
+  assert.equal(h.api.state.completed[0].badge, 'Night owl');
+  h.api.testSolution();
+  assert.equal(h.api.state.xp, 100);
+});
+test('incorrect starter fails tests and receives no rewards', () => {
+  const h = harness();
+  installAndWire(h, 0);
+  h.api.testSolution();
+  assert.equal(h.api.getPassed(), false);
+  assert.equal(h.api.state.xp, 0);
+  assert.ok(h.api.getTests().some((t) => !t.pass));
+});
+test('language switch preserves installed components and wiring', () => {
+  const h = harness();
+  installAndWire(h, 0);
+  const before = JSON.stringify(h.api.project().devices);
+  h.api.switchTab('code');
+  const el = h.document.getElementById('languageSelect');
+  el.value = 'python';
+  el.onchange();
+  assert.equal(h.api.state.language, 'python');
+  assert.equal(JSON.stringify(h.api.project().devices), before);
+  assert.match(h.api.code(), /from machine import/);
+  h.api.loadExample();
+  h.api.testSolution();
+  assert.equal(h.api.getPassed(), true);
+});
+test('running student code controls outputs and conditions change them', () => {
+  const h = harness();
+  installAndWire(h, 0);
+  h.api.switchTab('code');
+  h.api.loadExample();
+  h.api.run();
+  assert.equal(h.api.getOutputs()[26], 0);
+  h.api.state.env.light = 10;
+  h.api.tick();
+  assert.equal(h.api.getOutputs()[26], 1);
+  h.api.state.env.light = 90;
+  h.api.tick();
+  assert.equal(h.api.getOutputs()[26], 0);
+  h.api.stop();
+  assert.equal(h.api.getRunning(), false);
+  assert.equal(Object.keys(h.api.getOutputs()).length, 0);
+});
+test('motion mission passes both arrival and departure in UI workflow', () => {
+  const h = harness();
+  installAndWire(h, 1);
+  h.api.loadExample();
+  h.api.testSolution();
+  assert.equal(h.api.getPassed(), true);
+  assert.equal(h.api.state.xp, 120);
+});
+test('watering UI tests include dynamic target stop and dry tank protection', () => {
+  const h = harness();
+  installAndWire(h, 2);
+  h.api.loadExample();
+  h.api.testSolution();
+  assert.equal(h.api.getPassed(), true);
+  assert.ok(h.api.getTests().some((r) => r.name.includes('target and stops')));
+  h.api.run();
+  h.api.tick();
+  assert.ok(h.api.state.env.soil > 32);
+  assert.ok(h.api.state.env.tank < 80);
+});
+test('code edits invalidate the current pass and stop running outputs', () => {
+  const h = harness();
+  installAndWire(h, 0);
+  h.api.loadExample();
+  h.api.testSolution();
+  assert.equal(h.api.getPassed(), true);
+  h.api.switchTab('code');
+  h.api.run();
+  const el = h.document.getElementById('codeInput');
+  el.value = h.api.code().replace('light < 1800', 'true');
+  el.dispatchEvent({ type: 'input' });
+  assert.equal(h.api.getPassed(), false);
+  assert.equal(h.api.getRunning(), false);
+  h.api.testSolution();
+  assert.equal(h.api.getPassed(), false);
+});
+test('missing connections prevent execution', () => {
+  const h = harness();
+  h.api.installDialog('ldr');
+  h.document.getElementById('confirmInstall').click();
+  h.api.run();
+  assert.equal(h.api.getRunning(), false);
+  assert.equal(Object.keys(h.api.getOutputs()).length, 0);
+});
+test('Pico remaps signals and solution works after controller change', () => {
+  const h = harness();
+  installAndWire(h, 0);
+  h.api.changeBoard('Raspberry Pi Pico');
+  assert.deepEqual(
+    Array.from(h.api.project().devices, (d) => d.pin),
+    [26, 15],
+  );
+  h.api.loadExample();
+  h.api.testSolution();
+  assert.equal(h.api.getPassed(), true);
+});
+test('movement changes technician coordinates and stays inside world bounds', () => {
+  const h = harness();
+  h.api.resumeLegacy();
+  const x = h.api.state.player.x;
+  h.api.move('right');
+  assert.ok(h.api.state.player.x > x);
+  for (let i = 0; i < 200; i++) h.api.move('left');
+  assert.equal(h.api.state.player.x, 8);
+});
+
+test('mission installation puts the moisture probe in plant beds and tank sensor at the tank', () => {
+  const h = harness();
+  installAndWire(h, 2);
+  assert.equal(h.api.project().devices.find((d) => d.id === 'soil').area, 'Plant beds');
+  assert.equal(h.api.project().devices.find((d) => d.id === 'level').area, 'Water tank');
+});
+test('deployment Worker routes home and retains asset paths', async () => {
+  const { default: worker } = await import('../scripts/asset-worker.mjs');
+  const calls = [],
+    env = {
+      ASSETS: {
+        fetch: async (req) => {
+          calls.push(req.url);
+          return new Response('OK');
+        },
+      },
+    };
+  assert.equal((await worker.fetch(new Request('https://quest.example/'), env)).status, 200);
+  await worker.fetch(new Request('https://quest.example/sim-worker.js'), env);
+  assert.deepEqual(calls, ['https://quest.example/', 'https://quest.example/sim-worker.js']);
+});
+test('global travel starts on the atlas and preserves legacy code, wiring, XP and badges', async () => {
+  const old = {
+    mission: 2,
+    board: 'ESP32',
+    xp: 100,
+    name: 'Ari',
+    color: '#123456',
+    projects: {
+      0: { devices: defaults(['ldr', 'led'], 'ESP32'), code: { cpp: 'old saved code' } },
+    },
+    completed: { 0: { badge: 'Night owl', xp: 100 } },
+    env: { ...baseEnv, soil: 42 },
+  };
+  const h = harness(old);
+  assert.equal(h.api.state.travelScreen, true);
+  await h.api.enterLocation('kyoto', fallbackWeather(locations[0]));
+  assert.equal(h.api.state.activeLocation, 'kyoto');
+  assert.equal(h.document.getElementById('regionHeading').textContent, locations[0].title);
+  assert.equal(h.api.state.projects[0].code.cpp, 'old saved code');
+  assert.equal(h.api.state.xp, 100);
+  assert.equal(h.api.state.name, 'Ari');
+  assert.equal(h.api.state.completed[0].badge, 'Night owl');
+  h.api.resumeLegacy();
+  assert.equal(h.api.state.mission, 2);
+  assert.equal(h.api.state.env.soil, 42);
+  assert.equal(h.api.state.projects[0].devices.length, 2);
+});
+test('travel isolates regional projects and returns to the globe', async () => {
+  const h = harness();
+  await h.api.enterLocation('kyoto', fallbackWeather(locations[0]));
+  h.api.project().code.cpp = 'kyoto code';
+  await h.api.enterLocation('marrakech', fallbackWeather(locations[1]));
+  assert.notEqual(h.api.project().code.cpp, 'kyoto code');
+  h.api.project().code.cpp = 'riad code';
+  await h.api.enterLocation('kyoto', fallbackWeather(locations[0]));
+  assert.equal(h.api.code(), 'kyoto code');
+  h.api.returnToGlobe();
+  assert.equal(h.api.state.travelScreen, true);
+  assert.equal(h.document.getElementById('travelScreen').hidden, false);
+  assert.equal(h.document.getElementById('adventureScreen').hidden, true);
+});
+test('live weather changes simulated readings gradually without turning on student actuators', async () => {
+  const h = harness(),
+    l = locations[0];
+  const w = {
+    ...fallbackWeather(l),
+    status: 'live',
+    temperature: 39,
+    isDay: false,
+    precipitation: 6,
+    cloud: 95,
+  };
+  await h.api.enterLocation(l.id, w);
+  h.api.setWeatherMode('live');
+  const before = { ...h.api.state.env };
+  for (let i = 0; i < 40; i++) h.api.advanceWorld();
+  assert.ok(h.api.state.env.temp > before.temp);
+  assert.ok(h.api.state.env.rain > before.rain);
+  assert.ok(h.api.state.env.soil > before.soil);
+  assert.ok(h.api.state.env.light < before.light);
+  assert.equal(Object.keys(h.api.getOutputs()).length, 0);
+});
+test('regional rain-aware watering keeps installation, wiring, student code and deterministic tests', async () => {
+  const h = harness();
+  await h.api.enterLocation('kyoto', fallbackWeather(locations[0]));
+  h.api.setDifficulty('advanced');
+  h.api.selectMission(2);
+  h.api.switchTab('inventory');
+  for (const id of h.api.mission().ids) {
+    h.api.installDialog(id);
+    h.document.getElementById('confirmInstall').click();
+  }
+  h.api.switchTab('wiring');
+  h.document.getElementById('connectAll').click();
+  h.api.switchTab('code');
+  h.api.loadExample();
+  h.api.testSolution();
+  assert.equal(h.api.getPassed(), true);
+  assert.equal(h.api.state.weatherMode, 'practice');
+  assert.ok(h.api.getTests().some((t) => t.name.includes('Rain at')));
+  assert.equal(h.api.state.locationProgress.kyoto.completed['advanced:2'].badge, 'Green thumb');
+  assert.equal(h.api.state.completed[2], undefined);
+});
+test('fault projects preserve normal code, fail while broken, and pass after a real repair', () => {
+  const h = harness();
+  h.api.resumeLegacy();
+  h.api.project().code.cpp = 'saved normal project';
+  h.api.startFault('ground');
+  h.api.testSolution();
+  assert.equal(h.api.getPassed(), false);
+  assert.equal(h.api.state.xp, 0);
+  h.api.switchTab('wiring');
+  h.document.getElementById('connectAll').click();
+  h.api.testSolution();
+  assert.equal(h.api.getPassed(), true);
+  assert.ok(h.api.getTests().some((r) => r.name.includes('budget')));
+  h.api.exitFault();
+  assert.equal(h.api.code(), 'saved normal project');
+});
+test('faulty sensor workshop cannot pass until its simulated reading is repaired', () => {
+  const h = harness();
+  h.api.resumeLegacy();
+  h.api.startFault('sensor');
+  h.api.testSolution();
+  assert.equal(h.api.getPassed(), false);
+  delete h.api.project().devices[0].faultValue;
+  h.api.testSolution();
+  assert.equal(h.api.getPassed(), true);
+});
+test('main UI clock runs fixed controller substeps at accelerated speed and freezes on pause', () => {
+  const h = harness();
+  installAndWire(h, 0);
+  h.api.loadExample();
+  h.api.run();
+  const before = h.api.labState().elapsedMs;
+  h.api.setClockSpeed(360);
+  h.api.tick();
+  assert.equal(h.api.labState().elapsedMs - before, 72000);
+  const paused = h.api.labState().elapsedMs;
+  h.api.setClockSpeed(0);
+  h.api.tick();
+  h.api.advanceWorld();
+  assert.equal(h.api.labState().elapsedMs, paused);
+});
+test('live circuit can be opened during execution and reports the real lamp output', () => {
+  const h = harness();
+  installAndWire(h, 0);
+  h.api.loadExample();
+  h.api.state.env.light = 0;
+  h.api.run();
+  h.api.switchTab('circuit');
+  assert.match(h.document.getElementById('circuitRows').innerHTML, /HIGH/);
+  assert.match(h.document.getElementById('circuitRows').innerHTML, /GPIO 26/);
+});
+test('local cooperative ownership prevents programming-role changes to wiring', () => {
+  const h = harness();
+  installAndWire(h, 0);
+  h.api.labState().coopEnabled = true;
+  h.api.labState().role = 'Programmer';
+  h.api.switchTab('wiring');
+  const before = JSON.stringify(h.api.project().devices);
+  h.api.project().devices[0].power = false;
+  const current = JSON.stringify(h.api.project().devices);
+  h.document.getElementById('connectAll').click();
+  assert.equal(JSON.stringify(h.api.project().devices), current);
+  assert.notEqual(current, before);
+});
+
+test('Format stops the old program and invalidates its test evidence when source changes', () => {
+  const h = harness();
+  installAndWire(h, 0);
+  h.api.loadExample();
+  h.api.switchTab('code');
+  const input = h.document.getElementById('codeInput');
+  input.value = '   ' + h.api.code();
+  input.dispatchEvent({ type: 'input' });
+  h.api.testSolution();
+  assert.equal(h.api.getPassed(), true);
+  h.api.switchTab('code');
+  h.api.run();
+  h.document.getElementById('formatBtn').click();
+  assert.equal(h.api.getRunning(), false);
+  assert.equal(h.api.getPassed(), false);
+  assert.equal(Object.keys(h.api.getOutputs()).length, 0);
+  assert.equal(h.api.getTests().length, 0);
+  const restored = harness(JSON.parse(h.storage.get('iotquest-v1')));
+  assert.equal(restored.api.code(), h.api.code());
+});
+test('runtime errors with source lines are visibly identified in the editor', () => {
+  const h = harness();
+  installAndWire(h, 0);
+  h.api.switchTab('code');
+  const input = h.document.getElementById('codeInput');
+  input.value = 'void setup() {}\nvoid loop() {\n  int x = unknown;\n}';
+  input.dispatchEvent({ type: 'input' });
+  h.document.getElementById('runBtn').click();
+  assert.equal(h.api.getRunning(), false);
+  assert.match(h.document.getElementById('serialText').textContent, /Error at line 3/);
+  assert.equal(h.document.getElementById('serialText').classList.contains('error'), true);
+  assert.match(h.document.getElementById('editorStatus').textContent, /error/i);
+});
+test('editor typing, indentation, reset and language switching retain the intended project', () => {
+  const h = harness();
+  installAndWire(h, 0);
+  h.api.switchTab('code');
+  let input = h.document.getElementById('codeInput');
+  input.value = 'void loop() {';
+  input.selectionStart = input.selectionEnd = input.value.length;
+  input.dispatchEvent({ type: 'keydown', key: 'Enter', preventDefault() {} });
+  assert.equal(input.value, 'void loop() {\n  ');
+  input.dispatchEvent({ type: 'keydown', key: 'Tab', preventDefault() {} });
+  assert.equal(input.value, 'void loop() {\n    ');
+  const cpp = input.value,
+    wiring = JSON.stringify(h.api.project().devices);
+  let language = h.document.getElementById('languageSelect');
+  language.value = 'python';
+  language.onchange();
+  h.api.loadExample();
+  const python = h.api.code();
+  language = h.document.getElementById('languageSelect');
+  language.value = 'cpp';
+  language.onchange();
+  assert.equal(h.api.code(), cpp);
+  language = h.document.getElementById('languageSelect');
+  language.value = 'python';
+  language.onchange();
+  assert.equal(h.api.code(), python);
+  h.document.getElementById('runBtn').click();
+  assert.equal(h.api.getRunning(), true);
+  h.document.getElementById('resetCode').click();
+  assert.equal(h.api.getRunning(), false);
+  assert.match(h.api.code(), /if False:/);
+  assert.equal(JSON.stringify(h.api.project().devices), wiring);
+});
+
+for (const language of ['cpp', 'python'])
+  test(`${language}: editor Run button advances automatically and Stop cancels queued execution`, () => {
+    const h = harness(null, { deferWorker: true });
+    installAndWire(h, 0);
+    h.api.switchTab('code');
+    const lang = h.document.getElementById('languageSelect');
+    lang.value = language;
+    lang.onchange();
+    h.api.loadExample();
+    h.api.state.env.light = 10;
+    h.document.getElementById('runBtn').click();
+    assert.equal(h.api.getRunning(), true);
+    assert.equal(Object.keys(h.api.getOutputs()).length, 0);
+    h.flushWorker();
+    assert.equal(h.api.getOutputs()[26], 1);
+    h.api.state.env.light = 90;
+    h.advanceTimer();
+    h.flushWorker();
+    assert.equal(h.api.getOutputs()[26], 0);
+    h.api.state.env.light = 10;
+    h.advanceTimer();
+    h.document.getElementById('stopBtn').click();
+    h.flushWorker();
+    assert.equal(h.api.getRunning(), false);
+    assert.equal(Object.keys(h.api.getOutputs()).length, 0);
+  });
+test('conditions changed while a worker tick is pending are retained for the next execution', () => {
+  const h = harness(null, { deferWorker: true });
+  installAndWire(h, 0);
+  h.api.loadExample();
+  h.api.state.env.light = 10;
+  h.api.run();
+  const slider = h.document.getElementById('env-light');
+  slider.value = '90';
+  slider.dispatchEvent({ type: 'input' });
+  h.flushWorker();
+  assert.equal(h.api.state.env.light, 90);
+  h.advanceTimer();
+  h.flushWorker();
+  assert.equal(h.api.getOutputs()[26], 0);
+});
+
+test('appearance toggle persists both themes without changing running code or wiring', () => {
+  const h = harness();
+  installAndWire(h, 0);
+  h.api.loadExample();
+  h.api.state.env.light = 10;
+  h.api.run();
+  const code = h.api.code(),
+    wiring = JSON.stringify(h.api.project().devices),
+    output = h.api.getOutputs()[26];
+  h.document.getElementById('themeToggle').click();
+  assert.equal(h.api.state.theme, 'dark');
+  assert.equal(h.document.documentElement.dataset.theme, 'dark');
+  assert.equal(h.document.documentElement.style.colorScheme, 'dark');
+  assert.equal(
+    h.document.getElementById('themeToggle').attrs['aria-label'],
+    'Switch to light mode',
+  );
+  assert.equal(h.api.getRunning(), true);
+  assert.equal(h.api.code(), code);
+  assert.equal(JSON.stringify(h.api.project().devices), wiring);
+  assert.equal(h.api.getOutputs()[26], output);
+  const restored = harness(JSON.parse(h.storage.get('iotquest-v1')));
+  assert.equal(restored.document.documentElement.dataset.theme, 'dark');
+  restored.document.getElementById('themeToggle').click();
+  assert.equal(restored.api.state.theme, 'light');
+  assert.equal(restored.document.documentElement.dataset.theme, 'light');
+  assert.equal(JSON.parse(restored.storage.get('iotquest-v1')).theme, 'light');
+});
+test('appearance settings follow system changes only when System default is selected', () => {
+  const h = harness(null, { darkPreference: true });
+  assert.equal(h.api.state.theme, 'system');
+  assert.equal(h.document.documentElement.dataset.theme, 'dark');
+  h.changeSystemTheme(false);
+  assert.equal(h.document.documentElement.dataset.theme, 'light');
+  h.document.getElementById('settingsBtn').click();
+  const select = h.document.getElementById('themeSetting');
+  assert.equal(select.value, 'system');
+  select.value = 'dark';
+  select.onchange();
+  assert.equal(h.document.documentElement.dataset.theme, 'dark');
+  h.changeSystemTheme(false);
+  assert.equal(h.document.documentElement.dataset.theme, 'dark');
+  select.value = 'system';
+  select.onchange();
+  assert.equal(h.document.documentElement.dataset.theme, 'light');
+  h.changeSystemTheme(true);
+  assert.equal(h.document.documentElement.dataset.theme, 'dark');
+  assert.equal(select.value, 'system');
+});
+test('early appearance bootstrap respects saved preferences and tolerates unavailable storage', async () => {
+  const bootstrap = await readFile('public/theme-init.js', 'utf8');
+  for (const [saved, dark, expected] of [
+    [{ theme: 'dark' }, false, 'dark'],
+    [{ theme: 'light' }, true, 'light'],
+    [{}, true, 'dark'],
+    [{ theme: 'invalid' }, false, 'light'],
+  ]) {
+    const root = { dataset: {}, style: {} };
+    vm.runInNewContext(bootstrap, {
+      document: { documentElement: root },
+      localStorage: { getItem: () => JSON.stringify(saved) },
+      matchMedia: () => ({ matches: dark }),
+    });
+    assert.equal(root.dataset.theme, expected);
+    assert.equal(root.style.colorScheme, expected);
+  }
+  const root = { dataset: {}, style: {} };
+  vm.runInNewContext(bootstrap, {
+    document: { documentElement: root },
+    localStorage: {
+      getItem() {
+        throw Error('Storage blocked');
+      },
+    },
+    matchMedia: () => ({ matches: true }),
+  });
+  assert.equal(root.dataset.theme, 'dark');
+});
+
+test('weather Retry restores live readings without stopping running student code', async () => {
+  let calls = 0;
+  const live = {
+    timezone: 'Asia/Tokyo',
+    current: {
+      temperature_2m: 30,
+      relative_humidity_2m: 65,
+      precipitation: 2,
+      weather_code: 61,
+      cloud_cover: 60,
+      wind_speed_10m: 12,
+      wind_direction_10m: 180,
+      is_day: 1,
+      time: 1700000000,
+    },
+  };
+  const h = harness(null, {
+    weatherFetch: async () => {
+      calls++;
+      return { ok: true, json: async () => live };
+    },
+  });
+  await h.api.enterLocation('kyoto', fallbackWeather(locations[0]));
+  assert.equal(h.api.state.weatherByLocation.kyoto.status, 'live');
+  assert.match(h.document.getElementById('regionalWeatherDetails').innerHTML, /Open-Meteo/);
+  h.api.selectMission(0);
+  for (const id of h.api.mission().ids) {
+    h.api.installDialog(id);
+    h.document.getElementById('confirmInstall').click();
+  }
+  h.api.switchTab('wiring');
+  h.document.getElementById('connectAll').click();
+  h.api.loadExample();
+  h.api.run();
+  const code = h.api.code();
+  await h.document.getElementById('weatherRetry').click();
+  assert.equal(calls, 2);
+  assert.equal(h.api.getRunning(), true);
+  assert.equal(h.api.code(), code);
+  assert.equal(h.document.getElementById('weatherRetry').disabled, false);
+  h.api.setWeatherMode('practice');
+  assert.equal(h.document.getElementById('weatherRetry').hidden, true);
+});
+
+test('lab edits made through a held reference survive simulation ticks and are saved', () => {
+  const h = harness();
+  h.api.state.travelScreen = false;
+  const lab = h.api.labState();
+  lab.coopEnabled = true;
+  lab.upgrades.push('solar');
+  const before = lab.elapsedMs;
+  for (let i = 0; i < 3; i++) h.advanceTimer();
+  assert.equal(h.api.labState(), lab);
+  assert.ok(lab.elapsedMs > before);
+  h.api.setClockSpeed(1);
+  const saved = JSON.parse(h.storage.get('iotquest-v1'));
+  assert.equal(saved.projects[0].lab.coopEnabled, true);
+  assert.deepEqual(saved.projects[0].lab.upgrades, ['solar']);
+});
+test('typing coalesces edit evidence and never evicts test evidence', () => {
+  const h = harness();
+  installAndWire(h, 0);
+  h.api.loadExample();
+  h.api.testSolution();
+  h.api.switchTab('code');
+  const input = h.document.getElementById('codeInput');
+  for (let i = 0; i < 80; i++) {
+    input.value += ' ';
+    input.dispatchEvent({ type: 'input' });
+  }
+  const evidence = h.api.labState().evidence;
+  assert.ok(evidence.some((e) => e.type === 'test'));
+  assert.ok(evidence.filter((e) => e.type === 'edit').length <= 3);
+  assert.ok(evidence.at(-1).count >= 80);
+});
+test('syntax highlighting escapes after tokenising so quotes and hashes stay intact', () => {
+  const h = harness();
+  const cpp = highlight("char c = 'x'; // note <b>", 'cpp');
+  assert.match(cpp, /<span class="syn-string">&#39;x&#39;<\/span>/);
+  assert.match(cpp, /<span class="syn-comment">\/\/ note &lt;b&gt;<\/span>/);
+  assert.doesNotMatch(cpp, /syn-comment">#39/);
+  const py = highlight('s = "a # b"  # real\nx = 7 // 2', 'python');
+  assert.match(py, /<span class="syn-string">&quot;a # b&quot;<\/span>/);
+  assert.match(py, /<span class="syn-comment"># real<\/span>/);
+  assert.doesNotMatch(py, /syn-comment">\/\//);
+});
+test('malformed saved progress falls back to defaults instead of breaking startup', () => {
+  const h = harness({
+    player: null,
+    name: 5,
+    color: 'red;background:url(x)',
+    mission: 99,
+    completed: [],
+    projects: { 0: { devices: 'bad', lab: { evidence: 'bad' } } },
+    locationProgress: { kyoto: { completed: null }, broken: 7 },
+  });
+  assert.equal(h.api.state.name, 'Technician');
+  assert.equal(h.api.state.mission, 0);
+  assert.equal(h.api.project().devices.length, 0);
+  assert.equal(h.api.labState().evidence.length, 0);
+  assert.equal(h.api.state.locationProgress.broken, undefined);
+  assert.equal(Object.keys(h.api.state.locationProgress.kyoto.projects).length, 0);
+});
+test('fault repairs do not count as quests and advanced completions use their own key', () => {
+  const state = {
+    completed: { 0: {}, 'fault:ground': {} },
+    locationProgress: {
+      kyoto: { completed: { 'advanced:1': { xp: 10 }, 'fault:pin': { xp: 40 } } },
+    },
+  };
+  assert.equal(completedQuestCount(state), 2);
+  assert.deepEqual(progressForLocation(state, 'kyoto'), { completed: 1, total: 16, xp: 10 });
+  const h = harness();
+  assert.equal(h.api.missionKey(3), '3');
+});
+test('the interact shortcut is ignored while a dialog is open', () => {
+  const h = harness();
+  h.api.state.travelScreen = false;
+  h.api.switchTab('code');
+  h.document.getElementById('modal').showModal();
+  h.document.listeners.keydown({ key: 'e', target: { tagName: 'BUTTON' }, preventDefault() {} });
+  assert.ok(h.document.getElementById('codeInput'));
+});
+test('Tab indents in the editor until Escape releases focus', () => {
+  const h = harness();
+  h.api.switchTab('code');
+  const input = h.document.getElementById('codeInput');
+  input.value = '';
+  let prevented = false;
+  input.dispatchEvent({ type: 'keydown', key: 'Tab', preventDefault: () => (prevented = true) });
+  assert.equal(prevented, true);
+  assert.equal(input.value, '  ');
+  prevented = false;
+  input.dispatchEvent({ type: 'keydown', key: 'Escape', preventDefault() {} });
+  input.dispatchEvent({ type: 'keydown', key: 'Tab', preventDefault: () => (prevented = true) });
+  assert.equal(prevented, false);
+});
+test('editor shortcuts format code, split braces and step back on a closing brace', () => {
+  const h = harness();
+  installAndWire(h, 0);
+  h.api.switchTab('code');
+  let input = h.document.getElementById('codeInput');
+  input.value = 'void setup(){pinMode(2,OUTPUT);}\nvoid loop() {}';
+  input.dispatchEvent({ type: 'input' });
+  input.dispatchEvent({
+    type: 'keydown',
+    key: 'F',
+    shiftKey: true,
+    altKey: true,
+    preventDefault() {},
+  });
+  assert.equal(h.api.code(), 'void setup() { pinMode(2, OUTPUT); }\nvoid loop() {}\n');
+  input = h.document.getElementById('codeInput');
+  input.value = 'void loop() {}';
+  input.selectionStart = input.selectionEnd = input.value.indexOf('}');
+  input.dispatchEvent({ type: 'keydown', key: 'Enter', preventDefault() {} });
+  assert.equal(input.value, 'void loop() {\n  \n}');
+  input.value = 'void loop() {\n  if (x) {\n    ';
+  input.selectionStart = input.selectionEnd = input.value.length;
+  input.dispatchEvent({ type: 'keydown', key: '}', preventDefault() {} });
+  assert.equal(input.value, 'void loop() {\n  if (x) {\n  }');
+});
+test('a runtime error line is marked in the editor until the code changes', () => {
+  const h = harness();
+  installAndWire(h, 0);
+  h.api.switchTab('code');
+  const input = h.document.getElementById('codeInput');
+  input.value = 'void setup() {}\nvoid loop() {\n  int x = unknown;\n}';
+  input.dispatchEvent({ type: 'input' });
+  h.document.getElementById('runBtn').click();
+  const lines = h.document.getElementById('highlight').innerHTML.split('class="code-line');
+  assert.match(lines[3], /^ error-line/);
+  input.value += ' ';
+  input.dispatchEvent({ type: 'input' });
+  assert.doesNotMatch(h.document.getElementById('highlight').innerHTML, /error-line/);
+});
+
+test('running a program feeds the serial plotter, which Clear and a new run reset', () => {
+  const h = harness();
+  h.api.state.travelScreen = false;
+  installAndWire(h, 0);
+  h.api.loadExample();
+  h.api.switchTab('code');
+  h.api.run();
+  for (let i = 0; i < 3; i++) h.advanceTimer();
+  const samples = h.api.getPlotSamples();
+  assert.ok(samples.length >= 3);
+  const ldr = h.api.project().devices.find((d) => d.id === 'ldr');
+  assert.ok(samples.every((s) => s.inputs[ldr.pin] !== undefined));
+  assert.equal(h.document.getElementById('plotEmpty').hidden, true);
+  h.document.getElementById('plotClear').click();
+  assert.equal(h.api.getPlotSamples().length, 0);
+  h.advanceTimer();
+  h.api.run();
+  assert.equal(h.api.getPlotSamples().length, 1);
+});
+test('code checks appear under the editor, jump to the code, and clear when fixed', () => {
+  const h = harness();
+  installAndWire(h, 0);
+  h.api.switchTab('code');
+  const ldr = h.api.project().devices.find((d) => d.id === 'ldr');
+  let input = h.document.getElementById('codeInput');
+  const code = h.api.code().replace('lightPin = ' + ldr.pin, 'lightPin = 33');
+  assert.notEqual(code, h.api.code());
+  input.value = code;
+  input.dispatchEvent({ type: 'input' });
+  const summary = h.document.getElementById('diagSummary');
+  assert.equal(summary.hidden, false);
+  assert.match(summary.textContent, /1 warning/);
+  assert.match(
+    h.document.getElementById('diagList').innerHTML,
+    /lightPin \(GPIO 33\) isn&#39;t connected/,
+  );
+  input.selectionStart = input.selectionEnd = 0;
+  input.dispatchEvent({ type: 'keydown', key: 'F8', preventDefault() {} });
+  assert.equal(input.value.slice(input.selectionStart, input.selectionEnd), 'lightPin');
+  assert.equal(h.document.getElementById('diagMessage').hidden, false);
+  assert.match(h.document.getElementById('diagMessage').textContent, /Light sensor \(GPIO 34\)/);
+  assert.match(h.document.getElementById('highlight').innerHTML, /diag-warning">lightPin</);
+  input.value = code.replace('lightPin = 33', 'lightPin = ' + ldr.pin);
+  input.dispatchEvent({ type: 'input' });
+  assert.equal(h.document.getElementById('diagSummary').hidden, true);
+  assert.doesNotMatch(h.document.getElementById('highlight').innerHTML, /diag-/);
+});
+test('importing an exported project restores it without granting rewards and backs up existing work', async () => {
+  const author = harness();
+  installAndWire(author, 0);
+  author.api.loadExample();
+  author.api.testSolution();
+  assert.equal(author.api.getPassed(), true);
+  const manifest = author.api.exportManifest(),
+    bytes = zipFiles(
+      projectFiles({
+        name: 'Ari',
+        language: manifest.language,
+        board: manifest.board,
+        code: manifest.code[manifest.language],
+        devices: manifest.devices,
+        mission: author.api.mission(),
+        results: manifest.results,
+        lab: manifest.lab,
+        location: 'Original home',
+        manifest,
+      }),
+    );
+  const reviewer = harness();
+  installAndWire(reviewer, 0);
+  reviewer.api.switchTab('code');
+  const mine = reviewer.api.code() + '\n// mine';
+  reviewer.api.project().code.cpp = mine;
+  const plan = await reviewer.api.previewImport(bytes, 'ari.zip');
+  assert.equal(plan.technician, 'Technician');
+  const body = reviewer.document.getElementById('modalBody').innerHTML;
+  assert.match(body, /Light the Path/);
+  assert.match(body, /replaces your current work/);
+  assert.match(body, /\d+ of \d+ passed/);
+  reviewer.document.getElementById('confirmImport').click();
+  assert.equal(reviewer.api.code(), manifest.code.cpp);
+  assert.deepEqual(
+    reviewer.api.project().devices.map((d) => [d.id, d.pin]),
+    manifest.devices.map((d) => [d.id, d.pin]),
+  );
+  assert.equal(reviewer.api.state.xp, 0);
+  assert.equal(Object.keys(reviewer.api.state.completed).length, 0);
+  const backup = Object.entries(reviewer.api.state.projects).find(([k]) =>
+    k.startsWith('0~backup-'),
+  );
+  assert.equal(backup[1].code.cpp, mine);
+  const entry = reviewer.api.labState().evidence.at(-1);
+  assert.equal(entry.type, 'import');
+  assert.equal(entry.file, 'ari.zip');
+  reviewer.api.testSolution();
+  assert.equal(reviewer.api.getPassed(), true);
+  assert.equal(reviewer.api.state.xp, 100);
+  assert.equal(reviewer.api.state.completed[0].imported, true);
+});
+test('a rejected import explains why and leaves the project untouched', async () => {
+  const h = harness();
+  installAndWire(h, 0);
+  const before = JSON.stringify(h.api.project());
+  assert.equal(await h.api.previewImport(new TextEncoder().encode('nope'), 'x.zip'), null);
+  assert.match(h.document.getElementById('modalBody').innerHTML, /not a ZIP/);
+  assert.equal(JSON.stringify(h.api.project()), before);
+});

@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Class Progress · IoT Quest</title>
+    <script src="./theme-init.js"></script>
+    <link rel="stylesheet" href="./teacher.css" />
+    <link rel="icon" href="./favicon.svg" />
+  </head>
+  <body>
+    <header class="t-head">
+      <a class="t-brand" href="./game.html">IoT<span>Quest</span></a>
+      <span class="t-head-title">Class progress</span>
+      <a class="t-back" href="./game.html">Back to the game</a>
+    </header>
+    <main class="t-main">
+      <section class="t-intro">
+        <div>
+          <h1>Class progress</h1>
+          <p>
+            Load the progress reports your students handed in (they download them from
+            <strong>Package → Hand in your progress</strong>). Files stay on this computer: nothing
+            is uploaded, and nothing is kept after you close this page.
+          </p>
+        </div>
+        <label class="t-drop" id="drop">
+          <input type="file" id="files" accept=".json,application/json" multiple />
+          <strong>Drop report files here</strong>
+          <span>or choose files</span>
+        </label>
+      </section>
+      <ul class="t-errors" id="fileErrors" aria-live="polite" hidden></ul>
+      <section id="view" hidden>
+        <div class="t-toolbar">
+          <label
+            >Class
+            <select id="classSelect"></select>
+          </label>
+          <label
+            >Destination
+            <select id="viewSelect"></select>
+          </label>
+          <span class="t-spacer"></span>
+          <button class="t-button" id="csvBtn">Download CSV</button>
+          <button class="t-button t-quiet" id="clearBtn">Clear reports</button>
+        </div>
+        <div class="t-tiles" id="tiles"></div>
+        <div class="t-layout">
+          <div>
+            <div class="t-grid-wrap">
+              <table class="t-grid" id="grid"></table>
+            </div>
+            <p class="t-legend">
+              <span class="t-key passed">✓ Passed</span>
+              <span class="t-key started">… Working on it</span>
+              <span class="t-key help">! Needs help (3+ test attempts or hints)</span>
+              <span class="t-key none">– Not started</span>
+            </p>
+            <section class="t-help" id="helpList"></section>
+          </div>
+          <aside class="t-detail" id="detail" aria-live="polite">
+            <p class="t-muted">Select a cell to see the student’s progress and code.</p>
+          </aside>
+        </div>
+      </section>
+    </main>
+    <script type="module" src="./teacher.js"></script>
+  </body>
+</html>

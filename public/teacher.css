@@ -1,0 +1,434 @@
+:root {
+  --bg: #f4f6fb;
+  --panel: #ffffff;
+  --ink: #1f2a44;
+  --muted: #5d6b85;
+  --line: #dfe5f0;
+  --accent: #5352d8;
+  --accent-ink: #ffffff;
+  --ok: #1f7a5c;
+  --ok-bg: #e2f4ec;
+  --work: #7a5a12;
+  --work-bg: #fbf0d6;
+  --help: #a63b37;
+  --help-bg: #fbe2e0;
+  --none: #8592a8;
+  --code-bg: #151e30;
+  --mono: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    --bg: #0e1625;
+    --panel: #172234;
+    --ink: #e1e8f5;
+    --muted: #a1b0c8;
+    --line: #29364c;
+    --accent: #8d8cff;
+    --accent-ink: #10162a;
+    --ok: #8fe0c2;
+    --ok-bg: #173a31;
+    --work: #f1d28f;
+    --work-bg: #3a3020;
+    --help: #ffb0a8;
+    --help-bg: #46231f;
+    --none: #7c8aa3;
+    color-scheme: dark;
+  }
+}
+:root[data-theme='dark'] {
+  --bg: #0e1625;
+  --panel: #172234;
+  --ink: #e1e8f5;
+  --muted: #a1b0c8;
+  --line: #29364c;
+  --accent: #8d8cff;
+  --accent-ink: #10162a;
+  --ok: #8fe0c2;
+  --ok-bg: #173a31;
+  --work: #f1d28f;
+  --work-bg: #3a3020;
+  --help: #ffb0a8;
+  --help-bg: #46231f;
+  --none: #7c8aa3;
+  color-scheme: dark;
+}
+* {
+  box-sizing: border-box;
+}
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font:
+    14px/1.5 system-ui,
+    -apple-system,
+    'Segoe UI',
+    sans-serif;
+}
+button,
+select,
+input {
+  font: inherit;
+  color: inherit;
+}
+.t-head {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 14px max(16px, 3vw);
+  background: var(--panel);
+  border-bottom: 1px solid var(--line);
+}
+.t-brand {
+  font-weight: 800;
+  font-size: 18px;
+  color: var(--ink);
+  text-decoration: none;
+}
+.t-brand span {
+  color: var(--accent);
+}
+.t-head-title {
+  color: var(--muted);
+}
+.t-back {
+  margin-left: auto;
+  color: var(--accent);
+}
+.t-main {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 20px max(16px, 3vw) 48px;
+}
+.t-intro {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(240px, 1fr);
+  gap: 20px;
+  align-items: center;
+  margin-bottom: 16px;
+}
+.t-intro h1 {
+  margin: 0 0 6px;
+  font-size: 26px;
+}
+.t-intro p {
+  margin: 0;
+  color: var(--muted);
+}
+.t-drop {
+  position: relative;
+  display: grid;
+  place-items: center;
+  gap: 2px;
+  padding: 22px;
+  border: 2px dashed var(--line);
+  border-radius: 12px;
+  background: var(--panel);
+  text-align: center;
+  cursor: pointer;
+}
+.t-drop:focus-within,
+.t-drop.over {
+  border-color: var(--accent);
+}
+.t-drop input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+.t-drop span {
+  color: var(--muted);
+}
+.t-errors {
+  margin: 0 0 16px;
+  padding: 10px 14px 10px 30px;
+  border-radius: 8px;
+  background: var(--help-bg);
+  color: var(--help);
+}
+.t-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+.t-toolbar label {
+  display: grid;
+  gap: 4px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.t-toolbar select {
+  min-width: 180px;
+  padding: 7px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+}
+.t-spacer {
+  flex: 1;
+}
+.t-button {
+  padding: 8px 14px;
+  border: 0;
+  border-radius: 8px;
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-weight: 600;
+  cursor: pointer;
+}
+.t-button.t-quiet {
+  background: transparent;
+  color: var(--muted);
+  border: 1px solid var(--line);
+}
+.t-tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 12px;
+  margin-bottom: 16px;
+}
+.t-tile {
+  padding: 12px 16px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--panel);
+}
+.t-tile strong {
+  display: block;
+  font-size: 22px;
+}
+.t-tile span {
+  color: var(--muted);
+  font-size: 12px;
+}
+.t-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 380px);
+  gap: 16px;
+  align-items: start;
+}
+.t-grid-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--panel);
+}
+.t-grid {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+.t-grid th,
+.t-grid td {
+  padding: 6px;
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+  vertical-align: top;
+}
+.t-grid thead th {
+  min-width: 110px;
+  font-weight: 600;
+}
+.t-grid th small {
+  display: block;
+  color: var(--muted);
+  font-weight: 400;
+}
+.t-grid tbody th {
+  position: sticky;
+  left: 0;
+  min-width: 130px;
+  background: var(--panel);
+}
+.t-qnum {
+  color: var(--accent);
+}
+.t-cell {
+  display: grid;
+  gap: 1px;
+  width: 100%;
+  min-height: 52px;
+  padding: 6px 8px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  text-align: left;
+  cursor: pointer;
+  background: transparent;
+}
+.t-cell .t-icon {
+  font-weight: 800;
+}
+.t-cell small {
+  color: var(--muted);
+}
+.t-cell.passed,
+.t-status.passed,
+.t-key.passed {
+  background: var(--ok-bg);
+  color: var(--ok);
+}
+.t-cell.started,
+.t-status.started,
+.t-key.started {
+  background: var(--work-bg);
+  color: var(--work);
+}
+.t-cell.help,
+.t-status.help,
+.t-key.help {
+  background: var(--help-bg);
+  color: var(--help);
+}
+.t-cell.none,
+.t-status.none,
+.t-key.none {
+  color: var(--none);
+}
+.t-cell.active,
+.t-cell:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.t-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 10px 0 18px;
+  font-size: 12px;
+}
+.t-key {
+  padding: 3px 8px;
+  border-radius: 6px;
+}
+.t-help h2,
+.t-detail h2 {
+  margin: 0 0 8px;
+  font-size: 16px;
+}
+.t-help ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.t-help li {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--line);
+}
+.t-help li span {
+  color: var(--muted);
+}
+.t-link {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  cursor: pointer;
+  text-align: left;
+}
+.t-detail {
+  position: sticky;
+  top: 16px;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--panel);
+  max-height: calc(100vh - 32px);
+  overflow: auto;
+}
+.t-detail-quest {
+  margin: 0 0 8px;
+  color: var(--muted);
+}
+.t-status {
+  display: inline-block;
+  margin: 0 0 12px;
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-weight: 600;
+}
+.t-detail dl {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 4px 12px;
+  margin: 0 0 14px;
+}
+.t-detail dt {
+  color: var(--muted);
+}
+.t-detail dd {
+  margin: 0;
+}
+.t-detail h3 {
+  margin: 0 0 6px;
+  font-size: 13px;
+}
+.t-code {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: var(--code-bg);
+  color: #d5deef;
+  font: 12px/1.6 var(--mono);
+  overflow-x: auto;
+}
+.t-code .code-line {
+  display: block;
+  min-height: 1.6em;
+}
+.syn-comment {
+  color: #7f8ea8;
+}
+.syn-keyword,
+.syn-type {
+  color: #c7a0ff;
+}
+.syn-number,
+.syn-constant {
+  color: #ffbf7a;
+}
+.syn-string {
+  color: #a6dd8f;
+}
+.syn-builtin,
+.syn-function {
+  color: #7fc4ff;
+}
+.t-muted {
+  color: var(--muted);
+}
+.t-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+}
+@media (max-width: 900px) {
+  .t-intro,
+  .t-layout {
+    grid-template-columns: 1fr;
+  }
+  .t-detail {
+    position: static;
+    max-height: none;
+  }
+}
+@media (max-width: 520px) {
+  .t-head-title {
+    display: none;
+  }
+  .t-toolbar select {
+    min-width: 0;
+    width: 100%;
+  }
+  .t-toolbar label {
+    flex: 1 1 100%;
+  }
+}

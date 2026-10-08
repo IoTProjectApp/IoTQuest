@@ -77,8 +77,15 @@ export function renderLabPanel(tab, ctx) {
       ]
         .map((s) => '<div>✓ ' + s + '</div>')
         .join('') +
-      '</div><p class="weather-readings-note">Virtual calibrated sensors, weather APIs, networking helpers and motor drivers need physical replacements. The package explains 3.3 V logic, resistors and external actuator power.</p></div>';
+      '</div><p class="weather-readings-note">Virtual calibrated sensors, weather APIs, networking helpers and motor drivers need physical replacements. The package explains 3.3 V logic, resistors and external actuator power.</p>' +
+      '<section class="handin" aria-labelledby="handinTitle"><div><h3 id="handinTitle">Hand in your progress</h3><p>Download a progress report for your teacher: the quests you have passed, test attempts, hints used, where you are up to in the Guide, and your code. It is saved as a file on this device; nothing is sent online.</p></div><div class="handin-form"><label>Your name<input id="reportName" maxlength="80" autocomplete="name" value="' +
+      esc(ctx.reportName) +
+      '"></label><label><span>Class code <small>(optional)</small></span><input id="reportClass" maxlength="40" value="' +
+      esc(ctx.classCode) +
+      '"></label><button class="primary" id="downloadProgress">Download progress report</button></div><p class="weather-readings-note">Teachers: open the <a href="./teacher.html" target="_blank" rel="noopener">class progress view</a> and add your students’ reports.</p></section></div>';
     $('downloadPackage').onclick = ctx.exportProject;
+    $('downloadProgress').onclick = () =>
+      ctx.downloadProgress($('reportName').value, $('reportClass').value);
     $('importPackage').onclick = ctx.importProject;
   }
 }

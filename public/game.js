@@ -32,6 +32,7 @@ import { explainCode, removeExplanations, hasExplanations } from './code-explain
 import { readProject, ImportError, IMPORT_LIMITS, PROJECT_FORMAT } from './project-import.js';
 import { formatCode as formatSource, FormatError, INDENT } from './code-format.js';
 import { coachSteps } from './code-coach.js';
+import { buildProgressReport, progressFileName } from './progress-report.js';
 const $ = (id) => document.getElementById(id);
 const STORAGE_KEY = 'iotquest-v1',
   TICK_MS = 200,
@@ -741,7 +742,9 @@ function renderBench() {
 // The step-by-step coding guide: explains each part of the program as the student writes it,
 // checks each step against the code, and reveals hints one at a time.
 let coachTimer = null;
-const coachProgress = {};
+// Hints and finished explanation steps are saved with the project (they appear in progress
+// reports); the step on screen is remembered only for this session.
+const coachStep = {};
 function renderCoach() {
   const el = $('coach'),
     button = $('coachBtn');
@@ -756,8 +759,8 @@ function renderCoach() {
   if (el.hidden) return;
   const devices = project().devices.length ? project().devices : planned(),
     steps = coachSteps(mission(), state.language, devices, state.board),
-    key = activeKey() + ':' + state.language,
-    progress = (coachProgress[key] ??= { seen: {}, hints: {}, step: null }),
+    key = state.activeLocation + ':' + activeKey() + ':' + state.language,
+    progress = ((project().coach ??= {})[state.language] ??= { seen: {}, hints: {} }),
     source = code(),
     results = steps.map((step) =>
       step.manual ? { done: !!progress.seen[step.key] } : step.check(source),
@@ -767,7 +770,7 @@ function renderCoach() {
     // finished step shows its explanation and tick before Next.
     index = Math.min(
       steps.length - 1,
-      (progress.step ??= firstOpen < 0 ? steps.length - 1 : firstOpen),
+      (coachStep[key] ??= firstOpen < 0 ? steps.length - 1 : firstOpen),
     ),
     step = steps[index],
     result = results[index],
@@ -851,7 +854,7 @@ function renderCoach() {
       '</div></div>',
   );
   const go = (i) => {
-    progress.step = Math.max(0, Math.min(steps.length - 1, i));
+    coachStep[key] = Math.max(0, Math.min(steps.length - 1, i));
     renderCoach();
   };
   document
@@ -2723,6 +2726,22 @@ function canEdit(role) {
   toast('Local role mode: ' + role + ' owns this action. Switch roles in Advanced tools.');
   return false;
 }
+// A progress report for the teacher's class view: quests, attempts, hints, guide steps and code.
+function downloadProgress(student, classCode) {
+  student = String(student || '').trim();
+  classCode = String(classCode || '').trim();
+  if (!student) {
+    toast('Type your name first, so your teacher knows whose report it is.');
+    return false;
+  }
+  state.reportName = student;
+  state.classCode = classCode;
+  save();
+  const report = buildProgressReport(state, { student, classCode });
+  download(progressFileName(report), JSON.stringify(report, null, 2), 'application/json');
+  toast('Progress report downloaded. Hand the file in to your teacher.');
+  return report;
+}
 function download(name, text, type = 'text/plain') {
   const url = URL.createObjectURL(new Blob([text], { type })),
     a = document.createElement('a');
@@ -2830,6 +2849,9 @@ function labContext() {
     modal,
     exportProject,
     importProject: chooseImportFile,
+    reportName: state.reportName || (state.name !== 'Technician' ? state.name : ''),
+    classCode: state.classCode || '',
+    downloadProgress,
     repairSensor: (id) => {
       stop(false);
       const d = project().devices.find((d) => d.id === id);

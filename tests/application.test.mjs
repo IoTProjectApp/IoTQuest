@@ -45,6 +45,7 @@ import {
 } from '../public/project-import.js';
 import { formatCode as formatSource, FormatError, INDENT } from '../public/code-format.js';
 import { coachSteps } from '../public/code-coach.js';
+import { buildProgressReport, progressFileName } from '../public/progress-report.js';
 const html = await readFile('public/game.html', 'utf8'),
   source = await readFile('public/game.js', 'utf8');
 class Element {
@@ -288,6 +289,8 @@ function harness(
     FormatError,
     INDENT,
     coachSteps,
+    buildProgressReport,
+    progressFileName,
     structuredClone,
     Blob,
     URL,
@@ -308,7 +311,7 @@ function harness(
   });
   vm.runInContext(
     source.replace(/^import [^;]*;\n/gm, '') +
-      '\nglobalThis.api={state,project,mission,selectMission,installDialog,switchTab,testSolution,run,stop,tick,changeBoard,move,code,loadExample,renderCode,renderMission,getOutputs:()=>outputs,getTests:()=>testResults,getPassed:()=>currentPassed,getRunning:()=>running,labState,startFault,exitFault,setClockSpeed,setDifficulty,pauseExecution,stepExecution,resumeExecution,enterLocation,resumeLegacy,returnToGlobe,applyLocalWeather,setWeatherMode,advanceWorld,refreshWeather,missionKey,getPlotSamples:()=>plotSamples,previewImport,exportManifest,startBugHunt,getActiveFault:()=>activeFault,setLayout,renderCoach,labContext,exportProject};',
+      '\nglobalThis.api={state,project,mission,selectMission,installDialog,switchTab,testSolution,run,stop,tick,changeBoard,move,code,loadExample,renderCode,renderMission,getOutputs:()=>outputs,getTests:()=>testResults,getPassed:()=>currentPassed,getRunning:()=>running,labState,startFault,exitFault,setClockSpeed,setDifficulty,pauseExecution,stepExecution,resumeExecution,enterLocation,resumeLegacy,returnToGlobe,applyLocalWeather,setWeatherMode,advanceWorld,refreshWeather,missionKey,getPlotSamples:()=>plotSamples,previewImport,exportManifest,startBugHunt,getActiveFault:()=>activeFault,setLayout,renderCoach,downloadProgress,labContext,exportProject};',
     ctx,
   );
   return {
@@ -1415,4 +1418,29 @@ test('the guide walks through the program step by step and checks the student’
   assert.equal(coach().hidden, true);
   h.document.getElementById('coachBtn').click();
   assert.equal(coach().hidden, false);
+});
+
+test('students hand in a progress report with their quests, attempts and hints', () => {
+  const h = harness();
+  installAndWire(h, 0);
+  h.api.switchTab('code');
+  h.document.getElementById('coachHint').click();
+  assert.equal(h.api.project().coach.cpp.hints.pins, 1, 'hints are saved with the project');
+  h.api.testSolution();
+  h.api.switchTab('export');
+  assert.ok(h.document.getElementById('downloadProgress'));
+  // A name is required.
+  assert.equal(h.api.downloadProgress('  ', '7B'), false);
+  const report = h.api.downloadProgress('Amira', '7B');
+  assert.equal(h.api.state.reportName, 'Amira');
+  assert.equal(h.api.state.classCode, '7B');
+  const first = report.quests[0];
+  assert.equal(first.title, 'Light the Path');
+  assert.equal(first.status, 'started');
+  assert.equal(first.attempts, 1);
+  assert.equal(first.hints, 1);
+  assert.equal(first.stuck, 'Name your pins');
+  h.api.loadExample();
+  h.api.testSolution();
+  assert.equal(h.api.downloadProgress('Amira', '7B').quests[0].status, 'passed');
 });

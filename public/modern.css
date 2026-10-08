@@ -2529,3 +2529,37 @@ dialog::backdrop {
 .coach-nav button:disabled {
   opacity: 0.4;
 }
+
+/* Hand in your progress (Package tab). */
+.handin {
+  margin-top: 20px;
+  padding-top: 18px;
+  border-top: 1px solid var(--line, #e3e8f1);
+}
+.handin h3 {
+  margin: 0 0 4px;
+}
+.handin p {
+  margin: 0 0 10px;
+  font-size: 12px;
+}
+.handin-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 10px;
+}
+.handin-form label {
+  display: grid;
+  gap: 4px;
+  font-size: 12px;
+}
+.handin-form input {
+  min-width: 180px;
+  padding: 8px 10px;
+  border: 1px solid var(--line, #dce3f0);
+  border-radius: 8px;
+  background: var(--white, #fff);
+  color: var(--ink);
+  font: inherit;
+}

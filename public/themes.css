@@ -757,3 +757,11 @@ html[data-theme='dark'] .split-handle:focus-visible::after,
 html[data-theme='dark'] .split-handle.dragging::after {
   background: #7d8ef4;
 }
+html[data-theme='dark'] .day-toggle {
+  background: #1a263b;
+  border-color: #334159;
+}
+html[data-theme='dark'] .day-toggle[aria-pressed='true'] {
+  background: #0e1526;
+  border-color: #46557a;
+}

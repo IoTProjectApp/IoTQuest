@@ -1309,3 +1309,33 @@ test('the world/workbench divider resizes by keyboard, is clamped and saved', ()
     '85',
   );
 });
+test('the Day / Night switch sets the light, leaves live weather and moves the daily-cycle clock', async () => {
+  const h = harness();
+  h.api.state.travelScreen = false;
+  const toggle = h.document.getElementById('dayNightToggle');
+  toggle.click();
+  assert.equal(h.api.state.env.light, 4);
+  assert.equal(h.document.getElementById('dayLabel').textContent, 'Nighttime');
+  assert.equal(toggle.attrs['aria-pressed'], 'true');
+  for (let i = 0; i < 5; i++) h.advanceTimer();
+  assert.ok(h.api.state.env.light < 44, 'night holds while time passes');
+  toggle.click();
+  assert.equal(h.api.state.env.light, 85);
+  assert.equal(h.document.getElementById('dayLabel').textContent, 'Daytime');
+  // At a destination with live weather, the switch moves to Practice Weather first.
+  h.api.state.freeExploration = true;
+  await h.api.enterLocation('kyoto');
+  h.api.setWeatherMode('live');
+  h.document.getElementById('dayNightToggle').click();
+  assert.equal(h.api.state.weatherMode, 'practice');
+  assert.equal(h.api.state.env.light, 4);
+  // The clock moves with the switch (and the accelerated daily cycle follows it).
+  h.api.setClockSpeed(60);
+  const lab = h.api.labState(),
+    hour = () => Math.round((lab.startHour + lab.elapsedMs / 3600000) % 24) % 24;
+  for (let i = 0; i < 2; i++) {
+    h.document.getElementById('dayNightToggle').click();
+    const night = h.document.getElementById('dayLabel').textContent === 'Nighttime';
+    assert.equal(hour(), night ? 22 : 12);
+  }
+});

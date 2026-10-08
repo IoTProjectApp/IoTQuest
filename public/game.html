@@ -235,7 +235,13 @@
                     ><button data-view="garden">Garden</button>
                   </div>
                   <div class="world-status">
-                    <span id="dayIcon">☀</span> <span id="dayLabel">Daytime</span
+                    <button
+                      class="day-toggle"
+                      id="dayNightToggle"
+                      aria-pressed="false"
+                      title="Switch between day and night"
+                    >
+                      <span id="dayIcon">☀</span> <span id="dayLabel">Daytime</span></button
                     ><span class="sep"></span
                     ><select id="clockSpeed" aria-label="Simulation speed">
                       <option value="0">Paused</option>

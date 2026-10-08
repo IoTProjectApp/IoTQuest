@@ -2116,3 +2116,26 @@ dialog::backdrop {
 .hunt-card span {
   color: #e0a23b;
 }
+.day-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 9px;
+  font: inherit;
+  color: inherit;
+  background: #f7f9fc;
+  border: 1px solid #e0e6f0;
+  border-radius: 7px;
+  cursor: pointer;
+}
+.day-toggle:hover {
+  border-color: #b8c4f0;
+}
+.day-toggle[aria-pressed='true'] {
+  color: #dfe5ff;
+  background: #27324d;
+  border-color: #3a4870;
+}
+.day-toggle[aria-pressed='true'] #dayIcon {
+  color: #e9dda8;
+}

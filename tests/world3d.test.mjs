@@ -389,3 +389,80 @@ test('travel globe pauses while inactive, falls back on context loss, rebuilds o
     frames.restore();
   }
 });
+test('clouds appear with cloud cover, turn grey in storms and never cross the property', async () => {
+  const { addClouds, updateClouds } = await import('../public/clouds.js');
+  const { createWorldModel } = await import('../public/world-model.js');
+  const model = createWorldModel(),
+    clouds = addClouds(model),
+    visible = () => clouds.filter((c) => c.puffs[0].mesh.opacity > 0).length;
+  updateClouds(clouds, { cloud: 0 }, 0, false);
+  assert.equal(visible(), 0);
+  updateClouds(clouds, { cloud: 40 }, 0, false);
+  const few = visible();
+  updateClouds(clouds, { cloud: 100 }, 0, false);
+  assert.ok(few > 0 && few < visible() && visible() === clouds.length);
+  assert.ok(clouds.every((c) => c.puffs.length >= 5));
+  const clear = clouds[0].puffs[1].mesh.color;
+  updateClouds(clouds, { cloud: 100, rain: 90 }, 0, false);
+  assert.notEqual(clouds[0].puffs[1].mesh.color, clear);
+  // From every camera angle and over a long, windy simulated time, every puff stays beyond the
+  // property's corners on the far side from the camera, so it can never hide the house.
+  for (let yaw = 0; yaw < Math.PI * 2; yaw += 0.4)
+    for (let t = 0; t < 600; t += 13) {
+      updateClouds(clouds, { cloud: 100, wind: 60 }, t, false, yaw);
+      for (const { mesh } of clouds.flatMap((c) => c.puffs)) {
+        const [x, , z] = mesh.pos;
+        assert.ok(Math.hypot(x, z) > 20, 'cloud too close to the property');
+        assert.ok(x * Math.sin(yaw) + z * Math.cos(yaw) < -15, 'cloud on the camera side');
+      }
+    }
+  // Reduced motion keeps clouds still.
+  updateClouds(clouds, { cloud: 100 }, 0, true);
+  const still = clouds.map((c) => c.puffs[0].mesh.pos[0]);
+  updateClouds(clouds, { cloud: 100 }, 99, true);
+  assert.deepEqual(
+    clouds.map((c) => c.puffs[0].mesh.pos[0]),
+    still,
+  );
+});
+test('the sky shows the sun by day and the moon and stars at night, always behind the property', async () => {
+  const { addSky, updateSky } = await import('../public/sky.js');
+  const { createWorldModel } = await import('../public/world-model.js');
+  const sky = addSky(createWorldModel()),
+    starsShown = () => sky.stars.filter((s) => s.mesh.opacity > 0).length;
+  updateSky(sky, 1, 0, false);
+  assert.ok(sky.sun.mesh.opacity > 0.9 && sky.moon.mesh.opacity === 0 && starsShown() === 0);
+  updateSky(sky, 0, 0, false);
+  assert.ok(sky.sun.mesh.opacity === 0 && sky.moon.mesh.opacity > 0.9);
+  assert.equal(starsShown(), sky.stars.length);
+  for (let yaw = 0; yaw < Math.PI * 2; yaw += 0.5) {
+    updateSky(sky, 0, 0, false, yaw);
+    for (const mesh of [sky.sun.mesh, sky.moon.mesh, ...sky.stars.map((s) => s.mesh)])
+      assert.ok(mesh.pos[0] * Math.sin(yaw) + mesh.pos[2] * Math.cos(yaw) < -20);
+  }
+});
+test('weather dims the night sky and storms flash with lightning', async () => {
+  const { addSky, updateSky, lightningFlash } = await import('../public/sky.js');
+  const { createWorldModel } = await import('../public/world-model.js');
+  const sky = addSky(createWorldModel()),
+    stars = () => sky.stars.reduce((sum, s) => sum + s.mesh.opacity, 0);
+  updateSky(sky, 0, 0, true, 0.32, { cloud: 0 });
+  const clearStars = stars(),
+    clearMoon = sky.moon.mesh.opacity;
+  assert.ok(clearMoon > 0.9 && sky.moon.halo.opacity > 0);
+  assert.ok(sky.moon.craters.every((c) => c.mesh.opacity === clearMoon));
+  updateSky(sky, 0, 0, true, 0.32, { cloud: 80 });
+  assert.ok(stars() < clearStars && sky.moon.mesh.opacity < clearMoon);
+  updateSky(sky, 0, 0, true, 0.32, { cloud: 100, rain: 60 });
+  assert.equal(stars(), 0);
+  assert.ok(sky.moon.mesh.opacity < 0.1);
+  // Lightning only in storms, never with reduced motion, and only briefly.
+  const storm = { rain: 80, wind: 50, cloud: 95 };
+  assert.equal(lightningFlash({ rain: 20, wind: 50 }, 0.05, false), 0);
+  assert.equal(lightningFlash(storm, 0.05, true), 0);
+  assert.equal(lightningFlash(storm, 0.05, false), 1);
+  const lit = Array.from({ length: 670 }, (_, i) => lightningFlash(storm, i / 100, false)).filter(
+    Boolean,
+  ).length;
+  assert.ok(lit > 0 && lit < 30);
+});

@@ -2,6 +2,8 @@
 // labelled in the location card; these are adapted homes, not national archetypes.
 import { buildDestinationModel } from './regional-assets.js';
 import { createWorldModel } from './world-model.js';
+import { addClouds } from './clouds.js';
+import { addSky } from './sky.js';
 export function createRegionalModel(id) {
   const destination = buildDestinationModel(id);
   if (destination) return destination;
@@ -9,6 +11,8 @@ export function createRegionalModel(id) {
   m.region = id || 'legacy';
   m.floorHeight = (x, z) => (x > -13.1 && x < 1.4 && z > -11 && z < -1 ? 0.23 : 0);
   if (!id || id === 'legacy') {
+    m.clouds = addClouds(m);
+    m.sky = addSky(m);
     m.pitchedRoof('#a8735a', { ridge: '#8b5d48' });
     return m;
   }
@@ -183,12 +187,8 @@ export function createRegionalModel(id) {
   m.windObjects = m.objects
     .filter((o) => o.shape === 'sphere' && o.pos[1] > 1.5 && !o.actor && !o.device)
     .map((o) => ({ mesh: o, base: [...o.pos] }));
-  const clouds = [];
-  for (let i = 0; i < 8; i++)
-    clouds.push(
-      sphere(-8 + i * 3.2, 6.4 + (i % 2) * 0.4, -9 + (i % 3) * 4, 1.4, '#dce5e1', { opacity: 0 }),
-    );
-  m.clouds = clouds;
+  m.clouds = addClouds(m);
+  m.sky = addSky(m);
   m.wetSurface = box(0, 0.025, 3, 29, 0.005, 18, '#6c9296', { opacity: 0 });
   return m;
 }

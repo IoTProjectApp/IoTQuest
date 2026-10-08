@@ -7,6 +7,7 @@ export function createWorldModel() {
     lamps = [],
     actors = [],
     roofs = [],
+    windows = [],
     dynamic = {};
   const mesh = (shape, pos, size, color, extra = {}) => {
     const m = { shape, pos: [...pos], size: [...size], color, rotation: [0, 0, 0], ...extra };
@@ -156,7 +157,7 @@ export function createWorldModel() {
   wallH(-8.2, -3.4, -1, -5.8, 0.55);
   wallH(-3.4, 1.4, -1, -1.1, 0.55);
   for (const x of [-11.5, -6.7, -1.9]) {
-    box(x, 1.1, -10.88, 1.35, 0.78, 0.065, '#8abec5', { opacity: 0.68 });
+    windows.push(box(x, 1.1, -10.88, 1.35, 0.78, 0.065, '#8abec5', { opacity: 0.68 }));
     box(x, 1.1, -10.81, 0.06, 0.85, 0.1, '#fbf1dc');
   }
   // Bedroom: upholstered bed, duvet, pillows, bedside chest and blinds.
@@ -444,6 +445,7 @@ export function createWorldModel() {
     lamps,
     actors,
     roofs,
+    windows,
     dynamic,
     rain,
     roof,

@@ -13,6 +13,8 @@ import {
 } from './world-math.js';
 import { createWorldModel } from './world-model.js';
 import { createRegionalModel } from './regions.js';
+import { updateClouds } from './clouds.js';
+import { updateSky, lightningFlash } from './sky.js';
 const VERTEX = `attribute vec3 aPosition; attribute vec3 aNormal; uniform mat4 uModel; uniform mat4 uViewProjection; uniform mat3 uNormal; varying vec3 vNormal; varying vec3 vWorld; void main(){vec4 world=uModel*vec4(aPosition,1.0);vWorld=world.xyz;vNormal=normalize(uNormal*aNormal);gl_Position=uViewProjection*world;}`;
 const FRAGMENT = `precision mediump float; varying vec3 vNormal; varying vec3 vWorld; uniform vec4 uColor; uniform float uDay; uniform float uEmission; uniform float uWet; uniform vec3 uEye; uniform vec3 uFog; uniform vec3 uLights[8]; uniform vec3 uLightColor[8]; void main(){vec3 n=normalize(vNormal);float sun=max(0.0,dot(n,normalize(vec3(-0.5,1.0,0.65))));float ambient=mix(0.19,0.68,uDay);vec3 lit=uColor.rgb*(ambient+sun*mix(0.12,0.37,uDay));for(int i=0;i<8;i++){float d=distance(vWorld,uLights[i]);float fall=max(0.0,1.0-d/4.0);lit+=uColor.rgb*uLightColor[i]*fall*fall*1.7;}lit=mix(lit,lit*0.83+vec3(0.03,0.07,0.09),uWet*max(0.0,n.y)*0.3);lit=mix(lit,uColor.rgb*1.15,clamp(uEmission,0.0,1.0));float fog=smoothstep(38.0,90.0,distance(vWorld,uEye));gl_FragColor=vec4(mix(lit,uFog,fog*.48),uColor.a);}`;
 // Parsed colours are cached (read-only) because objects are recoloured every frame.
@@ -607,11 +609,27 @@ export class World3D {
         item.base[0] +
         (reduced ? 0 : Math.sin(t * 1.2 + item.base[2]) * 0.12 * Math.min(2, (env.wind || 0) / 20));
     }
-    for (const cloud of this.model.clouds || []) cloud.opacity = ((env.cloud || 0) / 100) * 0.55;
+    // Day and night: sun, moon and stars, clouds that darken, and windows that glow at night.
+    const daylight = clamp((env.light ?? 70) / 65, 0, 1);
+    this.flash = lightningFlash(env, this.realTime ?? t, reduced);
+    updateClouds(this.model.clouds || [], env, t, reduced, this.yaw, daylight);
+    // Clouds light up from inside during a lightning flash.
+    for (const cloud of this.model.clouds || [])
+      for (const { mesh } of cloud.puffs) mesh.emission = this.flash * 0.7;
+    updateSky(this.model.sky, daylight, t, reduced, this.yaw, env);
+    for (const pane of this.model.windows || []) {
+      const lit = daylight < 0.35;
+      pane.color = lit ? '#ffd98a' : '#8abec5';
+      pane.emission = lit ? 0.75 : 0;
+      pane.opacity = lit ? 0.95 : 0.68;
+    }
     if (this.model.wetSurface) this.model.wetSurface.opacity = (env.wetness || 0) * 0.13;
     for (let i = 0; i < this.model.rain.length; i++) {
       const drop = this.model.rain[i];
-      drop.opacity = env.rain > 0 ? 0.25 + env.rain / 200 : 0;
+      // At night, rain catches the light so it stays visible against the dark sky.
+      drop.opacity = env.rain > 0 ? 0.25 + env.rain / 200 + (1 - daylight) * 0.2 : 0;
+      drop.color = daylight < 0.5 ? '#c9dcf2' : '#b9dbe5';
+      drop.emission = (1 - daylight) * 0.45 + (this.flash || 0) * 0.5;
       drop.pos[1] = reduced ? 2.5 : 1 + ((((i * 0.47 - t * 6) % 5) + 5) % 5);
     }
     const door = this.model.dynamic.gate;
@@ -635,6 +653,7 @@ export class World3D {
   render(t, dt) {
     const gl = this.gl,
       s = this.getState();
+    this.realTime = t;
     this.animate(s, t, dt);
     const width = Math.max(1, this.canvas.clientWidth),
       height = Math.max(1, this.canvas.clientHeight),
@@ -667,8 +686,14 @@ export class World3D {
       ];
     this.eye = eye;
     this.matrix = multiply(perspective(0.78, width / height), lookAt(eye, this.currentTarget));
-    const day = clamp(s.env.light / 65, 0.04, 1),
-      fog = [0.11 + day * 0.65, 0.16 + day * 0.63, 0.23 + day * 0.5];
+    // Lightning briefly lights the whole scene, most visibly at night.
+    const flash = this.flash || 0,
+      day = Math.max(clamp(s.env.light / 65, 0.04, 1), flash * 0.85),
+      // Sky colour: deep navy at night to a soft sky blue by day (also used as distance fog);
+      // a flash washes it towards pale violet-white.
+      fog = [0.09 + day * 0.6, 0.13 + day * 0.68, 0.22 + day * 0.7].map(
+        (c, i) => c + ([0.85, 0.86, 0.95][i] - c) * flash * 0.7,
+      );
     gl.clearColor(...fog, 1);
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
     gl.useProgram(this.program);

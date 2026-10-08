@@ -1506,13 +1506,37 @@ function stop(notify = false) {
     toast('Simulation stopped. All outputs are off.');
   }
 }
+const isNight = () =>
+  currentLocation() && state.weatherMode === 'live' && typeof state.env.isDay === 'boolean'
+    ? !state.env.isDay
+    : state.env.light < 44;
+// Day / Night switch: sets the simulated light level, so students can check that their
+// circuits respond, and moves the simulated clock to 12:00 or 22:00 so the clock, the daily
+// cycle and resident routines agree. Live weather follows the real sky, so it switches to
+// Practice first.
+function setDayNight(night) {
+  if (currentLocation() && state.weatherMode === 'live') {
+    setWeatherMode('practice');
+    toast('Switched to Practice Weather so you can choose day or night.');
+  }
+  const lab = labState(),
+    hoursRun = lab.elapsedMs / 3600000;
+  lab.startHour = ((((night ? 22 : 12) - hoursRun) % 24) + 24) % 24;
+  state.env = { ...state.env, light: night ? 4 : 85, isDay: !night };
+  renderEnvironment();
+  updateReadings();
+  renderEffects();
+  updateClockLabel();
+  save();
+  toast(night ? '☾ Night: it is dark outside. Do your lights come on?' : '☀ Day: the sun is up.');
+}
+$('dayNightToggle').onclick = () => setDayNight(!isNight());
 function updateReadings() {
-  const dark =
-    currentLocation() && state.weatherMode === 'live' && typeof state.env.isDay === 'boolean'
-      ? !state.env.isDay
-      : state.env.light < 44;
+  const dark = isNight();
   $('dayLabel').textContent = dark ? 'Nighttime' : 'Daytime';
   $('dayIcon').textContent = dark ? '☾' : '☀';
+  $('dayNightToggle').setAttribute('aria-pressed', String(dark));
+  $('dayNightToggle').title = dark ? 'Switch to day' : 'Switch to night';
   for (const [signal, meta] of Object.entries(envMeta)) {
     if ($('value-' + signal))
       $('value-' + signal).textContent = Math.round(state.env[signal]) + meta[2];

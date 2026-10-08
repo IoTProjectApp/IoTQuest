@@ -1,5 +1,7 @@
 import { extraLocations } from './destination-catalog.js';
 import { createWorldModel } from './world-model.js';
+import { addClouds } from './clouds.js';
+import { addSky } from './sky.js';
 // Reusable geometry builders: courts, round enclosures, roof forms and planting.
 // Each destination has an explicit layout/material/style configuration.
 export function buildDestinationModel(id) {
@@ -334,11 +336,8 @@ export function buildDestinationModel(id) {
   m.windObjects = m.objects
     .filter((o) => o.shape === 'sphere' && o.pos[1] > 1.5 && !o.actor && !o.architectureMesh)
     .map((o) => ({ mesh: o, base: [...o.pos] }));
-  m.clouds = [];
-  for (let i = 0; i < 8; i++)
-    m.clouds.push(
-      sphere(-8 + i * 3.2, 6.4 + (i % 2) * 0.4, -9 + (i % 3) * 4, 1.4, '#dce5e1', { opacity: 0 }),
-    );
+  m.clouds = addClouds(m);
+  m.sky = addSky(m);
   m.wetSurface = box(0, 0.025, 3, 29, 0.005, 18, '#6c9296', { opacity: 0 });
   return m;
 }

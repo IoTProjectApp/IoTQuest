@@ -12,6 +12,7 @@ import { localSkyDate, DEFAULT_OBSERVER } from './astronomy.js';
 import { Runtime } from './runtime.js';
 import { World3D } from './world3d.js';
 import { toWorld, fromWorld } from './world-math.js';
+import { ADC_SIGNALS, ADC_SCALE } from './signals.js';
 import { locations, locationById, adaptMissions, progressForLocation } from './locations.js';
 import { WeatherService, advanceEnvironment } from './weather.js';
 import { advancedMenu } from './advanced-tools.js';
@@ -47,7 +48,6 @@ import { understandingQuestions, answerQuestion, understandingScore } from './un
 const $ = (id) => document.getElementById(id);
 const STORAGE_KEY = 'iotquest-v1',
   TICK_MS = 200,
-  ADC_SCALE = 40.95,
   ADVANCED_COMPONENT_XP = 150,
   EVIDENCE_LIMIT = 50;
 const areas = [
@@ -1820,7 +1820,7 @@ function updateReadings() {
       .map((d) => {
         let raw =
           lastInputs[d.pin] ??
-          (d.analog && ['light', 'soil', 'tank', 'rain', 'pot', 'pond'].includes(d.signal)
+          (d.analog && ADC_SIGNALS.includes(d.signal)
             ? Math.round(state.env[d.signal] * ADC_SCALE)
             : state.env[d.signal]);
         return (
@@ -3034,16 +3034,21 @@ function renderConversation() {
     '</p>' +
     '<div class="chat-messages" id="chatMessages" role="log" aria-live="polite" aria-relevant="additions text" aria-label="Conversation">' +
     chat.messages
-      .map(
-        (m) =>
-          '<div class="chat-message ' +
+      .map((m) => {
+        // "from-" prefix: bare .resident/.technician are the absolutely positioned map sprites.
+        const name = m.speaker === 'resident' ? chat.resident : state.name || 'You';
+        return (
+          '<div class="chat-message from-' +
           m.speaker +
-          '"><strong>' +
-          esc(m.speaker === 'resident' ? chat.resident : state.name) +
+          '"><span class="chat-avatar" aria-hidden="true">' +
+          esc(name.trim().charAt(0).toUpperCase()) +
+          '</span><div class="chat-bubble"><strong>' +
+          esc(name) +
           '</strong><p>' +
           esc(m.text) +
-          '</p></div>',
-      )
+          '</p></div></div>'
+        );
+      })
       .join('') +
     '</div>' +
     '<div class="chat-questions" aria-label="Suggested questions">' +
@@ -3634,18 +3639,21 @@ function projectWorldLabels(engine) {
         ' bright catalogue stars visible. North 0° · east 90°.';
     }
   }
-  const place = (el, p) => {
+  // Labels are collected first, then declutterLabels decides which name tags fit on screen.
+  const labels = [];
+  const place = (el, p, priority) => {
     if (!el) return;
     const v = engine.project(p);
     el.style.left = v.x + 'px';
     el.style.top = v.y + 'px';
-    el.style.visibility = v.visible ? 'visible' : 'hidden';
+    if (priority === undefined) el.style.visibility = v.visible ? 'visible' : 'hidden';
+    else labels.push({ el, x: v.x, y: v.y, visible: v.visible, priority });
   };
   for (const el of document.querySelectorAll('[data-area]')) {
     const a = areas.find((a) => a[0] === el.dataset.area);
     const p = toWorld({ x: a[1], y: a[2] });
     p[1] = 1.65 + (engine.model.floorHeight?.(p[0], p[2]) || 0);
-    place(el, p);
+    place(el, p, 0);
   }
   const targets = world3d?.deviceObjects || [];
   if ($('deviceWorldTargets').dataset.signature !== targets.map((r) => r.device.id).join(',')) {
@@ -3670,7 +3678,7 @@ function projectWorldLabels(engine) {
     place($('world-target-' + r.device.id), [r.face.pos[0], r.face.pos[1] + 0.2, r.face.pos[2]]);
   const p = toWorld(state.player);
   p[1] = 1.95 + (engine.model.floorHeight?.(p[0], p[2]) || 0);
-  place($('player'), p);
+  place($('player'), p, 1);
   for (const actor of engine.model.actors) {
     if (actor.id === 'player') continue;
     const part = actor.parts.find((p) => p.shape === 'sphere' && p.local[1] === 1.27);
@@ -3685,7 +3693,37 @@ function projectWorldLabels(engine) {
               : 'samNpc',
       ),
       [part.pos[0], part.pos[1] + 0.58, part.pos[2]],
+      actor.area ? 3 : 2,
     );
+  }
+  declutterLabels(labels);
+}
+// Label sizes only change when the markup is re-rendered, so measure each element once.
+const labelSizes = new WeakMap();
+function labelBox({ el, x, y }, lift = 0) {
+  if (!labelSizes.has(el)) labelSizes.set(el, [el.offsetWidth, el.offsetHeight]);
+  const [w, h] = labelSizes.get(el),
+    // Matches the CSS anchors: area markers translate(-50%, -50%), characters (-50%, -70%).
+    top = y - lift - h * (el.classList.contains('area-marker') ? 0.5 : 0.7);
+  return { left: x - w / 2 - 2, right: x + w / 2 + 2, top: top - 2, bottom: top + h + 2, h };
+}
+const overlaps = (a, b) =>
+  a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
+// Room markers and "You" are placed first and never move. A resident's tag that would cover one
+// of them is lifted until it clears (so every room stays clickable), or hidden if it cannot.
+function declutterLabels(labels) {
+  const shown = [];
+  for (const label of labels.sort((a, b) => a.priority - b.priority)) {
+    let box = label.visible ? labelBox(label) : null,
+      lift = 0;
+    if (box && label.priority > 1)
+      while (box && shown.some((o) => overlaps(box, o)))
+        box = (lift += box.h / 2) <= box.h * 3 ? labelBox(label, lift) : null;
+    if (box) shown.push(box);
+    const visibility = box ? 'visible' : 'hidden',
+      top = label.y - lift + 'px';
+    if (label.el.style.visibility !== visibility) label.el.style.visibility = visibility;
+    if (lift) label.el.style.top = top;
   }
 }
 if (typeof $('worldCanvas')?.getContext === 'function') {

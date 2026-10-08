@@ -116,6 +116,18 @@ html[data-theme='dark'] header {
 html[data-theme='dark'] .brand {
   color: #e3eafb;
 }
+html[data-theme='dark'] .chat-topic,
+html[data-theme='dark'] .chat-avatar,
+html[data-theme='dark'] .chat-bubble strong,
+html[data-theme='dark'] .chat-questions button {
+  color: #9da8ff;
+}
+html[data-theme='dark'] .from-technician .chat-avatar {
+  color: #fff;
+}
+html[data-theme='dark'] .from-technician .chat-bubble strong {
+  color: #ffffffcc;
+}
 html[data-theme='dark'] .brand-quest {
   color: #9da8ff;
 }

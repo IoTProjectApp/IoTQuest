@@ -5,11 +5,11 @@ import {
   suggestedName,
   questDevices,
 } from './code-coach.js';
+import { ADC_SIGNALS as ADC } from './signals.js';
 // "Check your understanding": three questions shown after a quest is passed, built from the
 // quest's own rule, sensors and scenarios, so every quest has them. Every answer, right or
 // wrong, comes with an explanation.
 
-const ADC = ['light', 'soil', 'tank', 'rain', 'pot', 'pond'];
 export const UNDERSTANDING_XP = 10;
 
 // Deterministic shuffle, so a question's choices stay in the same order between visits.

@@ -1,8 +1,8 @@
 import { sectionQuests } from './section-quests.js';
 import { weatherQuests } from './weather-quests.js';
 import { guidedStarter } from './code-coach.js';
-// Sensors read through the 12-bit ADC (0–4095). Other analogue channels are calibrated units.
-export const ADC_SIGNALS = ['light', 'soil', 'tank', 'rain', 'pot', 'pond'];
+import { ADC_SIGNALS } from './signals.js';
+export { ADC_SIGNALS };
 export const components = [
   {
     id: 'wind',

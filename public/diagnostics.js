@@ -1,8 +1,9 @@
 import { analyzeCode } from './code-analysis.js';
+import { ADC_SIGNALS as ADC_LIST } from './signals.js';
 // Editor diagnostics: advisory checks of the program against the installed wiring.
 // Warnings predict a runtime error or a condition that can never change; tips flag
 // habits that matter on real hardware. Nothing here blocks Run.
-const ADC_SIGNALS = new Set(['light', 'soil', 'tank', 'rain', 'pot', 'pond']),
+const ADC_SIGNALS = new Set(ADC_LIST),
   DIGITAL_SIGNALS = new Set(['motion', 'door', 'armed', 'occupied']),
   RANGES = {
     temp: [-10, 50, '°C'],

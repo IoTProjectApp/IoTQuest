@@ -406,6 +406,8 @@
   overflow: hidden;
 }
 .world.is-3d .area-marker {
+  /* Above resident name tags (z-index 8) so room buttons always receive clicks. */
+  z-index: 10;
   border-radius: 9px;
   box-shadow: 0 3px 10px #17243b14;
 }

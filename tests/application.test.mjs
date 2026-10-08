@@ -8,6 +8,7 @@ import {
 } from '../public/conversations.js';
 import { residentsForSections, createGreetingTracker } from '../public/section-residents.js';
 import { toWorld, fromWorld } from '../public/world-math.js';
+import { ADC_SIGNALS, ADC_SCALE } from '../public/signals.js';
 import test from 'node:test';
 import { localSkyDate, DEFAULT_OBSERVER } from '../public/astronomy.js';
 import assert from 'node:assert/strict';
@@ -327,6 +328,8 @@ function harness(
     understandingQuestions,
     answerQuestion,
     understandingScore,
+    ADC_SIGNALS,
+    ADC_SCALE,
     structuredClone,
     Blob,
     URL,
@@ -347,7 +350,7 @@ function harness(
   });
   vm.runInContext(
     source.replace(/^import [^;]*;\n/gm, '') +
-      '\nglobalThis.api={state,project,mission,selectMission,installDialog,switchTab,testSolution,run,stop,tick,changeBoard,move,code,loadExample,renderCode,renderMission,getOutputs:()=>outputs,getTests:()=>testResults,getPassed:()=>currentPassed,getRunning:()=>running,labState,startFault,exitFault,setClockSpeed,setDifficulty,pauseExecution,stepExecution,resumeExecution,enterLocation,resumeLegacy,returnToGlobe,applyLocalWeather,setWeatherMode,advanceWorld,refreshWeather,missionKey,getPlotSamples:()=>plotSamples,previewImport,exportManifest,startBugHunt,getActiveFault:()=>activeFault,setLayout,renderCoach,downloadProgress,labContext,exportProject,interact,enterArea,getConversation:()=>activeConversation,getTab:()=>tab};',
+      '\nglobalThis.api={state,project,mission,selectMission,installDialog,switchTab,testSolution,run,stop,tick,changeBoard,move,code,loadExample,renderCode,renderMission,getOutputs:()=>outputs,getTests:()=>testResults,getPassed:()=>currentPassed,getRunning:()=>running,labState,startFault,exitFault,setClockSpeed,setDifficulty,pauseExecution,stepExecution,resumeExecution,enterLocation,resumeLegacy,returnToGlobe,applyLocalWeather,setWeatherMode,advanceWorld,refreshWeather,missionKey,getPlotSamples:()=>plotSamples,previewImport,exportManifest,startBugHunt,getActiveFault:()=>activeFault,setLayout,renderCoach,downloadProgress,labContext,exportProject,interact,enterArea,getConversation:()=>activeConversation,getTab:()=>tab,declutterLabels};',
     ctx,
   );
   return {
@@ -1073,6 +1076,33 @@ test('pressing E at a room installs devices even with its resident beside the la
   // Arriving next to the resident is already acknowledged, so the first step does not greet.
   h.api.move('left', 0.55);
   assert.equal(h.api.getConversation(), null);
+});
+test('resident name tags lift clear of room buttons, or hide, so rooms stay clickable', () => {
+  const h = harness();
+  const el = (kind) => ({
+    offsetWidth: 80,
+    offsetHeight: 20,
+    classList: { contains: (c) => c === kind },
+    style: {},
+  });
+  const room = { el: el('area-marker'), x: 100, y: 100, visible: true, priority: 0 },
+    // Stands on the room button: lifted above it, still visible.
+    resident = { el: el('npc'), x: 100, y: 105, visible: true, priority: 3 },
+    // Fully boxed in by labels above and below: hidden rather than covering them.
+    boxedIn = { el: el('npc'), x: 300, y: 100, visible: true, priority: 3 },
+    walls = [0, -1, -2, -3, -4].map((i) => ({
+      el: el('area-marker'),
+      x: 300,
+      y: 100 + i * 12,
+      visible: true,
+      priority: 0,
+    }));
+  h.api.declutterLabels([resident, room, boxedIn, ...walls]);
+  assert.equal(room.el.style.visibility, 'visible');
+  assert.equal(resident.el.style.visibility, 'visible');
+  assert.ok(parseFloat(resident.el.style.top) < 105 - 20);
+  assert.equal(boxedIn.el.style.visibility, 'hidden');
+  assert.ok(walls.every((w) => w.el.style.visibility === 'visible'));
 });
 test('Tab indents in the editor until Escape releases focus', () => {
   const h = harness();

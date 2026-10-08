@@ -250,3 +250,12 @@ for (const l of locations)
         }
       }
     });
+test('the ADC signal list and scale are defined once, in signals.js', async () => {
+  const { readdir, readFile } = await import('node:fs/promises');
+  for (const file of (await readdir('public')).filter((f) => f.endsWith('.js'))) {
+    if (file === 'signals.js') continue;
+    const source = await readFile('public/' + file, 'utf8');
+    assert.doesNotMatch(source, /\['light', 'soil', 'tank', 'rain', 'pot', 'pond'\]/, file);
+    assert.doesNotMatch(source, /\*\s*40\.95/, file);
+  }
+});

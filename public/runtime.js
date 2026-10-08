@@ -1,4 +1,5 @@
 import { SimulatedBroker } from './mqtt.js';
+import { ADC_SIGNALS, ADC_SCALE } from './signals.js';
 // A bounded AST interpreter. No eval, Function constructor, or host-object access.
 const MAX_NESTING = 100,
   MAX_CALL_DEPTH = 30;
@@ -474,8 +475,7 @@ export class Runtime {
       throw Error(d.name + ': disconnected power or ground.');
     if (d.output) throw Error(d.name + ' is an output, not a sensor.');
     let v = Number(d.faultValue ?? this.env[d.signal] ?? 0);
-    if (['light', 'soil', 'tank', 'rain', 'pot', 'pond'].includes(d.signal))
-      v = Math.round(v * 40.95);
+    if (ADC_SIGNALS.includes(d.signal)) v = Math.round(v * ADC_SCALE);
     this.inputs[d.pin] = v;
     return v;
   }

@@ -1,12 +1,11 @@
 import { Runtime } from './runtime.js';
 import { baseEnv, defaults } from './missions.js';
+import { ADC_SIGNALS as ADC, ADC_SCALE } from './signals.js';
 // The code coach. Students write the whole program themselves: the editor starts with only the
 // quest's title and goal as comments, and the guide walks through each part (imports, pin names,
 // setup, the loop, sensor readings and decisions), explaining what the code does and why. Each
 // step is checked as they type, and hints build up one at a time. No code is put in the editor.
 
-const ADC = ['light', 'soil', 'tank', 'rain', 'pot', 'pond'],
-  ADC_SCALE = 40.95;
 const python = (language) => language === 'python';
 const inputsOf = (devices) => devices.filter((d) => !d.output),
   outputsOf = (devices) => devices.filter((d) => d.output);

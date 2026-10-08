@@ -1,5 +1,5 @@
 import { clamp } from './world-math.js';
-import { ADC_SIGNALS } from './missions.js';
+import { ADC_SIGNALS, ADC_SCALE } from './signals.js';
 import { advanceEnvironment } from './weather.js';
 export const RESOURCE_ASSUMPTIONS = {
   tankLitres: 100,
@@ -288,7 +288,7 @@ export function circuitSnapshot(devices, outputs, inputs = {}, kinds = {}, env =
       type: d.output ? 'Output' : d.analog ? 'Analogue input' : 'Digital input',
       value: d.output
         ? (outputs[d.pin] ?? 0)
-        : (inputs[d.pin] ?? (d.analog && adc ? Math.round(raw * 40.95) : raw)),
+        : (inputs[d.pin] ?? (d.analog && adc ? Math.round(raw * ADC_SCALE) : raw)),
       kind: kinds[d.pin] || 'digital',
       sampled: d.output ? Object.hasOwn(outputs, d.pin) : Object.hasOwn(inputs, d.pin),
       connected: d.power && d.ground,

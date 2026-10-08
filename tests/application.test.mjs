@@ -35,6 +35,8 @@ import { sanitizeSaved } from '../public/persistence.js';
 import { highlight } from '../public/syntax-highlight.js';
 import { SerialPlotter, findThresholds, PLOT_LIMIT } from '../public/plotter.js';
 import { diagnose } from '../public/diagnostics.js';
+import { createBugHunt, scoreBugHunt } from '../public/bug-hunt.js';
+import { explainCode, removeExplanations, hasExplanations } from '../public/code-explain.js';
 import {
   readProject,
   ImportError,
@@ -271,6 +273,11 @@ function harness(
     formatSource,
     SerialPlotter,
     diagnose,
+    createBugHunt,
+    scoreBugHunt,
+    explainCode,
+    removeExplanations,
+    hasExplanations,
     readProject,
     ImportError,
     IMPORT_LIMITS,
@@ -299,7 +306,7 @@ function harness(
   });
   vm.runInContext(
     source.replace(/^import [^;]*;\n/gm, '') +
-      '\nglobalThis.api={state,project,mission,selectMission,installDialog,switchTab,testSolution,run,stop,tick,changeBoard,move,code,loadExample,renderCode,renderMission,getOutputs:()=>outputs,getTests:()=>testResults,getPassed:()=>currentPassed,getRunning:()=>running,labState,startFault,exitFault,setClockSpeed,setDifficulty,pauseExecution,stepExecution,resumeExecution,enterLocation,resumeLegacy,returnToGlobe,applyLocalWeather,setWeatherMode,advanceWorld,refreshWeather,missionKey,getPlotSamples:()=>plotSamples,previewImport,exportManifest,labContext,exportProject};',
+      '\nglobalThis.api={state,project,mission,selectMission,installDialog,switchTab,testSolution,run,stop,tick,changeBoard,move,code,loadExample,renderCode,renderMission,getOutputs:()=>outputs,getTests:()=>testResults,getPassed:()=>currentPassed,getRunning:()=>running,labState,startFault,exitFault,setClockSpeed,setDifficulty,pauseExecution,stepExecution,resumeExecution,enterLocation,resumeLegacy,returnToGlobe,applyLocalWeather,setWeatherMode,advanceWorld,refreshWeather,missionKey,getPlotSamples:()=>plotSamples,previewImport,exportManifest,startBugHunt,getActiveFault:()=>activeFault,labContext,exportProject};',
     ctx,
   );
   return {
@@ -1130,4 +1137,121 @@ test('pages load every asset by relative path so the site works under a sub-path
       file + ' uses a root-absolute path',
     );
   }
+});
+test('spot the bugs: flag lines, check, fix and pass the tests for XP once', () => {
+  const h = harness();
+  h.api.state.travelScreen = false;
+  installAndWire(h, 0);
+  h.api.switchTab('tests');
+  h.document.getElementById('huntBtn').click();
+  const hunt = h.api.project().hunt;
+  assert.equal(hunt.bugs.length, 3);
+  assert.equal(h.document.getElementById('codeInput').readOnly, true);
+  assert.equal(h.document.getElementById('huntBanner').hidden, false);
+  assert.equal(h.document.getElementById('diagSummary').hidden, true);
+  const input = h.document.getElementById('codeInput'),
+    caretAt = (line) =>
+      input.value
+        .split('\n')
+        .slice(0, line - 1)
+        .join('\n').length + 1;
+  for (const line of [hunt.bugs[0].line, hunt.bugs[1].line, 1]) {
+    input.selectionStart = input.selectionEnd = caretAt(line);
+    h.document.getElementById('flagLine').click();
+  }
+  assert.match(h.document.getElementById('highlight').innerHTML, /hunt-flag/);
+  h.document.getElementById('checkHunt').click();
+  assert.deepEqual(hunt.score, { found: 2, total: 3, wrong: [1], perfect: false });
+  assert.match(h.document.getElementById('huntBanner').innerHTML, /Found 2 of 3/);
+  assert.match(h.document.getElementById('highlight').innerHTML, /hunt-missed/);
+  assert.equal(h.api.labState().evidence.at(-1).type, 'bughunt');
+  h.api.testSolution();
+  assert.equal(h.api.getPassed(), false);
+  const m = h.api.getActiveFault().mission;
+  h.api.project().code.cpp = program(m, 'cpp', h.api.project().devices, true);
+  h.api.testSolution();
+  assert.equal(h.api.getPassed(), true);
+  assert.equal(h.api.state.xp, 40);
+  assert.equal(completedQuestCount(h.api.state), 0);
+  h.api.testSolution();
+  assert.equal(h.api.state.xp, 40);
+});
+test('Explain adds and removes comments without invalidating test results', () => {
+  const h = harness();
+  installAndWire(h, 0);
+  h.api.loadExample();
+  h.api.testSolution();
+  assert.equal(h.api.getPassed(), true);
+  h.api.switchTab('code');
+  h.document.getElementById('explainBtn').click();
+  assert.match(h.api.code(), /\/\/ » /);
+  assert.equal(h.api.getPassed(), true);
+  assert.equal(h.document.getElementById('explainBtn').textContent, 'Hide explanations');
+  h.document.getElementById('explainBtn').click();
+  assert.doesNotMatch(h.api.code(), /» /);
+});
+test('bug hunts cannot be short-circuited and follow the board, roles and free build', () => {
+  const h = harness();
+  h.api.state.travelScreen = false;
+  installAndWire(h, 0);
+  h.api.startBugHunt();
+  const buggy = h.api.code();
+  // Worked example, Reset and Format would give away or erase the answers while spotting.
+  h.api.loadExample();
+  h.document.getElementById('resetCode').click();
+  h.document.getElementById('formatBtn').click();
+  assert.equal(h.api.code(), buggy);
+  assert.equal(h.api.state.xp, 0);
+  // Roles: only the Programmer may flag or check.
+  h.api.labState().coopEnabled = true;
+  h.api.labState().role = 'Installer';
+  h.api.switchTab('code');
+  h.document.getElementById('flagLine').click();
+  assert.equal(h.api.project().hunt.flagged.length, 0);
+  h.api.labState().coopEnabled = false;
+  // Free build leaves the hunt.
+  h.document.getElementById('freeBtn').click();
+  assert.equal(h.api.getActiveFault(), null);
+  h.document.getElementById('freeBtn').click();
+  // A hunt started on another board uses that board's pins.
+  h.api.changeBoard('Raspberry Pi Pico');
+  h.api.startBugHunt();
+  assert.deepEqual(validate(h.api.project().devices, 'Raspberry Pi Pico'), []);
+});
+test('bug hunt XP is awarded once per mission across languages', () => {
+  const h = harness();
+  h.api.state.travelScreen = false;
+  installAndWire(h, 0);
+  for (const language of ['cpp', 'python']) {
+    h.api.state.language = language;
+    h.api.startBugHunt();
+    const m = h.api.getActiveFault().mission;
+    h.api.project().code[language] = program(m, language, h.api.project().devices, true);
+    h.api.testSolution();
+    assert.equal(h.api.getPassed(), true, language);
+    h.api.exitFault();
+  }
+  assert.equal(h.api.state.xp, 40);
+});
+test('after fixing starts, result line numbers are dropped and Explain stops a running program', () => {
+  const h = harness();
+  h.api.state.travelScreen = false;
+  installAndWire(h, 0);
+  h.api.startBugHunt();
+  const input = h.document.getElementById('codeInput');
+  input.selectionStart = input.selectionEnd = 0;
+  h.document.getElementById('flagLine').click();
+  h.document.getElementById('checkHunt').click();
+  assert.match(h.document.getElementById('huntBanner').innerHTML, /· Ln \d+/);
+  const editor = h.document.getElementById('codeInput');
+  editor.value = editor.value + '\n';
+  editor.dispatchEvent({ type: 'input' });
+  assert.doesNotMatch(h.document.getElementById('huntBanner').innerHTML, /· Ln \d+/);
+  h.api.exitFault();
+  h.api.loadExample();
+  h.api.run();
+  assert.equal(h.api.getRunning(), true);
+  h.api.switchTab('code');
+  h.document.getElementById('explainBtn').click();
+  assert.equal(h.api.getRunning(), false);
 });

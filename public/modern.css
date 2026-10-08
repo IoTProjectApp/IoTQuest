@@ -2048,3 +2048,71 @@ dialog::backdrop {
 .import-warnings p {
   margin: 0;
 }
+
+/* Spot the bugs. Flag/result states pair colour with an icon and text in the banner. */
+.hunt-banner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px 16px;
+  padding: 10px 14px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: #c0cde2;
+  background: #1b2539;
+  border-bottom: 1px solid #ffffff0d;
+}
+.hunt-banner p {
+  margin: 2px 0 0;
+}
+.hunt-banner .bench-actions button {
+  font-size: 12px;
+}
+.hunt-results {
+  margin: 6px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.hunt-results li {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 10px;
+  padding: 2px 0;
+}
+.hunt-results li span {
+  min-width: 112px;
+  font-variant-numeric: tabular-nums;
+  color: #7e91b1;
+}
+.hunt-results li.found span {
+  color: #56c596;
+}
+.hunt-results li.missed span {
+  color: #e0a23b;
+}
+.hunt-results em {
+  color: #7e91b1;
+}
+.editor-wrap.hunting .line-numbers {
+  cursor: pointer;
+  user-select: none;
+}
+.code-line.hunt-flag {
+  background: #e0a23b26;
+  box-shadow: inset 3px 0 0 #e0a23b;
+}
+.code-line.hunt-found {
+  background: #56c59622;
+  box-shadow: inset 3px 0 0 #56c596;
+}
+.code-line.hunt-missed {
+  background: #e0a23b26;
+  box-shadow: inset 3px 0 0 #e0a23b;
+}
+.code-line.hunt-wrong {
+  box-shadow: inset 3px 0 0 #7e91b1;
+}
+.hunt-card span {
+  color: #e0a23b;
+}

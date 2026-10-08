@@ -1,6 +1,26 @@
 import { createLabState } from './lab.js';
 import { missions } from './missions.js';
 const isRecord = (v) => !!v && typeof v === 'object' && !Array.isArray(v);
+// A saved bug hunt is kept only if its bugs and flags have the shapes the editor relies on.
+function sanitizeHunt(hunt) {
+  if (!isRecord(hunt) || !Array.isArray(hunt.bugs) || !hunt.bugs.length) return undefined;
+  const bugs = hunt.bugs.filter(
+    (b) =>
+      isRecord(b) &&
+      Number.isInteger(b.line) &&
+      typeof b.explain === 'string' &&
+      typeof b.fix === 'string',
+  );
+  if (bugs.length !== hunt.bugs.length) return undefined;
+  return {
+    ...hunt,
+    bugs,
+    flagged: Array.isArray(hunt.flagged) ? hunt.flagged.filter(Number.isInteger) : [],
+    phase: hunt.phase === 'fix' ? 'fix' : 'spot',
+    seed: Number.isInteger(hunt.seed) ? hunt.seed : 1,
+    checkedCode: typeof hunt.checkedCode === 'string' ? hunt.checkedCode : undefined,
+  };
+}
 function sanitizeLab(lab) {
   const base = createLabState();
   return {
@@ -29,6 +49,7 @@ function sanitizeProfile(p) {
         devices: Array.isArray(project.devices) ? project.devices.filter(isRecord) : [],
         code: isRecord(project.code) ? project.code : {},
         lab: isRecord(project.lab) ? sanitizeLab(project.lab) : undefined,
+        hunt: sanitizeHunt(project.hunt),
       };
   return {
     ...p,

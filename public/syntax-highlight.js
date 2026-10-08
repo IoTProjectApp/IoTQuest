@@ -66,7 +66,7 @@ function bracketPair(tokens, caret) {
 export function highlight(
   source,
   language = 'cpp',
-  { caret = null, errorLine = null, diagnostics = [] } = {},
+  { caret = null, errorLine = null, diagnostics = [], lineClasses = new Map() } = {},
 ) {
   const vocab = vocabulary[language] || vocabulary.cpp,
     tokens = tokenize(source, language),
@@ -83,6 +83,7 @@ export function highlight(
     (line === caretLine ? ' current-line' : '') +
     (line === errorLine ? ' error-line' : '') +
     (lineSeverity.has(line) ? ' diag-line-' + lineSeverity.get(line) : '') +
+    (lineClasses.has(line) ? ' ' + lineClasses.get(line) : '') +
     '">';
   html += openLine();
   tokens.forEach((token, index) => {

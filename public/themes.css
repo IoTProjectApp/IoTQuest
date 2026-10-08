@@ -711,3 +711,27 @@ html[data-theme='light'] .diag-summary {
 html[data-theme='light'] .diag-summary.has-warnings {
   border-color: var(--diag-warning);
 }
+html[data-theme='light'] .hunt-banner {
+  color: #3d506c;
+  background: #f0f3fa;
+  border-bottom-color: #e1e7f2;
+}
+html[data-theme='light'] .hunt-results li span,
+html[data-theme='light'] .hunt-results em {
+  color: #7082a0;
+}
+html[data-theme='light'] .hunt-results li.found span {
+  color: #18794e;
+}
+html[data-theme='light'] .hunt-results li.missed span {
+  color: #b26b00;
+}
+html[data-theme='light'] .code-line.hunt-flag,
+html[data-theme='light'] .code-line.hunt-missed {
+  background: #b26b001a;
+  box-shadow: inset 3px 0 0 #b26b00;
+}
+html[data-theme='light'] .code-line.hunt-found {
+  background: #18794e14;
+  box-shadow: inset 3px 0 0 #18794e;
+}

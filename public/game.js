@@ -27,6 +27,8 @@ import { sanitizeSaved } from './persistence.js';
 import { highlight } from './syntax-highlight.js';
 import { SerialPlotter, findThresholds, PLOT_LIMIT } from './plotter.js';
 import { diagnose } from './diagnostics.js';
+import { createBugHunt, scoreBugHunt } from './bug-hunt.js';
+import { explainCode, removeExplanations, hasExplanations } from './code-explain.js';
 import { readProject, ImportError, IMPORT_LIMITS, PROJECT_FORMAT } from './project-import.js';
 import { formatCode as formatSource, FormatError, INDENT } from './code-format.js';
 const $ = (id) => document.getElementById(id);
@@ -141,9 +143,11 @@ let tab = 'code',
 const mission = () =>
   activeFault
     ? {
-        ...missions[0],
+        ...(activeFault.mission || missions[0]),
         title: activeFault.title,
-        quote: '“Find the fault, repair it, and show why the circuit works.”',
+        quote: activeFault.mission
+          ? '“Someone broke my program. Can you spot what is wrong before you fix it?”'
+          : '“Find the fault, repair it, and show why the circuit works.”',
         xp: 40,
       }
     : free
@@ -168,6 +172,8 @@ const mission = () =>
 const missionKey = (index = state.mission) =>
   (state.difficulty === 'advanced' && currentLocation() ? 'advanced:' : '') + index;
 const activeKey = () => (activeFault ? 'fault:' + activeFault.id : missionKey());
+// Where a pass is recorded; bug hunts reward once per mission, whatever the language or board.
+const completionKey = () => activeFault?.rewardKey ?? activeKey();
 const project = () => {
   const key = !activeFault && free ? 'free' : activeKey();
   const projects = locationProfile().projects;
@@ -681,7 +687,7 @@ function renderCode() {
     state.board === 'Raspberry Pi Pico W'
       ? '<option>Raspberry Pi Pico W</option>'
       : '') +
-    '</select><button class="text-btn" id="exampleBtn">Worked example</button><button class="text-btn" id="languageHelp">Language guide</button></div><div class="editor-actions"><button id="formatBtn" title="Format code (Shift+Alt+F)" aria-keyshortcuts="Shift+Alt+F">Format</button><button id="resetCode" title="Reset starter code">↺ Reset</button><button id="stopBtn">■ Stop</button><button class="primary" id="runBtn">▶ Run</button></div></div><div class="editor-wrap"><div class="line-numbers" id="lineNumbers"></div><div class="code-scroll" id="codeScroll"><pre class="highlight" id="highlight" aria-hidden="true"></pre><textarea class="code-input" id="codeInput" spellcheck="false" autocapitalize="off" aria-label="Student program code. Press Escape, then Tab, to leave the editor."></textarea></div></div><div class="diag-panel" id="diagPanel" hidden><ul id="diagList" aria-label="Code checks"></ul></div><p class="diag-message" id="diagMessage" role="status" aria-live="polite" hidden></p><div class="editor-status"><span id="editorStatus">' +
+    '</select><button class="text-btn" id="exampleBtn">Worked example</button><button class="text-btn" id="languageHelp">Language guide</button></div><div class="editor-actions"><button id="explainBtn" aria-pressed="false" title="Add or remove plain-English comments">Explain</button><button id="formatBtn" title="Format code (Shift+Alt+F)" aria-keyshortcuts="Shift+Alt+F">Format</button><button id="resetCode" title="Reset starter code">↺ Reset</button><button id="stopBtn">■ Stop</button><button class="primary" id="runBtn">▶ Run</button></div></div><div class="hunt-banner" id="huntBanner" hidden></div><div class="editor-wrap" id="editorWrap"><div class="line-numbers" id="lineNumbers"></div><div class="code-scroll" id="codeScroll"><pre class="highlight" id="highlight" aria-hidden="true"></pre><textarea class="code-input" id="codeInput" spellcheck="false" autocapitalize="off" aria-label="Student program code. Press Escape, then Tab, to leave the editor."></textarea></div></div><div class="diag-panel" id="diagPanel" hidden><ul id="diagList" aria-label="Code checks"></ul></div><p class="diag-message" id="diagMessage" role="status" aria-live="polite" hidden></p><div class="editor-status"><span id="editorStatus">' +
     (running ? 'Running · simulated devices connected' : 'Ready when you are') +
     '</span><button class="diag-summary" id="diagSummary" aria-expanded="false" aria-controls="diagPanel" hidden></button><span id="cursorPos">Ln 1, Col 1</span></div>' +
     SerialPlotter.markup() +
@@ -700,6 +706,7 @@ function renderCode() {
     project().code[state.language] = $('codeInput').value;
     stop(false);
     markEdited({ typing: true });
+    if (huntPhase() === 'fix') renderHunt();
     updateHighlight();
   });
   // Tab indents; Escape releases it so keyboard users can leave the editor (WCAG 2.1.2).
@@ -764,6 +771,11 @@ function renderCode() {
     $('lineNumbers').scrollTop = $('codeScroll').scrollTop;
   };
   $('languageSelect').onchange = () => {
+    if (huntPhase()) {
+      $('languageSelect').value = state.language;
+      toast('Leave the bug hunt to change language.');
+      return;
+    }
     stop(false);
     state.language = $('languageSelect').value;
     currentPassed = false;
@@ -777,8 +789,18 @@ function renderCode() {
   $('exampleBtn').onclick = loadExample;
   $('languageHelp').onclick = languageGuide;
   $('formatBtn').onclick = formatCode;
+  $('explainBtn').onclick = toggleExplanations;
+  $('explainBtn').textContent = hasExplanations(code()) ? 'Hide explanations' : 'Explain';
+  $('explainBtn').setAttribute('aria-pressed', String(hasExplanations(code())));
+  $('lineNumbers').onclick = (e) => {
+    if (huntPhase() !== 'spot') return;
+    const gutter = $('lineNumbers'),
+      top = parseFloat(getComputedStyle(gutter).paddingTop) || 16;
+    toggleBugFlag(Math.floor((e.offsetY + gutter.scrollTop - top) / 21) + 1);
+  };
+  renderHunt();
   $('resetCode').onclick = () => {
-    if (!canEdit('Programmer')) return;
+    if (!canEdit('Programmer') || blockedByHunt('Reset')) return;
     stop(false);
     project().code[state.language] = program(mission(), state.language, planned());
     markEdited();
@@ -863,11 +885,13 @@ function refreshDiagnostics(source) {
     key = [
       state.language,
       JSON.stringify(devices.map((d) => [d.id, d.pin, d.output, d.signal])),
+      huntPhase(),
       source,
     ].join('\0');
   if (key === diagnosticsKey) return false;
   diagnosticsKey = key;
-  diagnostics = diagnose(source, state.language, devices);
+  // While spotting bugs, the checks would give the answers away.
+  diagnostics = huntPhase() === 'spot' ? [] : diagnose(source, state.language, devices);
   return true;
 }
 function renderHighlight() {
@@ -875,13 +899,21 @@ function renderHighlight() {
   if (!el || !$('highlight')) return;
   const changed = refreshDiagnostics(el.value),
     caret = el.selectionStart === el.selectionEnd ? el.selectionStart : null,
-    key = [state.language, caret, errorLine, diagnosticsKey, el.value].join('\0');
+    lineClasses = huntLineClasses(),
+    key = [
+      state.language,
+      caret,
+      errorLine,
+      diagnosticsKey,
+      JSON.stringify([...lineClasses]),
+      el.value,
+    ].join('\0');
   if (changed) renderDiagnosticList();
   updateDiagnosticMessage();
   if (key === highlightedKey && $('highlight').innerHTML) return;
   highlightedKey = key;
   $('highlight').innerHTML =
-    highlight(el.value, state.language, { caret, errorLine, diagnostics }) + '\n';
+    highlight(el.value, state.language, { caret, errorLine, diagnostics, lineClasses }) + '\n';
 }
 const diagIcon = (d) => (d.severity === 'warning' ? '⚠' : 'ⓘ');
 function renderDiagnosticList() {
@@ -950,13 +982,24 @@ function nextDiagnostic() {
 }
 function updateCursor() {
   if (!$('codeInput')) return;
+  if (huntPhase() === 'spot' && $('flagLine')) {
+    const line = $('codeInput').value.slice(0, $('codeInput').selectionStart).split('\n').length;
+    $('flagLine').textContent =
+      (huntState().flagged.includes(line) ? 'Unflag line ' : 'Flag line ') + line;
+  }
   let before = $('codeInput').value.slice(0, $('codeInput').selectionStart),
     lines = before.split('\n');
   $('cursorPos').textContent = 'Ln ' + lines.length + ', Col ' + (lines.at(-1).length + 1);
   renderHighlight();
 }
+// Actions that replace the program would give away (or erase) a bug hunt's answers.
+function blockedByHunt(action, phases = ['spot', 'fix']) {
+  if (!phases.includes(huntPhase())) return false;
+  toast(action + ' is not available during Spot the bugs.');
+  return true;
+}
 function loadExample() {
-  if (!canEdit('Programmer')) return;
+  if (!canEdit('Programmer') || blockedByHunt('The worked example')) return;
   let ds = project().devices.length ? project().devices : planned();
   project().code[state.language] = program(mission(), state.language, ds, true);
   stop(false);
@@ -965,7 +1008,7 @@ function loadExample() {
   toast('Worked example loaded. Run it, change a threshold, then test again.');
 }
 function formatCode() {
-  if (!canEdit('Programmer')) return;
+  if (!canEdit('Programmer') || blockedByHunt('Format', ['spot'])) return;
   let formatted;
   try {
     formatted = formatSource(code(), state.language);
@@ -986,6 +1029,11 @@ function formatCode() {
   toast(changed ? 'Code formatted. Spacing and indentation tidied.' : 'Code is already formatted.');
 }
 function changeBoard(board) {
+  if (huntPhase()) {
+    toast('Leave the bug hunt to change controller.');
+    renderBench();
+    return;
+  }
   if (!canEdit('Installer')) {
     renderBench();
     return;
@@ -1675,9 +1723,9 @@ function testSolution() {
   labState().assessment = { budget, consumption: assessment };
   currentPassed = testResults.length > 0 && testResults.every((r) => r.pass);
   if (currentPassed) {
-    if (!currentCompletions()[activeKey()]) {
+    if (!currentCompletions()[completionKey()]) {
       state.xp += m.xp;
-      currentCompletions()[activeKey()] = {
+      currentCompletions()[completionKey()] = {
         badge: m.badge,
         xp: m.xp,
         date: new Date().toISOString(),
@@ -1759,11 +1807,13 @@ function renderTests() {
     (currentPassed && !activeFault && state.mission < activeMissions().length - 1
       ? '<button class="primary" id="nextMission">Next quest</button>'
       : '<button class="outline" id="debugBtn">Try a debugging challenge</button>') +
+    (free || activeFault ? '' : '<button class="outline" id="huntBtn">Spot the bugs</button>') +
     '</div></div>';
   $('testAgain').onclick = testSolution;
   $('backCode').onclick = () => switchTab('code');
   if ($('nextMission')) $('nextMission').onclick = () => selectMission(state.mission + 1);
   if ($('debugBtn')) $('debugBtn').onclick = debugChallenge;
+  if ($('huntBtn')) $('huntBtn').onclick = () => startBugHunt();
 }
 function debugChallenge() {
   const m = mission();
@@ -1833,6 +1883,7 @@ $('hintBtn').onclick = () => {
 };
 $('freeBtn').onclick = () => {
   stop(false);
+  activeFault = null;
   free = !free;
   currentPassed = false;
   testResults = [];
@@ -1991,6 +2042,194 @@ document.querySelectorAll('[data-nav]').forEach(
       else help();
     }),
 );
+// ---- Explain code -------------------------------------------------------------
+function toggleExplanations() {
+  if (!canEdit('Programmer')) return;
+  if (huntPhase() === 'spot') {
+    toast('Explanations are off while you spot the bugs.');
+    return;
+  }
+  const source = code(),
+    showing = hasExplanations(source);
+  // Comments do not change behaviour, so test results are kept. A running program and an
+  // error marker refer to the old line numbers, so they are reset.
+  if (running) stop(false);
+  errorLine = null;
+  project().code[state.language] = showing
+    ? removeExplanations(source)
+    : explainCode(source, state.language, project().devices);
+  save();
+  renderCode();
+  toast(
+    showing
+      ? 'Explanations removed. Your own comments are kept.'
+      : 'Explanations added as » comments. Press Explain again to remove them.',
+  );
+}
+
+// ---- Spot the bugs ------------------------------------------------------------
+const huntState = () => (activeFault?.kind === 'hunt' ? project().hunt : null);
+const huntPhase = () => huntState()?.phase || null;
+function startBugHunt(fresh = false) {
+  if (fresh && !canEdit('Programmer')) return;
+  if (free) {
+    toast('Choose a quest first: bug hunts use the current mission.');
+    return;
+  }
+  const base = activeFault?.mission ?? activeMissions()[state.mission],
+    id = 'hunt:' + state.board.replace(/\s+/g, '-') + ':' + state.language + ':' + missionKey(),
+    key = 'fault:' + id,
+    profile = locationProfile();
+  stop(false);
+  let saved = profile.projects[key];
+  if (!saved?.hunt || fresh) {
+    const devices = defaults(base.ids, state.board).map((d) => ({
+        ...d,
+        power: true,
+        ground: true,
+        resistorConnected: !!d.resistor,
+      })),
+      seed = (saved?.hunt?.seed ?? 0) + 1,
+      hunt = createBugHunt(base, state.language, devices, state.board, { seed });
+    saved = profile.projects[key] = {
+      devices,
+      code: { [state.language]: hunt.code },
+      lab: saved?.lab,
+      hunt: { seed, bugs: hunt.bugs, flagged: [], phase: 'spot' },
+    };
+  }
+  activeFault = {
+    id,
+    kind: 'hunt',
+    rewardKey: 'fault:hunt:' + missionKey(),
+    mission: base,
+    title: 'Spot the bugs · ' + base.title,
+    hints: saved.hunt.bugs.map((b) => b.fix),
+    explain: 'Every planted bug is fixed and the mission tests pass.',
+  };
+  currentPassed = false;
+  testResults = [];
+  renderMission();
+  switchTab('code');
+  save();
+  toast(
+    'This program has ' + saved.hunt.bugs.length + ' bugs. Flag the lines you think are wrong.',
+  );
+}
+function toggleBugFlag(line) {
+  if (!canEdit('Programmer')) return;
+  const hunt = huntState();
+  if (!hunt || hunt.phase !== 'spot' || line < 1 || line > code().split('\n').length) return;
+  hunt.flagged = hunt.flagged.includes(line)
+    ? hunt.flagged.filter((l) => l !== line)
+    : [...hunt.flagged, line].sort((a, b) => a - b);
+  save();
+  renderHunt();
+  renderHighlight();
+}
+function checkBugHunt() {
+  const hunt = huntState();
+  if (!hunt || !canEdit('Programmer')) return;
+  const score = scoreBugHunt(hunt.bugs, hunt.flagged);
+  hunt.phase = 'fix';
+  hunt.score = score;
+  hunt.checkedCode = code();
+  hunt.best = Math.max(hunt.best || 0, score.found);
+  recordEvidence({
+    at: new Date().toISOString(),
+    type: 'bughunt',
+    mission: activeFault.mission.title,
+    language: state.language,
+    found: score.found,
+    total: score.total,
+    wrongFlags: score.wrong.length,
+  });
+  save();
+  renderCode();
+  toast(
+    score.perfect
+      ? 'You spotted every bug! Now fix them and run the tests.'
+      : 'You found ' +
+          score.found +
+          ' of ' +
+          score.total +
+          '. The answers are shown; now fix them.',
+  );
+}
+// Line classes for the editor overlay: flags while spotting, results afterwards.
+function huntLineClasses() {
+  const hunt = huntState(),
+    classes = new Map();
+  if (!hunt) return classes;
+  if (hunt.phase === 'spot') for (const line of hunt.flagged) classes.set(line, 'hunt-flag');
+  // Result markers refer to the checked code; once it is edited, lines may have moved.
+  else if (hunt.checkedCode === code()) {
+    for (const bug of hunt.bugs)
+      classes.set(bug.line, hunt.flagged.includes(bug.line) ? 'hunt-found' : 'hunt-missed');
+    for (const line of scoreBugHunt(hunt.bugs, hunt.flagged).wrong) classes.set(line, 'hunt-wrong');
+  }
+  return classes;
+}
+function renderHunt() {
+  const banner = $('huntBanner'),
+    hunt = huntState();
+  if (!banner) return;
+  banner.hidden = !hunt;
+  $('editorWrap')?.classList.toggle('hunting', hunt?.phase === 'spot');
+  if (!hunt) return;
+  const input = $('codeInput');
+  if (hunt.phase === 'spot') {
+    input.readOnly = true;
+    const line = input.value.slice(0, input.selectionStart).split('\n').length;
+    banner.innerHTML =
+      '<div><strong>🐞 Spot the bugs</strong><p>This program has <b>' +
+      hunt.bugs.length +
+      ' bugs</b> on different lines. Click a line number, or put the cursor on a line and press Flag. Then check your answers.</p></div><div class="bench-actions"><button class="outline" id="flagLine">' +
+      (hunt.flagged.includes(line) ? 'Unflag line ' : 'Flag line ') +
+      line +
+      '</button><button class="primary" id="checkHunt"' +
+      (hunt.flagged.length ? '' : ' disabled') +
+      '>Check ' +
+      hunt.flagged.length +
+      ' flagged</button><button class="text-btn" id="leaveHunt">Leave</button></div>';
+    $('flagLine').onclick = () =>
+      toggleBugFlag(
+        $('codeInput').value.slice(0, $('codeInput').selectionStart).split('\n').length,
+      );
+    $('checkHunt').onclick = checkBugHunt;
+  } else {
+    const score = scoreBugHunt(hunt.bugs, hunt.flagged),
+      // After edits, line numbers may no longer match what is on screen.
+      at = (line) => (hunt.checkedCode === code() ? ' · Ln ' + line : '');
+    banner.innerHTML =
+      '<div><strong>🐞 ' +
+      (score.perfect ? 'All bugs spotted!' : 'Found ' + score.found + ' of ' + score.total) +
+      '</strong><ul class="hunt-results">' +
+      hunt.bugs
+        .map(
+          (b) =>
+            '<li class="' +
+            (hunt.flagged.includes(b.line) ? 'found' : 'missed') +
+            '"><span>' +
+            (hunt.flagged.includes(b.line) ? '✓ Found' : '✗ Missed') +
+            at(b.line) +
+            '</span>' +
+            esc(b.explain) +
+            ' <em>' +
+            esc(b.fix) +
+            '</em></li>',
+        )
+        .join('') +
+      score.wrong
+        .map((l) => '<li class="wrong"><span>○ Flagged' + at(l) + '</span>This line was fine.</li>')
+        .join('') +
+      '</ul><p>Fix the bugs, then run the tests to prove the repair.</p></div><div class="bench-actions"><button class="primary" id="huntTest">▶ Run tests</button><button class="outline" id="huntAgain">New bugs</button><button class="text-btn" id="leaveHunt">Back to quest</button></div>';
+    $('huntTest').onclick = testSolution;
+    $('huntAgain').onclick = () => startBugHunt(true);
+  }
+  $('leaveHunt').onclick = exitFault;
+}
+
 function exportManifest() {
   return {
     format: PROJECT_FORMAT,
@@ -2006,7 +2245,9 @@ function exportManifest() {
     language: state.language,
     code: { ...project().code, [state.language]: code() },
     devices: structuredClone(project().devices),
-    results: testResults.length ? testResults : currentCompletions()[activeKey()]?.results || [],
+    results: testResults.length
+      ? testResults
+      : currentCompletions()[completionKey()]?.results || [],
     lab: { evidence: labState().evidence },
   };
 }
@@ -2020,7 +2261,9 @@ function exportProject() {
       devices: structuredClone(project().devices),
       mission: mission(),
       // In-memory results are lost on reload; fall back to the saved completion record.
-      results: testResults.length ? testResults : currentCompletions()[activeKey()]?.results || [],
+      results: testResults.length
+        ? testResults
+        : currentCompletions()[completionKey()]?.results || [],
       lab: labState(),
       location: currentLocation()
         ? currentLocation().city + ', ' + currentLocation().country
@@ -2332,6 +2575,8 @@ function labContext() {
     selectDevice,
     startFault,
     exitFault,
+    startBugHunt: () => startBugHunt(),
+    huntTitle: free ? null : activeMissions()[state.mission]?.title,
     test: testSolution,
     save,
     modal,

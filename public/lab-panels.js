@@ -27,6 +27,11 @@ export function renderLabPanel(tab, ctx) {
             '</strong><small>Inspect → repair → test</small></button>',
         )
         .join('') +
+      (ctx.huntTitle
+        ? '<button class="fault-card hunt-card" id="startHunt"><span>Spot the bugs</span><strong>' +
+          esc(ctx.huntTitle) +
+          '</strong><small>Find 3 planted bugs → fix → test</small></button>'
+        : '') +
       '</div>' +
       (ctx.fault
         ? '<div class="debug-card"><strong>' +
@@ -38,6 +43,7 @@ export function renderLabPanel(tab, ctx) {
       .querySelectorAll('[data-fault]')
       .forEach((b) => (b.onclick = () => ctx.startFault(b.dataset.fault)));
     if ($('exitFault')) $('exitFault').onclick = ctx.exitFault;
+    if ($('startHunt')) $('startHunt').onclick = ctx.startBugHunt;
     if ($('testFault')) $('testFault').onclick = ctx.test;
     $('progressiveHint')?.addEventListener('click', () => {
       const current = ctx.labState?.() ?? lab,

@@ -1255,3 +1255,22 @@ test('after fixing starts, result line numbers are dropped and Explain stops a r
   h.document.getElementById('explainBtn').click();
   assert.equal(h.api.getRunning(), false);
 });
+test('the conditions panel shows only what the quest sensors read, unless all are explored', async () => {
+  const h = harness();
+  const shown = () =>
+    h.document
+      .querySelectorAll('[data-env]')
+      .map((el) => el.dataset.env)
+      .sort();
+  h.api.selectMission(1); // Welcome Home: motion sensor only
+  assert.deepEqual(shown(), ['motion']);
+  h.api.state.freeExploration = true;
+  await h.api.enterLocation('kyoto');
+  h.api.selectMission(5); // Protect the Courtyard Pump: water level and soil
+  assert.deepEqual(shown(), ['soil', 'tank']);
+  assert.match(h.document.getElementById('conditionsNote').textContent, /this quest’s sensors/);
+  h.document.getElementById('moreConditions').onclick();
+  assert.ok(shown().includes('outdoorTemp') && shown().includes('pond'));
+  h.document.getElementById('moreConditions').onclick();
+  assert.deepEqual(shown(), ['soil', 'tank']);
+});

@@ -345,7 +345,10 @@ const envMeta = {
   distance: ['◍', 'Distance', 'cm', 0, 300, 'Near', 'Far'],
   pot: ['◴', 'Potentiometer', '%', 0, 100, 'Minimum', 'Maximum'],
   humidity: ['≋', 'Humidity', '%', 0, 100, 'Dry', 'Humid'],
+  pond: ['≈', 'Pond level', '%', 0, 100, 'Low', 'Full'],
 };
+// Conditions shown in the panel: only what this quest's sensors (and any extra sensors
+// installed in the circuit) can read, unless the player asks to explore every condition.
 function relevantSignals() {
   return [
     ...new Set([
@@ -371,21 +374,23 @@ function relevantSignals() {
             'outdoorTemp',
             'wind',
             'cloud',
+            'pond',
+            'occupied',
           ]
-        : ['light']),
+        : []),
     ]),
   ];
 }
 function renderEnvironment() {
-  const signals = relevantSignals();
-  if (currentLocation())
-    for (const signal of ['outdoorTemp', 'wind', 'cloud', 'humidity', 'rain'])
-      if (!signals.includes(signal)) signals.push(signal);
-  $('conditionsNote').textContent = currentLocation()
-    ? state.weatherMode === 'live'
-      ? 'Simulated sensors · outdoor climate follows local weather.'
-      : 'Practice conditions · sliders control the simulated climate.'
-    : 'Try a different day in your world.';
+  const signals = relevantSignals(),
+    scope = free || allConditions ? '' : 'Showing what this quest’s sensors read. ';
+  $('conditionsNote').textContent =
+    scope +
+    (currentLocation()
+      ? state.weatherMode === 'live'
+        ? 'Simulated sensors · outdoor climate follows local weather.'
+        : 'Practice conditions · sliders control the simulated climate.'
+      : 'Try a different day in your world.');
   $('envControls').innerHTML =
     signals
       .map((s) => {

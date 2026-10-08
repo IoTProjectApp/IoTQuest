@@ -1,6 +1,7 @@
 import { missions, defaults } from './missions.js';
 import { locationById, adaptMissions } from './locations.js';
 import { coachSteps } from './code-coach.js';
+import { understandingQuestions, understandingScore } from './understanding.js';
 // Progress reports: a student downloads one small file and hands it in; a teacher loads the
 // class's files into the class progress view (teacher.html). Nothing is sent anywhere.
 
@@ -44,12 +45,22 @@ function questRecord(profile, location, index, difficulty, state) {
     status = done ? 'passed' : languages.length || attempts ? 'started' : 'not-started';
   let stepsDone = 0,
     stepsTotal = 0,
-    stuck = null;
+    stuck = null,
+    understanding = { right: 0, answered: 0, total: 0 };
   if (m.ids.length) {
-    const devices = project?.devices?.length ? project.devices : defaults(m.ids, 'ESP32'),
+    const devices = done?.devices?.length
+        ? done.devices
+        : project?.devices?.length
+          ? project.devices
+          : defaults(m.ids, profile.board || state.board || 'ESP32'),
       steps = coachSteps(m, language, devices, profile.board || state.board).filter((s) => s.check),
       source = done?.code ?? project?.code?.[language] ?? '';
     stepsTotal = steps.length;
+    if (done)
+      understanding = understandingScore(
+        done.understanding,
+        understandingQuestions(m, language, devices, profile.board || state.board).length,
+      );
     if (status === 'passed') stepsDone = stepsTotal;
     else if (status === 'started')
       for (const step of steps) {
@@ -70,6 +81,9 @@ function questRecord(profile, location, index, difficulty, state) {
     stepsDone,
     stepsTotal,
     stuck: status === 'started' ? stuck : null,
+    understood: understanding.right,
+    understandAnswered: understanding.answered,
+    understandTotal: understanding.total,
     passedAt: done?.date || null,
     lastActive: project?.lab?.evidence?.at(-1)?.at || done?.date || null,
     language,
@@ -104,19 +118,25 @@ export function buildProgressReport(state, { student, classCode = '', now = new 
   };
 }
 
+// Keeps letters and digits in any script (for example Arabic or Chinese names).
 export const progressFileName = (report) =>
   'iotquest-progress-' +
-  (report.student || 'student')
+  ((report.student || '')
     .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-|-$/g, '') +
+    .replace(/[^\p{L}\p{N}]+/gu, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 60) || 'student') +
   '-' +
   report.createdAt.slice(0, 10) +
   '.json';
 
 const text = (v, max = PROGRESS_LIMITS.text) => (typeof v === 'string' ? v.slice(0, max) : '');
 const count = (v) => (Number.isFinite(v) && v >= 0 ? Math.min(Math.floor(v), 1e6) : 0);
-const date = (v) => (typeof v === 'string' && !Number.isNaN(Date.parse(v)) ? v.slice(0, 40) : null);
+// Dates are stored as ISO strings, so they sort correctly.
+const date = (v) =>
+  typeof v === 'string' && v.length <= 40 && !Number.isNaN(Date.parse(v))
+    ? new Date(v).toISOString()
+    : null;
 
 // Reads a handed-in file, rejecting anything that is not a progress report and normalising every
 // field, so a damaged or edited file cannot break the class view.
@@ -146,14 +166,17 @@ export function parseProgressReport(source) {
     difficulty: ['original', 'beginner', 'advanced'].includes(q.difficulty)
       ? q.difficulty
       : 'original',
-    index: count(q.index),
-    title: text(q.title) || 'Quest ' + (count(q.index) + 1),
+    index: Math.min(count(q.index), 99),
+    title: text(q.title) || 'Quest ' + (Math.min(count(q.index), 99) + 1),
     status: ['passed', 'started', 'not-started'].includes(q.status) ? q.status : 'not-started',
     attempts: count(q.attempts),
     hints: count(q.hints),
     stepsDone: count(q.stepsDone),
     stepsTotal: count(q.stepsTotal),
     stuck: text(q.stuck) || null,
+    understood: count(q.understood),
+    understandAnswered: count(q.understandAnswered),
+    understandTotal: count(q.understandTotal),
     passedAt: date(q.passedAt),
     lastActive: date(q.lastActive),
     language: q.language === 'python' ? 'python' : 'cpp',
@@ -205,6 +228,13 @@ export function reportViews(reports) {
 
 // A student needs help on a quest they have started but not passed after several tries or hints.
 export const needsHelp = (q) => q.status === 'started' && (q.attempts >= 3 || q.hints >= 3);
+// A passed quest needs review when the understanding questions are all answered and fewer than
+// half were right first time.
+export const needsReview = (q) =>
+  q.status === 'passed' &&
+  q.understandTotal > 0 &&
+  q.understandAnswered >= q.understandTotal &&
+  q.understood * 2 < q.understandTotal;
 
 // The class grid for one destination and level: quest columns and one row per student.
 export function classGrid(reports, viewId) {
@@ -226,6 +256,7 @@ export function classGrid(reports, viewId) {
       passed: cells.filter((q) => q.status === 'passed').length,
       started: cells.filter((q) => q.status === 'started').length,
       helping: cells.filter(needsHelp).length,
+      reviewing: cells.filter(needsReview).length,
     };
   });
   return { quests: quests.filter(Boolean), rows };
@@ -252,6 +283,9 @@ export function progressCSV(reports) {
     'Guide steps done',
     'Guide steps total',
     'Stuck at',
+    'Understanding right first time',
+    'Understanding questions answered',
+    'Understanding questions',
     'Passed at',
     'Language',
     'Report date',
@@ -273,6 +307,9 @@ export function progressCSV(reports) {
           q.stepsDone,
           q.stepsTotal,
           q.stuck || '',
+          q.understood,
+          q.understandAnswered,
+          q.understandTotal,
           q.passedAt || '',
           q.language === 'python' ? 'MicroPython' : 'Arduino C++',
           r.createdAt,

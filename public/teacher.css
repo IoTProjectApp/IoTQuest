@@ -13,6 +13,8 @@
   --help: #a63b37;
   --help-bg: #fbe2e0;
   --none: #8592a8;
+  --review: #4d4ab8;
+  --review-bg: #e7e6fb;
   --code-bg: #151e30;
   --mono: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
   color-scheme: light;
@@ -33,6 +35,8 @@
     --help: #ffb0a8;
     --help-bg: #46231f;
     --none: #7c8aa3;
+    --review: #c3c1ff;
+    --review-bg: #2a2a52;
     color-scheme: dark;
   }
 }
@@ -51,6 +55,8 @@
   --help: #ffb0a8;
   --help-bg: #46231f;
   --none: #7c8aa3;
+  --review: #c3c1ff;
+  --review-bg: #2a2a52;
   color-scheme: dark;
 }
 * {
@@ -282,6 +288,12 @@ input {
 .t-key.help {
   background: var(--help-bg);
   color: var(--help);
+}
+.t-cell.review,
+.t-status.review,
+.t-key.review {
+  background: var(--review-bg);
+  color: var(--review);
 }
 .t-cell.none,
 .t-status.none,

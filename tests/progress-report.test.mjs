@@ -9,6 +9,7 @@ import {
   classGrid,
   progressCSV,
   needsHelp,
+  needsReview,
   progressFileName,
   ProgressError,
   PROGRESS_LIMITS,
@@ -187,4 +188,68 @@ test('the CSV has a row per student and quest and cannot run spreadsheet formula
     lines[1],
     /^"'=HYPERLINK\(""x""\)","7B","Willowbrook \(original home\)","original","1","Light the Path","passed"/,
   );
+});
+
+test('understanding results reach the report, the grid and the CSV', () => {
+  const game = savedGame();
+  game.completed[0].understanding = {
+    answers: {
+      predict: { first: false, tries: 2, solved: true },
+      read: { first: true, tries: 1, solved: true },
+      change: { first: false, tries: 3, solved: true },
+    },
+  };
+  const report = parseProgressReport(
+      JSON.stringify(buildProgressReport(game, { student: 'Ben', classCode: '7B' })),
+    ),
+    q = report.quests[0];
+  assert.deepEqual([q.understood, q.understandAnswered, q.understandTotal], [1, 3, 3]);
+  assert.ok(needsReview(q));
+  assert.equal(report.quests[1].understandTotal, 0, 'not passed: no questions yet');
+  const cell = cellSummary(q);
+  assert.deepEqual([cell.kind, cell.icon, cell.text], ['review', '?', 'Passed · review']);
+  assert.match(cell.effort, /1\/3 understood/);
+  assert.equal(classGrid([report], 'legacy|original').quests[0].reviewing, 1);
+  const csv = progressCSV([report]);
+  assert.match(
+    csv.split('\r\n')[0],
+    /"Understanding right first time","Understanding questions answered","Understanding questions"/,
+  );
+  assert.match(csv.split('\r\n')[1], /"passed","2","1","5","5","","1","3","3"/);
+  // Half or more right first time is fine.
+  assert.equal(needsReview({ ...q, understood: 2 }), false);
+  assert.equal(needsReview({ ...q, understandAnswered: 2 }), false, 'not finished yet');
+});
+
+test('regressions: names in any script, Pico pins, normalised dates and bounded quest numbers', () => {
+  assert.equal(
+    progressFileName({ student: 'محمد علي', createdAt: '2026-10-08T00:00:00Z' }),
+    'iotquest-progress-محمد-علي-2026-10-08.json',
+  );
+  assert.equal(
+    progressFileName({ student: '!!!', createdAt: '2026-10-08T00:00:00Z' }),
+    'iotquest-progress-student-2026-10-08.json',
+  );
+  // On a Pico the student's pins are the Pico's, so the guide steps are judged on those.
+  const pico = buildProgressReport(
+    {
+      name: 'x',
+      board: 'Raspberry Pi Pico',
+      language: 'cpp',
+      projects: {
+        0: { devices: [], code: { cpp: 'const int lightPin = 26;\nconst int ledPin = 15;\n' } },
+      },
+    },
+    { student: 'x' },
+  );
+  assert.equal(pico.quests[0].stuck, 'Write setup()');
+  const mk = (createdAt, quests = []) =>
+    parseProgressReport(
+      JSON.stringify({ format: 'iotquest-progress', version: 1, student: 'A', createdAt, quests }),
+    );
+  const older = mk('2026-10-08T00:00:00Z'),
+    newer = mk('Oct 9 2026 10:00 UTC');
+  assert.equal(newer.createdAt, '2026-10-09T10:00:00.000Z');
+  assert.equal(latestReports([newer, older])[0], newer);
+  assert.equal(mk('2026-10-08', [{ index: 999999 }]).quests[0].index, 99);
 });

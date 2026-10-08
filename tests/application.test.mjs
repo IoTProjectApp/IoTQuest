@@ -46,6 +46,11 @@ import {
 import { formatCode as formatSource, FormatError, INDENT } from '../public/code-format.js';
 import { coachSteps } from '../public/code-coach.js';
 import { buildProgressReport, progressFileName } from '../public/progress-report.js';
+import {
+  understandingQuestions,
+  answerQuestion,
+  understandingScore,
+} from '../public/understanding.js';
 const html = await readFile('public/game.html', 'utf8'),
   source = await readFile('public/game.js', 'utf8');
 class Element {
@@ -291,6 +296,9 @@ function harness(
     coachSteps,
     buildProgressReport,
     progressFileName,
+    understandingQuestions,
+    answerQuestion,
+    understandingScore,
     structuredClone,
     Blob,
     URL,
@@ -1443,4 +1451,68 @@ test('students hand in a progress report with their quests, attempts and hints',
   h.api.loadExample();
   h.api.testSolution();
   assert.equal(h.api.downloadProgress('Amira', '7B').quests[0].status, 'passed');
+});
+
+test('after passing, students check their understanding and earn XP for right first tries', () => {
+  const h = harness();
+  installAndWire(h, 0);
+  h.api.switchTab('code');
+  h.api.loadExample();
+  h.api.testSolution();
+  const xp = h.api.state.xp,
+    box = () => h.document.getElementById('understanding');
+  h.api.switchTab('tests');
+  assert.match(box().innerHTML, /Check your understanding/);
+  assert.match(box().innerHTML, /Question 1 of 3/);
+  assert.match(box().innerHTML, /“At threshold”/);
+  const questions = understandingQuestions(h.api.mission(), 'cpp', h.api.project().devices);
+  let current = 0;
+  const pick = (text) => {
+    const i = questions[current].choices.findIndex((c) => c.text.includes(text));
+    h.document
+      .querySelectorAll('[data-u-choice]')
+      .find((b) => b.attrs['data-u-choice'] === String(i))
+      .click();
+  };
+  pick('ON');
+  assert.match(box().innerHTML, /Not quite\./);
+  assert.match(box().innerHTML, /less than/);
+  assert.equal(h.document.getElementById('understandNext'), null, 'try again before moving on');
+  pick('OFF');
+  assert.match(box().innerHTML, /✓ Correct\./);
+  assert.equal(h.api.state.xp, xp, 'no XP after a wrong first try');
+  h.document.getElementById('understandNext').click();
+  current++;
+  pick('0 to 4095');
+  assert.equal(h.api.state.xp, xp + 10);
+  h.document.getElementById('understandNext').click();
+  current++;
+  pick('The number 1800');
+  h.document.getElementById('understandNext').click();
+  assert.match(box().innerHTML, /got <strong>2 of 3<\/strong> right first time/);
+  const q = h.api.downloadProgress('Amira', '7B').quests[0];
+  assert.deepEqual([q.understood, q.understandAnswered, q.understandTotal], [2, 3, 3]);
+  // Answers are saved: coming back shows the results, not the questions again.
+  h.api.switchTab('code');
+  h.api.switchTab('tests');
+  assert.match(box().innerHTML, /2 of 3/);
+});
+
+test('regressions: Explain on an empty editor and Reset restarting the guide', () => {
+  const h = harness();
+  installAndWire(h, 0);
+  h.api.switchTab('code');
+  const before = h.api.code();
+  h.document.getElementById('explainBtn').click();
+  assert.equal(h.api.code(), before, 'nothing added to a comments-only editor');
+  const input = h.document.getElementById('codeInput'),
+    pin = (id) => h.api.project().devices.find((d) => d.id === id).pin;
+  input.value =
+    before + 'const int lightPin = ' + pin('ldr') + ';\nconst int ledPin = ' + pin('led') + ';\n';
+  input.dispatchEvent({ type: 'input' });
+  h.api.renderCoach();
+  h.document.getElementById('coachNext').click();
+  assert.match(h.document.getElementById('coach').innerHTML, /Write setup\(\)/);
+  h.document.getElementById('resetCode').click();
+  assert.match(h.document.getElementById('coach').innerHTML, /Step 1 of 6 · Name your pins/);
 });

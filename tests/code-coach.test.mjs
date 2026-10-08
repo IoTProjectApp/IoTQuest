@@ -210,3 +210,64 @@ test('conditions are explained in plain English', () => {
     'the door contact reads HIGH and the arm button reads HIGH',
   );
 });
+
+test('regressions: install order, extra devices, timing and other ways of writing correct code', async () => {
+  const { understandingQuestions } = await import('../public/understanding.js');
+  // Smart Greenhouse installed in a different order, plus a device the quest does not use.
+  const m = missions[6],
+    planned = defaults(m.ids, 'ESP32'),
+    byId = (id) => planned.find((d) => d.id === id),
+    installed = [
+      ...['ldr', 'led', 'temp', 'fan', 'soil', 'valve'].map(byId),
+      { ...defaults(['buzzer'], 'ESP32')[0], pin: 4 },
+    ],
+    steps = coachSteps(m, 'cpp', installed),
+    decide = steps.filter((s) => s.key.startsWith('decide-'));
+  assert.deepEqual(
+    decide.map((s) => s.title),
+    ['Switch the cooling fan', 'Switch the path lights', 'Switch the irrigation valve'],
+  );
+  assert.match(decide[0].body[1], /temp reading is above 27/);
+  const solution = studentProgram(m, 'cpp', planned);
+  assert.ok(decide.every((s) => s.check(solution).done));
+  assert.match(understandingQuestions(m, 'cpp', installed)[0].prompt, /cooling fan/);
+
+  const light = missions[0],
+    devices = defaults(light.ids, 'ESP32'),
+    cpp = coachSteps(light, 'cpp', devices),
+    step = (key, list = cpp) => list.find((s) => s.key === key);
+  // Reading, then waiting, then deciding: same verdict as the mission tests.
+  const waitFirst = studentProgram(light, 'cpp', devices).replace(
+    '  int light = analogRead(lightPin);\n',
+    '  int light = analogRead(lightPin);\n  delay(200);\n',
+  );
+  assert.equal(step('decide-0').check(waitFirst).done, true);
+  // Other integer types and an untyped reading into a global variable.
+  const byteProgram = studentProgram(light, 'cpp', devices)
+    .replace('const int lightPin', 'const byte lightPin')
+    .replace('const int ledPin', 'const uint8_t ledPin')
+    .replace('void setup() {', 'int light = 0;\nvoid setup() {')
+    .replace('  int light = analogRead', '  light = analogRead');
+  for (const key of ['pins', 'setup', 'read-light', 'decide-0'])
+    assert.equal(step(key).check(byteProgram).done, true, key);
+  // #define is not supported by the simulator, so it is not accepted as done.
+  const defined = '#define LIGHT 34\n#define LED 26\n';
+  assert.equal(step('pins').check(defined).done, false);
+  assert.match(step('pins').check(defined).message, /does not support #define/);
+  // A program hidden in a block comment is not code.
+  const hidden = '/*\n' + studentProgram(light, 'cpp', devices) + '*/\n';
+  for (const key of ['pins', 'setup', 'loop'])
+    assert.equal(step(key).check(hidden).done, false, key);
+  // MicroPython: pull-down option on a digital input, and ADC(n) on a Pico.
+  const motion = missions[1],
+    py = coachSteps(motion, 'python', defaults(motion.ids, 'ESP32')),
+    pulled = studentProgram(motion, 'python', defaults(motion.ids, 'ESP32')).replace(
+      'Pin(27, Pin.IN)',
+      'Pin(27, Pin.IN, Pin.PULL_DOWN)',
+    );
+  assert.equal(step('pins', py).check(pulled).done, true, step('pins', py).check(pulled).message);
+  const picoDevices = defaults(light.ids, 'Raspberry Pi Pico'),
+    pico = coachSteps(light, 'python', picoDevices, 'Raspberry Pi Pico'),
+    adc = studentProgram(light, 'python', picoDevices).replace('ADC(Pin(26))', 'ADC(26)');
+  assert.equal(step('pins', pico).check(adc).done, true);
+});

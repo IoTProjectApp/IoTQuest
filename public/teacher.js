@@ -4,7 +4,9 @@ import {
   reportViews,
   classGrid,
   needsHelp,
+  needsReview,
   progressCSV,
+  PROGRESS_LIMITS,
 } from './progress-report.js';
 import { highlight } from './syntax-highlight.js';
 import { esc } from './html.js';
@@ -26,7 +28,12 @@ const inClass = () =>
 // Text for a cell, so status is never shown by colour alone.
 export function cellSummary(q) {
   if (!q || q.status === 'not-started') return { kind: 'none', icon: '–', text: 'Not started' };
-  const effort = plural(q.attempts, 'test') + ' · ' + plural(q.hints, 'hint');
+  const effort =
+    plural(q.attempts, 'test') +
+    ' · ' +
+    plural(q.hints, 'hint') +
+    (q.understandAnswered ? ' · ' + q.understood + '/' + q.understandTotal + ' understood' : '');
+  if (needsReview(q)) return { kind: 'review', icon: '?', text: 'Passed · review', effort };
   if (q.status === 'passed') return { kind: 'passed', icon: '✓', text: 'Passed', effort };
   return {
     kind: needsHelp(q) ? 'help' : 'started',
@@ -40,6 +47,9 @@ async function addFiles(files) {
   const errors = [];
   for (const file of files) {
     try {
+      // Reject oversized files before reading them into memory.
+      if (file.size > PROGRESS_LIMITS.bytes)
+        throw new Error('This file is too large to be a progress report.');
       reports.push(parseProgressReport(await file.text()));
     } catch (e) {
       errors.push(file.name + ': ' + (e.message || 'could not be read.'));
@@ -47,6 +57,8 @@ async function addFiles(files) {
   }
   $('fileErrors').hidden = !errors.length;
   $('fileErrors').innerHTML = errors.map((e) => '<li>' + esc(e) + '</li>').join('');
+  // New students change the row order, so the selected cell would point at someone else.
+  selected = null;
   render();
 }
 
@@ -91,14 +103,21 @@ function render() {
       (n, r) => n + r.cells.filter((q) => q?.status === 'passed').length,
       0,
     ),
-    helping = grid.rows.filter((r) => r.cells.some((q) => q && needsHelp(q)));
+    helping = grid.rows.filter((r) => r.cells.some((q) => q && needsHelp(q))),
+    reviewing = grid.rows.filter((r) => r.cells.some((q) => q && needsReview(q)));
   $('tiles').innerHTML =
     tile(students, students === 1 ? 'student' : 'students') +
     tile(
       students ? (passed / students).toFixed(1) + ' / ' + grid.quests.length : '–',
       'quests passed on average',
     ) +
-    tile(helping.length, helping.length === 1 ? 'student needs help' : 'students need help');
+    tile(helping.length, helping.length === 1 ? 'student needs help' : 'students need help') +
+    tile(
+      reviewing.length,
+      reviewing.length === 1
+        ? 'student passed but needs review'
+        : 'students passed but need review',
+    );
   $('grid').innerHTML =
     '<caption class="t-sr">Quest progress for each student</caption><thead><tr><th scope="col">Student</th>' +
     grid.quests
@@ -164,9 +183,14 @@ function render() {
   );
   const help = [];
   grid.rows.forEach((r, ri) =>
-    r.cells.forEach((q, index) => q && needsHelp(q) && help.push({ r, ri, q, index })),
+    r.cells.forEach(
+      (q, index) => q && (needsHelp(q) || needsReview(q)) && help.push({ r, ri, q, index }),
+    ),
   );
-  help.sort((a, b) => b.q.attempts + b.q.hints - (a.q.attempts + a.q.hints));
+  help.sort(
+    (a, b) =>
+      needsReview(a.q) - needsReview(b.q) || b.q.attempts + b.q.hints - (a.q.attempts + a.q.hints),
+  );
   $('helpList').innerHTML =
     '<h2>Who needs help</h2>' +
     (help.length
@@ -184,16 +208,22 @@ function render() {
               esc(h.q.title) +
               '</button><span>' +
               esc(
-                (h.q.stuck ? 'At “' + h.q.stuck + '” · ' : '') +
-                  plural(h.q.attempts, 'test') +
-                  ' · ' +
-                  plural(h.q.hints, 'hint'),
+                needsReview(h.q)
+                  ? 'Passed, but ' +
+                      h.q.understood +
+                      ' of ' +
+                      h.q.understandTotal +
+                      ' understanding questions right first time'
+                  : (h.q.stuck ? 'At “' + h.q.stuck + '” · ' : '') +
+                      plural(h.q.attempts, 'test') +
+                      ' · ' +
+                      plural(h.q.hints, 'hint'),
               ) +
               '</span></li>',
           )
           .join('') +
         '</ul>'
-      : '<p class="t-muted">Nobody is stuck on these quests: no one has 3 or more test attempts or hints on a quest they have not passed.</p>');
+      : '<p class="t-muted">Nobody needs help on these quests: no one has 3 or more test attempts or hints on a quest they have not passed, and no one has passed with fewer than half of the understanding questions right first time.</p>');
   document.querySelectorAll('.t-link').forEach(
     (b) =>
       (b.onclick = () => {
@@ -243,6 +273,16 @@ function renderDetail(grid) {
         q.attempts +
         '</dd><dt>Hints used</dt><dd>' +
         q.hints +
+        '</dd><dt>Understanding</dt><dd>' +
+        (q.status !== 'passed' || !q.understandTotal
+          ? '–'
+          : q.understandAnswered
+            ? q.understood +
+              ' of ' +
+              q.understandTotal +
+              ' right first time' +
+              (q.understandAnswered < q.understandTotal ? ' (not finished)' : '')
+            : 'Not answered yet') +
         '</dd><dt>Passed</dt><dd>' +
         esc(when(q.passedAt)) +
         '</dd><dt>Last active</dt><dd>' +

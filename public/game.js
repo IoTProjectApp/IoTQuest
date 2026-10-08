@@ -33,6 +33,7 @@ import { readProject, ImportError, IMPORT_LIMITS, PROJECT_FORMAT } from './proje
 import { formatCode as formatSource, FormatError, INDENT } from './code-format.js';
 import { coachSteps } from './code-coach.js';
 import { buildProgressReport, progressFileName } from './progress-report.js';
+import { understandingQuestions, answerQuestion, understandingScore } from './understanding.js';
 const $ = (id) => document.getElementById(id);
 const STORAGE_KEY = 'iotquest-v1',
   TICK_MS = 200,
@@ -1013,6 +1014,8 @@ function renderCode() {
     if (!canEdit('Programmer') || blockedByHunt('Reset')) return;
     stop(false);
     project().code[state.language] = program(mission(), state.language, planned());
+    // Start the Guide again from the first unfinished step.
+    delete coachStep[state.activeLocation + ':' + activeKey() + ':' + state.language];
     markEdited();
     renderCode();
     toast('Starter code restored. Components and wiring are preserved.');
@@ -1257,6 +1260,9 @@ function changeBoard(board) {
   );
   project().devices = project().devices.map((d, i) => ({ ...d, pin: plannedDevices[i].pin }));
   project().code = {};
+  // The editor is empty again, so the Guide starts from its first unfinished step.
+  for (const key of Object.keys(coachStep))
+    if (key.startsWith(state.activeLocation + ':' + activeKey() + ':')) delete coachStep[key];
   markEdited();
   renderBench();
   toast('Controller changed. Pins were remapped and starter code reloaded for ' + board + '.');
@@ -2038,6 +2044,9 @@ function renderTests() {
     (currentPassed && activeFault
       ? '<p class="repair-explanation">' + esc(activeFault.explain) + '</p>'
       : '') +
+    (!free && !activeFault && solvedOwnCode(state.mission)
+      ? '<section class="understand" id="understanding" aria-labelledby="understandTitle"></section>'
+      : '') +
     '<div class="bench-heading"><button class="outline" id="backCode">Back to code</button>' +
     (currentPassed && !activeFault && state.mission < activeMissions().length - 1
       ? '<button class="primary" id="nextMission">Next quest</button>'
@@ -2047,10 +2056,132 @@ function renderTests() {
     (free || activeFault ? '' : '<button class="outline" id="huntBtn">Spot the bugs</button>') +
     '</div></div>';
   $('testAgain').onclick = testSolution;
+  renderUnderstanding();
   $('backCode').onclick = () => switchTab('code');
   if ($('nextMission')) $('nextMission').onclick = () => selectMission(state.mission + 1);
   if ($('debugBtn')) $('debugBtn').onclick = debugChallenge;
   if ($('huntBtn')) $('huntBtn').onclick = () => ownCodeFirst(state.mission) && startBugHunt();
+}
+// "Check your understanding": questions about the passed quest. Answers are saved with the
+// quest's completion record (and appear in progress reports); a right first try earns XP.
+const understandView = {};
+function renderUnderstanding() {
+  const el = $('understanding');
+  if (!el) return;
+  const done = currentCompletions()[completionKey()],
+    language = done?.language === 'python' ? 'python' : done?.language ? 'cpp' : state.language,
+    devices = done?.devices?.length
+      ? done.devices
+      : project().devices.length
+        ? project().devices
+        : planned(),
+    questions = understandingQuestions(mission(), language, devices, state.board);
+  if (!done || !questions.length) {
+    el.hidden = true;
+    return;
+  }
+  const record = (done.understanding ??= {}),
+    answers = record.answers || {},
+    key = state.activeLocation + ':' + completionKey(),
+    firstOpen = questions.findIndex((q) => !answers[q.id]?.solved),
+    index = (understandView[key] ??= firstOpen < 0 ? questions.length : firstOpen),
+    score = understandingScore(record, questions.length),
+    rich = (text) => esc(text).replace(/`([^`]+)`/g, '<code>$1</code>'),
+    heading =
+      '<h4 id="understandTitle">Check your understanding</h4><p class="u-progress">' +
+      (index < questions.length
+        ? 'Question ' + (index + 1) + ' of ' + questions.length + ' · '
+        : '') +
+      score.right +
+      ' right first time' +
+      (record.xp ? ' · +' + record.xp + ' XP' : '') +
+      '</p>';
+  if (index >= questions.length) {
+    setHTML(
+      el,
+      heading +
+        '<p>You answered all ' +
+        questions.length +
+        ' questions and got <strong>' +
+        score.right +
+        ' of ' +
+        questions.length +
+        '</strong> right first time.' +
+        (score.right < questions.length
+          ? ' Read the explanations again for the ones you missed, then try the simulation at the threshold.'
+          : ' Excellent: you understand how your program works.') +
+        '</p><ul class="u-summary">' +
+        questions
+          .map((q) => '<li>' + (answers[q.id]?.first ? '✓ ' : '↺ ') + rich(q.prompt) + '</li>')
+          .join('') +
+        '</ul><button class="outline" id="understandReview">Review the questions</button>',
+    );
+    $('understandReview').onclick = () => {
+      understandView[key] = 0;
+      renderUnderstanding();
+    };
+    return;
+  }
+  const q = questions[index],
+    a = answers[q.id],
+    chosen = a?.last,
+    solved = !!a?.solved;
+  setHTML(
+    el,
+    heading +
+      '<p class="u-prompt">' +
+      rich(q.prompt) +
+      '</p><div class="u-choices" role="group" aria-label="Answers">' +
+      q.choices
+        .map(
+          (c, i) =>
+            '<button class="u-choice' +
+            (i === chosen ? (i === q.answer ? ' right' : ' wrong') : '') +
+            (solved && i === q.answer ? ' right' : '') +
+            '" data-u-choice="' +
+            i +
+            '" aria-pressed="' +
+            (i === chosen) +
+            '">' +
+            rich(c.text) +
+            '</button>',
+        )
+        .join('') +
+      '</div>' +
+      (chosen !== undefined
+        ? '<p class="u-feedback ' +
+          (chosen === q.answer ? 'ok' : 'no') +
+          '" role="status">' +
+          (chosen === q.answer ? '✓ Correct. ' : 'Not quite. ') +
+          rich(q.choices[chosen].why.replace(/^Right\. /, '')) +
+          (chosen === q.answer ? '' : ' Try another answer.') +
+          '</p>'
+        : '') +
+      (solved
+        ? '<button class="primary" id="understandNext">' +
+          (index < questions.length - 1 ? 'Next question →' : 'See your results') +
+          '</button>'
+        : ''),
+  );
+  document.querySelectorAll('[data-u-choice]').forEach(
+    (b) =>
+      (b.onclick = () => {
+        const result = answerQuestion(record, q, Number(b.dataset.uChoice));
+        if (result.xp) {
+          state.xp += result.xp;
+          record.xp = (record.xp || 0) + result.xp;
+          $('xp').textContent = state.xp;
+          toast('✦ Right first time · +' + result.xp + ' XP');
+        }
+        save();
+        renderUnderstanding();
+      }),
+  );
+  if ($('understandNext'))
+    $('understandNext').onclick = () => {
+      understandView[key] = index + 1;
+      renderUnderstanding();
+    };
 }
 function debugChallenge() {
   const m = mission();
@@ -2288,6 +2419,10 @@ function toggleExplanations() {
   }
   const source = code(),
     showing = hasExplanations(source);
+  if (!showing && explainCode(source, state.language, project().devices) === source) {
+    toast('Nothing to explain yet: write some code, then press Explain.');
+    return;
+  }
   // Comments do not change behaviour, so test results are kept. A running program and an
   // error marker refer to the old line numbers, so they are reset.
   if (running) stop(false);

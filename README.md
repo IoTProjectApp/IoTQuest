@@ -34,13 +34,23 @@ Install components, connect signal/power/ground and required resistors, then edi
 - Hints are revealed one at a time. The last hint for a decision is the condition itself, never the full if/else.
 - Activities that start from finished code (Try a debugging challenge, Spot the bugs and the fault workshop) unlock only after the student has passed that quest with their own program. Changing language preserves wiring; changing controller remaps pins and reloads starters.
 
+### Check your understanding
+
+After a quest is passed, the Tests panel asks three questions built from that quest's own rule, sensors and scenarios, so every quest has them (in the language the student passed with):
+
+- **Predict:** the output in one of the quest's scenarios, at the exact boundary where possible (for example, "At threshold: the readings are light 1800. Are the path lights ON or OFF?").
+- **Read:** what the student's sensor-reading code gives the program (a 0–4095 number, °C, a percentage, centimetres, or HIGH/LOW).
+- **Change:** which part of the condition to change to switch at a different reading, or, for quests without a numeric threshold, what the `else` is for.
+
+Every answer, right or wrong, is explained; students keep trying until they get it right. A right first try earns 10 XP. Results are saved with the quest, included in progress reports, and shown in the class view.
+
 ### Class progress for teachers
 
 Progress is saved in each student's browser, so students hand it in as a file:
 
 - **Students:** Package → **Hand in your progress**. Type your name (and optionally a class code), then download the progress report (`iotquest-progress-<name>-<date>.json`) and submit it through the LMS or Teams. Nothing is sent online.
 - **Teachers:** open `teacher.html` (linked from the Package tab, or `/teacher.html` on the site) and drop in the class's report files. The class view shows:
-  - a grid of students × quests for each destination and level: ✓ passed, … working on it (with the Guide step they are up to), ! needs help (3 or more test attempts or hints on a quest not yet passed), – not started, plus test attempts and hints per quest;
+  - a grid of students × quests for each destination and level: ✓ passed, ? passed but needs review (fewer than half of the understanding questions right first time), … working on it (with the Guide step they are up to), ! needs help (3 or more test attempts or hints on a quest not yet passed), – not started, plus test attempts, hints and understanding per quest;
   - totals: students, quests passed on average, and how many students need help;
   - a **Who needs help** list, most attempts and hints first;
   - each student's details and code when you select a cell;

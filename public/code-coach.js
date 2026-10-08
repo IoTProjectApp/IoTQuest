@@ -1,5 +1,5 @@
 import { Runtime } from './runtime.js';
-import { baseEnv } from './missions.js';
+import { baseEnv, defaults } from './missions.js';
 // The code coach. Students write the whole program themselves: the editor starts with only the
 // quest's title and goal as comments, and the guide walks through each part (imports, pin names,
 // setup, the loop, sensor readings and decisions), explaining what the code does and why. Each
@@ -35,8 +35,18 @@ export function guidedStarter(mission, language) {
   );
 }
 
+// The quest's devices in the quest's own order (output i follows condition i), whatever order
+// the student installed them in; devices the quest does not use are left out.
+export function questDevices(mission, devices, board = 'ESP32') {
+  const planned = defaults(mission.ids, board);
+  return mission.ids.map(
+    (id) => devices.find((d) => d.id === id) ?? planned.find((d) => d.id === id),
+  );
+}
 // Strips comments so examples in comments never count as code.
 function codeOnly(code, language) {
+  if (!python(language))
+    code = code.replace(/\/\*[\s\S]*?\*\//g, (block) => block.replace(/[^\n]/g, ' '));
   return code
     .split('\n')
     .map((line) => line.replace(python(language) ? /#.*$/ : /\/\/.*$/, ''))
@@ -48,27 +58,34 @@ function pinName(code, d, language) {
   const m = python(language)
     ? code.match(
         d.output
-          ? new RegExp('^\\s*(\\w+)\\s*=\\s*Pin\\(\\s*' + pin + '\\s*,\\s*Pin\\.OUT\\s*\\)', 'm')
+          ? new RegExp(
+              '^\\s*(\\w+)\\s*=\\s*Pin\\(\\s*' + pin + '\\s*,\\s*Pin\\.OUT\\b[^)]*\\)',
+              'm',
+            )
           : d.analog
-            ? new RegExp('^\\s*(\\w+)\\s*=\\s*ADC\\(\\s*Pin\\(\\s*' + pin + '\\s*\\)\\s*\\)', 'm')
-            : new RegExp('^\\s*(\\w+)\\s*=\\s*Pin\\(\\s*' + pin + '\\s*,\\s*Pin\\.IN\\s*\\)', 'm'),
+            ? new RegExp(
+                '^\\s*(\\w+)\\s*=\\s*ADC\\(\\s*(?:Pin\\(\\s*' + pin + '\\s*\\)|' + pin + ')\\s*\\)',
+                'm',
+              )
+            : new RegExp(
+                '^\\s*(\\w+)\\s*=\\s*Pin\\(\\s*' + pin + '\\s*,\\s*Pin\\.IN\\b[^)]*\\)',
+                'm',
+              ),
       )
     : code.match(
         new RegExp(
-          '(?:\\b(?:const\\s+)?int\\s+(\\w+)\\s*=\\s*' +
+          '\\b(?:const\\s+)?(?:unsigned\\s+)?(?:int|byte|uint8_t|long|short)\\s+(\\w+)\\s*=\\s*' +
             pin +
-            '\\s*;|#define\\s+(\\w+)\\s+' +
-            pin +
-            '\\b)',
+            '\\s*;',
         ),
       );
-  return m ? m[1] || m[2] : null;
+  return m ? m[1] : null;
 }
 // Where the repeating part starts, so readings can be checked to be inside it.
 const loopStart = (code, language) =>
   code.search(python(language) ? /^while\s+True\s*:/m : /\bvoid\s+loop\s*\(\s*\)\s*\{/);
 
-const OPERATORS = {
+export const OPERATORS = {
   '<': [
     'is below',
     '< means “less than”. The threshold itself is not less than itself, so it counts as false.',
@@ -108,7 +125,7 @@ export function describeCondition(condition, devices) {
 const conditionFor = (condition, language) =>
   python(language) ? condition.replace(/&&/g, 'and').replace(/\|\|/g, 'or') : condition;
 
-function readingText(env, devices) {
+export function readingText(env, devices) {
   return Object.entries(env)
     .map(([signal, v]) => {
       const d = devices.find((d) => d.signal === signal);
@@ -132,7 +149,9 @@ export function checkOutput(code, language, devices, board, mission, index) {
   for (const [name, env, expected] of mission.scenarios) {
     let result;
     try {
-      result = runtime.step({ ...baseEnv, ...env });
+      // As many steps as the mission tests, so a program that reads, waits and then decides
+      // gets the same verdict here as in Test your solution.
+      for (let i = 0; i < 25; i++) result = runtime.step({ ...baseEnv, ...env });
     } catch (e) {
       return { done: false, message: 'The program stopped with an error: ' + e.message };
     }
@@ -232,7 +251,7 @@ function pinsStep(devices, language) {
               (py ? '\\s*=\\s*(?:ADC\\()?Pin\\(\\s*(\\d+)' : '\\s*=\\s*(\\d+)'),
           ),
         );
-        if (wrong)
+        if (wrong && wrong[1] !== String(d.pin))
           return waiting(
             '`' +
               suggestedName(d, language) +
@@ -244,6 +263,8 @@ function pinsStep(devices, language) {
               d.pin +
               '.',
           );
+        if (!py && /#define\b/.test(code))
+          return waiting('Use `const int` for pin names: the simulator does not support #define.');
         if (py && new RegExp('Pin\\(\\s*' + d.pin + '\\b').test(code))
           return waiting(
             'Check the ' +
@@ -375,7 +396,7 @@ function readStep(d, language) {
               'm',
             )
           : new RegExp(
-              '\\b(?:int|long|float|double)\\s+(\\w+)\\s*=\\s*(analogRead|digitalRead)\\s*\\(\\s*(?:' +
+              '(?:\\b(?:int|long|float|double|bool|byte)\\s+)?\\b(\\w+)\\s*=\\s*(analogRead|digitalRead)\\s*\\(\\s*(?:' +
                 escapeRe(name) +
                 '|' +
                 d.pin +
@@ -464,8 +485,9 @@ function decideStep(mission, d, i, devices, language, board) {
 }
 
 // The guide for a mission: one step per part of the program, each explaining what to write.
-export function coachSteps(mission, language, devices, board = 'ESP32') {
+export function coachSteps(mission, language, installed, board = 'ESP32') {
   const py = python(language),
+    devices = questDevices(mission, installed, board),
     steps = [];
   if (py) steps.push(importStep(devices));
   steps.push(pinsStep(devices, language));

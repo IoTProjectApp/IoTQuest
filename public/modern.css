@@ -3247,3 +3247,28 @@ html[data-theme='dark'] .u-feedback.no {
 .ac-doc[hidden] {
   display: none;
 }
+.update-bar {
+  position: fixed;
+  left: 50%;
+  bottom: 18px;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px 10px 16px;
+  border-radius: 999px;
+  background: #17243b;
+  color: #fff;
+  font-size: 13px;
+  box-shadow: 0 10px 30px #17243b40;
+  transform: translateX(-50%);
+}
+.update-bar button {
+  padding: 6px 14px;
+  border: 0;
+  border-radius: 999px;
+  background: #fff;
+  color: #17243b;
+  font-weight: 700;
+  cursor: pointer;
+}

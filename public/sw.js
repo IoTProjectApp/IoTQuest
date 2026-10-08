@@ -1,6 +1,13 @@
-// Offline support: the build stamps in VERSION and the full file list, so the first visit stores
-// the whole game and each deploy replaces the old copy. Weather and other online requests still
-// go to the network; when that fails the game falls back to practice weather.
+// Offline support: the build stamps in VERSION and the full file list. Each deploy is stored as
+// one complete, versioned copy, and a page only ever uses one copy, so files from two deploys are
+// never mixed (a new game.js with an old module would break the game):
+// - installing downloads every file straight from the server, never from the browser's HTTP cache
+//   (GitHub Pages lets browsers keep files for 10 minutes, which would mix in the previous deploy);
+// - files are served from this version's copy and never refreshed one by one;
+// - a new version waits until the student reloads (the page shows "A new version is ready"), so
+//   an open page never runs half old, half new code.
+// Weather and other online requests still go to the network; offline, the game falls back to
+// practice weather.
 const VERSION = 'dev';
 const PRECACHE = [];
 const CACHE = 'iotquest-' + VERSION;
@@ -15,9 +22,13 @@ self.addEventListener('install', (event) => {
   event.waitUntil(
     caches
       .open(CACHE)
-      .then((cache) => cache.addAll(PRECACHE))
-      .then(() => self.skipWaiting()),
+      .then((cache) => cache.addAll(PRECACHE.map((url) => new Request(url, { cache: 'reload' })))),
   );
+});
+
+// The page asks for this when the student chooses to reload into the new version.
+self.addEventListener('message', (event) => {
+  if (event.data === 'skipWaiting') self.skipWaiting();
 });
 
 self.addEventListener('activate', (event) => {
@@ -48,14 +59,16 @@ self.addEventListener('fetch', (event) => {
       const root = new URL('./', self.location).href,
         key = request.mode === 'navigate' && url.origin + url.pathname === root ? root : request;
       const cached = await cache.match(key, { ignoreSearch: request.mode === 'navigate' });
-      const fresh = fetch(request)
-        .then((response) => {
-          if (response.ok || response.type === 'opaque') cache.put(key, response.clone());
-          return response;
-        })
-        .catch(() => cached || Response.error());
-      // Stale-while-revalidate: answer from the cache at once, refresh it in the background.
-      return cached || fresh;
+      if (cached) return cached;
+      try {
+        const response = await fetch(request);
+        // Only fonts are added as they are used; game files come from the versioned install.
+        if (!sameOrigin && (response.ok || response.type === 'opaque'))
+          cache.put(request, response.clone());
+        return response;
+      } catch {
+        return Response.error();
+      }
     }),
   );
 });

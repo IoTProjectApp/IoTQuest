@@ -151,7 +151,7 @@ In **Live circuit → Real board**, **Download board program** generates a progr
 
 ### Install and play offline
 
-The game can be installed as an app (browser menu, or **Settings → Install app** when offered) and opens offline after the first visit. The build stamps the service worker (`public/sw.js`) with every file and a content version, so a deploy replaces the cached copy on the next visit. Live weather still needs the network; offline, the header shows **Offline · practice weather**. The unbuilt `sw.js` served by `npm run dev` caches nothing, so development is never affected. To try offline locally, run `npm run build`, then `ROOT=dist/client npm run dev`.
+The game can be installed as an app (browser menu, or **Settings → Install app** when offered) and opens offline after the first visit. The build stamps the service worker (`public/sw.js`) with every file and a content version. Each deploy is stored as one complete copy, downloaded straight from the server (GitHub Pages lets browsers keep files for 10 minutes, which would otherwise mix in the previous deploy). An open page keeps using its version; when a new one has downloaded, a bar offers **A new version of IoT Quest is ready · Reload**, so a page never runs half old and half new code. Live weather still needs the network; offline, the header shows **Offline · practice weather**. The unbuilt `sw.js` served by `npm run dev` caches nothing, so development is never affected. To try offline locally, run `npm run build`, then `ROOT=dist/client npm run dev`.
 
 ### Class progress for teachers
 

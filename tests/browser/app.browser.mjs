@@ -291,3 +291,81 @@ test('typing in the editor offers suggestions, Enter inserts one and the hint sh
   assert.deepEqual(errors, []);
   await page.close();
 });
+
+// GitHub Pages lets browsers keep files for 10 minutes. This serves two releases the same way and
+// checks that a returning visitor gets each deploy whole, after choosing to reload.
+test('a returning visitor switches to a new deploy whole, never a mix of two releases', async () => {
+  const { mkdtemp, cp, readFile, writeFile, appendFile } = await import('node:fs/promises');
+  const { tmpdir } = await import('node:os');
+  const { join, extname } = await import('node:path');
+  const http = await import('node:http');
+  execFileSync(process.execPath, ['scripts/build.mjs']);
+  const root = await mkdtemp(join(tmpdir(), 'iotquest-releases-'));
+  await cp('dist/client', join(root, 'one'), { recursive: true });
+  await cp('dist/client', join(root, 'two'), { recursive: true });
+  await appendFile(join(root, 'two', 'game.js'), '\n// release two\n');
+  const sw = join(root, 'two', 'sw.js');
+  await writeFile(
+    sw,
+    (await readFile(sw, 'utf8')).replace(
+      /const VERSION = "[a-f0-9]+"/,
+      'const VERSION = "release-two"',
+    ),
+  );
+  let release = 'one';
+  const server = http.createServer(async (req, res) => {
+    let path = decodeURIComponent(new URL(req.url, 'http://x').pathname);
+    if (path.endsWith('/')) path += 'index.html';
+    try {
+      const body = await readFile(join(root, release, path));
+      res.writeHead(200, {
+        'Content-Type':
+          { '.js': 'text/javascript', '.html': 'text/html', '.css': 'text/css' }[extname(path)] ||
+          'application/octet-stream',
+        'Cache-Control': 'max-age=600',
+      });
+      res.end(body);
+    } catch {
+      res.writeHead(404).end();
+    }
+  });
+  await new Promise((r) => server.listen(0, '127.0.0.1', r));
+  const url = 'http://127.0.0.1:' + server.address().port + '/';
+  const context = await browser.newContext();
+  const page = await context.newPage();
+  try {
+    await page.route(/^https?:\/\/(?!127\.0\.0\.1)/, (route) => route.abort());
+    await page.goto(url);
+    await page.evaluate(() => navigator.serviceWorker.ready);
+    await page.reload();
+    release = 'two';
+    let offered = false;
+    for (let i = 0; i < 4 && !offered; i++) {
+      await page.reload();
+      offered = await page
+        .locator('#updateBar')
+        .waitFor({ timeout: 3000 })
+        .then(
+          () => true,
+          () => false,
+        );
+    }
+    assert.ok(offered, 'the page offers the new version');
+    // Until the student reloads, the open page keeps using release one, whole.
+    assert.doesNotMatch(
+      await page.evaluate(() => fetch('game.js').then((r) => r.text())),
+      /release two/,
+    );
+    await Promise.all([page.waitForEvent('load'), page.click('#updateBar button')]);
+    const after = await page.evaluate(async () => ({
+      caches: (await caches.keys()).filter((k) => k.startsWith('iotquest-')),
+      game: await fetch('game.js').then((r) => r.text()),
+    }));
+    assert.deepEqual(after.caches, ['iotquest-release-two']);
+    assert.match(after.game, /release two/);
+    assert.equal(await page.locator('#resumeLegacy').isVisible(), true);
+  } finally {
+    await context.close();
+    server.close();
+  }
+});

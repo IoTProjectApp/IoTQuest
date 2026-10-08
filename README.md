@@ -41,6 +41,12 @@ Install components, connect signal/power/ground and required resistors, then edi
 - Hints are revealed one at a time. The last hint for a decision is the condition itself, never the full if/else.
 - Activities that start from finished code (Try a debugging challenge, Spot the bugs and the fault workshop) unlock only after the student has passed that quest with their own program. Changing language preserves wiring; changing controller remaps pins and reloads starters.
 
+### Code suggestions
+
+As students type, the editor suggests what can come next: Arduino and MicroPython functions the simulator runs (`digitalWrite`, `analogRead`, `Serial.println`, `Pin`, `ADC`, `time.sleep_ms`, the MQTT functions), keywords and constants (`OUTPUT`, `HIGH`, `Pin.OUT`), the student's own variables and functions, and the installed devices' pin names (`lightPin`, `light_sensor`). Each suggestion has a one-line explanation. After a dot it offers methods such as `led.value()` and `sensor.read()`. Inside a call, a hint shows the function's parameters with the current one highlighted.
+
+↑/↓ choose, Enter or Tab accept, Escape closes, and Ctrl+Space opens the list on demand. Enter and Tab keep their usual meaning (new indented line, indent) when the list is closed. Suggestions complete names only and never write statements, so students still write every line. Nothing is suggested inside comments or strings. **Settings → Code suggestions** turns them off, for example for an assessment.
+
 ### Resident conversations
 
 Every room and garden work area has a dedicated resident with requests specific to that section. Farm stations identify crop gardens, livestock shelters, farm water, workshops and stock entrances. Walking within greeting range automatically starts a conversation; closing it keeps the resident quiet until you leave the area. You can also click a character, press **T** nearby, or use the **Talk to …** button beside the world tip to talk again. At an installation point **E** installs devices rather than starting a chat. After a request is passed, its resident thanks the technician once and describes what now works. Ask typed questions or use the suggested replies to learn what the resident wants, which components to install, when outputs should start and stop, and which objects will animate. Choose another request in the conversation, then select **Start this request** to begin building it. Residents stop walking, face the technician and gesture during chat; reduced motion keeps gestures still.

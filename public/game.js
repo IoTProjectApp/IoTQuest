@@ -54,6 +54,7 @@ import { neededNow, situationReason } from './situation.js';
 import { conversationHTML } from './conversation-view.js';
 import { predictionHTML } from './prediction-view.js';
 import { declutterLabels } from './world-labels.js';
+import { attachAssist } from './editor-assist.js';
 import { simulateDay, dayLogQuestions, dayLogCSV } from './day-log.js';
 import { dayLogHTML } from './day-log-view.js';
 import { securityCases, dashboardQuests } from './challenges.js';
@@ -1290,9 +1291,16 @@ function renderCode() {
     clearTimeout(coachTimer);
     coachTimer = setTimeout(renderCoach, 350);
   });
+  // Code suggestions and parameter hints (registered first: they claim Enter/Tab while open).
+  attachAssist($('codeInput'), $('editorWrap'), () => ({
+    enabled: state.codeSuggestions !== false,
+    language: state.language,
+    devices: project().devices.length ? project().devices : planned(),
+  }));
   // Tab indents; Escape releases it so keyboard users can leave the editor (WCAG 2.1.2).
   let tabReleased = false;
   $('codeInput').addEventListener('keydown', (e) => {
+    if (e.assistHandled) return;
     if (e.key === 'Escape') {
       tabReleased = true;
       $('editorStatus').textContent = 'Tab now moves focus. Type to resume indenting.';
@@ -2869,6 +2877,8 @@ function settings() {
     'Make yourself comfortable',
     '<label class="setting-row"><span>Appearance<small>Choose a theme or follow your device settings.</small></span><select id="themeSetting" aria-label="Appearance theme"><option value="system">System default</option><option value="light">Light</option><option value="dark">Dark</option></select></label><label class="setting-row"><span>Reduced motion<small>Keep effects visible without looping animations.</small></span><input id="reducedSetting" type="checkbox" ' +
       (state.reduced ? 'checked' : '') +
+      '></label><label class="setting-row"><span>Code suggestions<small>Suggest names and show what each function needs while you type (Ctrl+Space to ask).</small></span><input id="suggestSetting" type="checkbox" ' +
+      (state.codeSuggestions !== false ? 'checked' : '') +
       '></label><label class="setting-row"><span>Sound effects<small>Optional buzzer alerts. Sound is off by default.</small></span><input id="soundSetting" type="checkbox" ' +
       (state.sound ? 'checked' : '') +
       '></label>' +
@@ -2895,6 +2905,10 @@ function settings() {
   $('reducedSetting').onchange = () => {
     state.reduced = $('reducedSetting').checked;
     document.body.classList.toggle('reduced-motion', state.reduced);
+    save();
+  };
+  $('suggestSetting').onchange = () => {
+    state.codeSuggestions = $('suggestSetting').checked;
     save();
   };
   $('soundSetting').onchange = () => {

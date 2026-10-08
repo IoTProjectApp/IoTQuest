@@ -3145,3 +3145,105 @@ html[data-theme='dark'] .u-feedback.no {
   color: #8a5a12;
   font-weight: 600;
 }
+.ac-pop {
+  position: absolute;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  width: 280px;
+  max-width: calc(100% - 8px);
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--white, #fff);
+  box-shadow: 0 8px 24px #17243b24;
+}
+.ac-list {
+  max-height: 150px;
+  margin: 0;
+  padding: 4px;
+  overflow-y: auto;
+  list-style: none;
+  font: 12px/1.4 var(--mono);
+}
+.ac-list li {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 4px 6px;
+  border-radius: 6px;
+  color: var(--ink);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.ac-list li[aria-selected='true'] {
+  background: var(--sage);
+}
+.ac-list li small {
+  margin-left: auto;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 10px;
+  text-overflow: ellipsis;
+}
+.ac-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ac-kind {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
+  background: var(--sage);
+  color: var(--green);
+  font-size: 10px;
+  font-weight: 700;
+}
+.ac-kind.ac-keyword {
+  color: #a0539b;
+}
+.ac-kind.ac-pin {
+  color: #2f7a4f;
+}
+.ac-doc {
+  padding: 7px 10px;
+  border-top: 1px solid var(--line);
+  background: var(--cream);
+  color: var(--ink);
+  font-size: 11px;
+  line-height: 1.45;
+}
+.ac-signature {
+  position: absolute;
+  z-index: 19;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-width: 360px;
+  padding: 6px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--white, #fff);
+  box-shadow: 0 6px 18px #17243b1f;
+  color: var(--ink);
+  font-size: 11px;
+  pointer-events: none;
+}
+.ac-signature code {
+  font: 12px var(--mono);
+}
+.ac-signature b {
+  color: var(--green);
+  text-decoration: underline;
+}
+.ac-signature span {
+  color: var(--muted);
+}
+.ac-pop[hidden],
+.ac-signature[hidden],
+.ac-doc[hidden] {
+  display: none;
+}

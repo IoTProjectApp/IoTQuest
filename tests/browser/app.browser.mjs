@@ -264,3 +264,30 @@ test('the dashboard switch controls a running program and shows what it reports'
   assert.deepEqual(errors, []);
   await page.close();
 });
+
+test('typing in the editor offers suggestions, Enter inserts one and the hint shows the argument', async () => {
+  const { page, errors } = await openHome();
+  await page.click('[data-tab="code"]');
+  await page.locator('#codeInput').click();
+  await page.keyboard.press('Control+End');
+  await page.keyboard.type('\nconst int lightPin = 34;\nvoid loop() {\ndigi');
+  assert.deepEqual(
+    await page.$$eval('#acList li .ac-label', (li) => li.map((l) => l.textContent)),
+    ['digitalRead(pin)', 'digitalWrite(pin, value)'],
+  );
+  await page.keyboard.press('ArrowDown');
+  await page.keyboard.press('Enter');
+  await page.keyboard.type('lightP');
+  await page.keyboard.press('Tab');
+  await page.keyboard.type(', ');
+  assert.match(await page.inputValue('#codeInput'), /digitalWrite\(lightPin, \)$/);
+  assert.equal(await page.textContent('#acSignature b'), 'value');
+  const box = await page.locator('#acSignature').boundingBox(),
+    editor = await page.locator('#editorWrap').boundingBox();
+  assert.ok(
+    box.x >= editor.x && box.x + box.width <= editor.x + editor.width + 1,
+    'hint inside the editor',
+  );
+  assert.deepEqual(errors, []);
+  await page.close();
+});

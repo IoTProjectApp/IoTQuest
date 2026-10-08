@@ -165,6 +165,16 @@ html[data-theme='dark'] .situation-line {
 html[data-theme='dark'] .needed-request {
   border-color: #5a4626;
 }
+html[data-theme='dark'] .ac-kind,
+html[data-theme='dark'] .ac-signature b {
+  color: #9da8ff;
+}
+html[data-theme='dark'] .ac-kind.ac-keyword {
+  color: #e7a6e1;
+}
+html[data-theme='dark'] .ac-kind.ac-pin {
+  color: #7fd6a2;
+}
 html[data-theme='dark'] .brand-quest {
   color: #9da8ff;
 }

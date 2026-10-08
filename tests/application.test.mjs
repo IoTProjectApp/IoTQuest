@@ -14,6 +14,7 @@ import { neededNow, situationReason } from '../public/situation.js';
 import { conversationHTML } from '../public/conversation-view.js';
 import { predictionHTML } from '../public/prediction-view.js';
 import { declutterLabels } from '../public/world-labels.js';
+import { attachAssist } from '../public/editor-assist.js';
 import { simulateDay, dayLogQuestions, dayLogCSV } from '../public/day-log.js';
 import { dayLogHTML } from '../public/day-log-view.js';
 import { securityCases, dashboardQuests } from '../public/challenges.js';
@@ -142,11 +143,18 @@ class Element {
     (this.listeners[name] ??= []).push(fn);
   }
   dispatchEvent(e) {
-    e.target = this;
+    // Real Events (from modules loaded outside the harness) have a read-only target.
+    if (!(e instanceof Event)) e.target = this;
     for (const fn of this.listeners[e.type] || []) fn(e);
   }
   setAttribute(k, v) {
     this.attrs[k] = v;
+  }
+  removeAttribute(k) {
+    delete this.attrs[k];
+  }
+  append(...nodes) {
+    (this.children ??= []).push(...nodes);
   }
   focus() {
     this.doc.activeElement = this;
@@ -371,6 +379,7 @@ function harness(
     conversationHTML,
     predictionHTML,
     declutterLabels,
+    attachAssist,
     simulateDay,
     dayLogQuestions,
     dayLogCSV,
@@ -1354,6 +1363,35 @@ test('several device labels at one installation point fan out and all stay visib
     (d) => (d.el.style.left ?? '300px') + ',' + (d.el.style.top ?? '200px'),
   );
   assert.equal(new Set(spots).size, 5, 'no two labels share a spot');
+});
+test('the editor suggests names, Enter accepts while the list is open and indents otherwise', () => {
+  const h = harness();
+  h.api.switchTab('code');
+  const input = h.document.getElementById('codeInput');
+  const type = (value) => {
+    input.value = value;
+    input.selectionStart = input.selectionEnd = value.length;
+    input.dispatchEvent({ type: 'input' });
+  };
+  const key = (k) => {
+    const e = { type: 'keydown', key: k, preventDefault() {} };
+    input.dispatchEvent(e);
+    return e;
+  };
+  type('void loop() {\n  digi');
+  assert.equal(input.attrs['aria-expanded'], 'true');
+  key('ArrowDown');
+  assert.equal(key('Enter').assistHandled, true);
+  assert.equal(input.value, 'void loop() {\n  digitalWrite()');
+  assert.equal(input.attrs['aria-expanded'], 'false');
+  // With the list closed, Enter is the editor’s own: a new, indented line.
+  type('void loop() {');
+  assert.equal(key('Enter').assistHandled, undefined);
+  assert.match(input.value, /\{\n {2}/);
+  // Suggestions can be turned off in Settings.
+  h.api.state.codeSuggestions = false;
+  type('void loop() {\n  digi');
+  assert.equal(input.attrs['aria-expanded'], 'false');
 });
 test('Tab indents in the editor until Escape releases focus', () => {
   const h = harness();

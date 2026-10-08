@@ -1,4 +1,4 @@
-import { addAnimal } from './animals.js';
+import { addAnimal, setGoal } from './animals.js';
 // Victorian farm scenes: a homestead on the usual property, surrounded by post-and-wire
 // paddocks with farm buildings, water and animals. The playable property stays where it is.
 
@@ -13,6 +13,7 @@ const PADDOCKS = {
 export function buildFarm(l, m) {
   const { box, cylinder, sphere, mesh, roof, pitchedRoof, beam } = m;
   m.animals = [];
+  const farm = (m.farm = { style: l.style });
   const front = -1,
     pasture = { dairy: '#8fb865', sheep: '#b4b877', orchard: '#9cba6d', horse: '#a3b56f' }[l.style];
   // ---- Homestead on the property ----
@@ -72,7 +73,12 @@ export function buildFarm(l, m) {
     cylinder(x, 0.55, z, 0.55, 1.1, colour, { rotation: [Math.PI / 2, 0, 0] });
   const trough = (x, z) => {
     box(x, 0.3, z, 2.2, 0.5, 0.7, '#8d969a');
-    box(x, 0.52, z, 2.0, 0.05, 0.5, '#6f9fb0');
+    return box(x, 0.52, z, 2.0, 0.05, 0.5, '#6f9fb0');
+  };
+  // A swinging gate in a paddock fence, hinged at (x, z) and closed along +z.
+  const fenceGate = (x, z) => {
+    const panel = box(x, 0.6, z + 1.2, 0.08, 1.0, 2.4, '#b9a27e');
+    return { panel, hinge: [x, z], angle: 0 };
   };
   const windmill = (x, z) => {
     for (const [dx, dz] of [
@@ -114,6 +120,8 @@ export function buildFarm(l, m) {
       dam(8, 24, 3.2);
       windmill(27, -22);
       trough(24, -22);
+      // Gates from the side paddocks into the dairy yard.
+      farm.gates = [fenceGate(-17.3, -23.2), fenceGate(17.3, -23.2)];
       herd('cow', PADDOCKS.left, 5);
       herd('cow', PADDOCKS.right, 4);
       break;
@@ -121,7 +129,7 @@ export function buildFarm(l, m) {
       shed(-3, -23, 11, 6, 2.4, '#b8bfc2', '#9aa3a6'); // shearing shed
       box(4.5, 0.6, -23, 4, 1.2, 4, '#a7a08c'); // holding yard pens
       windmill(26, -20);
-      trough(23.5, -20);
+      farm.troughWater = trough(23.5, -20);
       dam(-26, 21, 3.5);
       for (let i = 0; i < 5; i++) bale(-6 + i * 1.3, 26);
       herd('sheep', PADDOCKS.left, 8);
@@ -132,6 +140,8 @@ export function buildFarm(l, m) {
       for (let x = -32; x <= -21; x += 3.6) for (let z = -26; z <= 26; z += 4.2) fruitTree(x, z);
       for (let x = 21; x <= 32; x += 3.6) for (let z = -26; z <= 26; z += 4.2) fruitTree(x, z);
       shed(-6, -22, 4, 3, 1.6, '#c2a27a', '#4f6b4a'); // hen house
+      box(-6, 0.45, -20.47, 0.8, 0.9, 0.04, '#2b2622'); // pop hole
+      farm.henDoor = box(-6, 0.45, -20.43, 0.9, 0.95, 0.05, '#8c6a4a');
       for (const z of [-25, -18]) box(-1, 0.45, z, 10, 0.9, 0.04, '#b9bcb8', { opacity: 0.6 }); // run
       dam(0, 24, 4);
       herd('chicken', [-12, -27, 9, -16], 9);
@@ -147,6 +157,26 @@ export function buildFarm(l, m) {
       cylinder(26, 0.03, 18, 5, 0.04, '#d6c49c');
       trough(-24, -24);
       for (let i = 0; i < 4; i++) bale(6 + i * 1.3, 26);
+      // Paddock shelters with misting sprinklers along the eaves.
+      farm.shelters = [-31, 31].map((x) => {
+        openShed(x, -25, 5, 4, 2.9, '#5f6b63');
+        // Two rows of sprinkler heads, each with a few droplets falling at staggered heights.
+        const mist = [];
+        for (let i = 0; i < 36; i++)
+          mist.push(
+            sphere(
+              x - 2.1 + (i % 9) * 0.52,
+              2.8,
+              -25 + (i % 18 < 9 ? -1.4 : 1.4),
+              0.09,
+              '#f2f8fa',
+              {
+                opacity: 0,
+              },
+            ),
+          );
+        return { x, z: -25, mist };
+      });
       herd('horse', [-35, -30, -17.6, 14], 2);
       herd('horse', [17.6, -30, 35, 10], 2);
       herd('goat', PADDOCKS.back, 4);
@@ -154,4 +184,95 @@ export function buildFarm(l, m) {
   }
   m.architecture = l.style;
   return m;
+}
+
+const on = (devices, outputs, id) =>
+  (devices || []).some((d) => d.id === id && (outputs?.[d.pin] || 0) > 0);
+// Routes start with no goal; the first 'home' goal must not walk animals anywhere.
+const goal = (a, key, route, bounds, hide) =>
+  !a.goalKey && key === 'home' ? (a.goalKey = 'home') : setGoal(a, key, route, bounds, hide);
+
+// Farm responses to the circuit and the conditions: the hen-house door and hens at dusk, the
+// dairy gates and the herd, the stock trough and thirsty sheep, and the misting shelters.
+export function updateFarm(model, devices, outputs, env, t, reduced) {
+  const farm = model.farm;
+  if (!farm) return;
+  const daylight = Math.min(1, Math.max(0, (env.light ?? 70) / 65)),
+    animals = model.animals || [];
+  if (farm.henDoor) {
+    // Without a door circuit the farmer opens the door by day and shuts it at night.
+    const open = devices?.some((d) => d.id === 'gate')
+      ? on(devices, outputs, 'gate')
+      : daylight > 0.35;
+    farm.henDoor.pos[1] = open ? 1.3 : 0.45;
+    const door = [-6, -19.2];
+    for (const a of animals.filter((a) => a.kind === 'chicken')) {
+      if (daylight > 0.35) {
+        // Morning: out through an open door; with the door shut the hens stay in.
+        if (open || a.goalKey !== 'roost') goal(a, 'home', [door], a.paddock);
+      } else if (open) goal(a, 'roost', [door, [-6, -22]], [-7.5, -23.2, -4.5, -21], true);
+      else if (a.goalKey !== 'roost') goal(a, 'waiting', [], [-7.6, -20.2, -4.4, -17.4]);
+    }
+  }
+  if (farm.gates) {
+    const open = on(devices, outputs, 'gate');
+    for (const gate of farm.gates) {
+      gate.angle += ((open ? Math.PI / 2 : 0) - gate.angle) * (reduced ? 1 : 0.08);
+      const side = gate.hinge[0] < 0 ? -1 : 1,
+        a = gate.angle * side;
+      gate.panel.pos[0] = gate.hinge[0] + 1.2 * Math.sin(a);
+      gate.panel.pos[2] = gate.hinge[1] + 1.2 * Math.cos(a);
+      gate.panel.rotation[1] = a;
+    }
+    for (const a of animals.filter((a) => a.kind === 'cow')) {
+      const s = a.paddock[0] < 0 ? -1 : 1;
+      if (open)
+        goal(
+          a,
+          'milking',
+          [
+            [s * 21, -22],
+            [s * 14, -22],
+            [s * 4, -19],
+          ],
+          [-6, -26, 6, -17.5],
+        );
+      else
+        goal(
+          a,
+          'home',
+          [
+            [s * 14, -22],
+            [s * 21, -22],
+          ],
+          a.paddock,
+        );
+    }
+  }
+  if (farm.troughWater) {
+    const level = Math.min(1, Math.max(0, (env.pond ?? 60) / 100));
+    farm.troughWater.size[1] = 0.03 + level * 0.4;
+    farm.troughWater.pos[1] = 0.1 + farm.troughWater.size[1] / 2;
+    farm.troughWater.opacity = level < 0.02 ? 0 : undefined;
+    // A low trough brings the thirsty sheep in the windmill paddock crowding round.
+    for (const a of animals.filter((a) => a.kind === 'sheep' && a.paddock[0] > 0))
+      if (level < 0.3) goal(a, 'thirsty', [], [20.5, -23.5, 27, -16.5]);
+      else goal(a, 'home', [], a.paddock);
+  }
+  if (farm.shelters) {
+    const misting = on(devices, outputs, 'valve') && (env.tank ?? 0) > 0;
+    for (const shelter of farm.shelters)
+      shelter.mist.forEach((drop, i) => {
+        const fall = reduced ? 0.5 : (t * 0.8 + i * 0.37 + (i >= 18 ? 0.5 : 0)) % 1;
+        drop.pos[1] = 2.8 - fall * 2.4;
+        drop.opacity = misting ? 0.8 * (1 - fall * 0.7) : 0;
+      });
+    // Horses seek the shade of their paddock shelter on hot days.
+    for (const a of animals.filter((a) => a.kind === 'horse')) {
+      const shelter = farm.shelters[a.paddock[0] < 0 ? 0 : 1];
+      if ((env.temp ?? 24) > 30)
+        goal(a, 'shade', [], [shelter.x - 2.2, shelter.z - 1.6, shelter.x + 2.2, shelter.z + 1.6]);
+      else goal(a, 'home', [], a.paddock);
+    }
+  }
 }

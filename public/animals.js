@@ -1,6 +1,7 @@
 // Low-poly farm animals. Each animal is a set of meshes with offsets in its own frame (x is
 // forward, y is up); updateAnimals moves it around its paddock, turning towards a target,
 // alternating between walking and grazing (head down), and places every part each frame.
+// setGoal sends an animal along a route (through gates, into sheds) to graze in new bounds.
 
 // [shape, local position, size, colour key or colour, role]
 const BODIES = {
@@ -158,7 +159,23 @@ function pose(animal, t, walking = false, grazing = false) {
     mesh.pos[1] = ly + dy;
     mesh.pos[2] = animal.z - (lx + dx) * sin + lz * cos;
     mesh.rotation[1] = animal.heading;
+    if (animal.hidden) mesh.opacity = 0;
+    else delete mesh.opacity;
   }
+}
+
+// Sends the animal along `route` ([[x, z], ...]) and then lets it graze inside `bounds`. Repeated
+// calls with the same key are ignored, so this can be called every frame. `hide` makes the animal
+// disappear once it arrives (for example, hens gone in to roost).
+export function setGoal(animal, key, route = [], bounds = animal.paddock, hide = false) {
+  if (animal.goalKey === key) return;
+  animal.goalKey = key;
+  animal.route = route.map((p) => [...p]);
+  animal.bounds = bounds;
+  animal.hideAtEnd = hide;
+  animal.hidden = false;
+  animal.target = null;
+  animal.grazeFor = 0;
 }
 
 // `dt` is real seconds since the last frame; animals hold still when paused or reduced motion.
@@ -168,7 +185,12 @@ export function updateAnimals(animals, t, dt, still = false) {
       pose(a, 0, false, true);
       continue;
     }
-    const [x0, z0, x1, z1] = a.paddock;
+    const [x0, z0, x1, z1] = a.bounds || a.paddock,
+      routing = a.route?.length > 0;
+    if (routing) {
+      a.target = a.route[0];
+      a.grazeFor = 0;
+    }
     if (a.grazeFor > 0) {
       a.grazeFor -= dt;
       if (a.grazeFor <= 0)
@@ -183,16 +205,25 @@ export function updateAnimals(animals, t, dt, still = false) {
         distance = Math.hypot(dx, dz);
       if (distance < 0.3) {
         a.target = null;
-        a.grazeFor = 3 + a.rand() * 8;
+        if (routing) {
+          a.route.shift();
+          if (!a.route.length) a.hidden = !!a.hideAtEnd;
+        }
+        a.grazeFor = routing ? 0.5 + a.rand() * 2 : 3 + a.rand() * 8;
       } else {
         // Turn towards the target (heading measured so that forward is (cos, -sin)).
-        const want = Math.atan2(-dz, dx),
+        // On a route animals walk briskly. Outside their bounds (after a new goal) they walk
+        // back in rather than jumping to the edge.
+        const free = routing || a.x < x0 || a.x > x1 || a.z < z0 || a.z > z1,
+          want = Math.atan2(-dz, dx),
           turn = Math.atan2(Math.sin(want - a.heading), Math.cos(want - a.heading));
-        a.heading += Math.max(-dt * 2, Math.min(dt * 2, turn));
+        a.heading += Math.max(-dt * 3, Math.min(dt * 3, turn));
         if (Math.abs(turn) < 0.6) {
-          const step = Math.min(distance, SPEED[a.kind] * dt);
-          a.x = Math.min(x1 - 0.5, Math.max(x0 + 0.5, a.x + Math.cos(a.heading) * step));
-          a.z = Math.min(z1 - 0.5, Math.max(z0 + 0.5, a.z - Math.sin(a.heading) * step));
+          const step = Math.min(distance, SPEED[a.kind] * (free ? 2.5 : 1) * dt),
+            x = a.x + Math.cos(a.heading) * step,
+            z = a.z - Math.sin(a.heading) * step;
+          a.x = free ? x : Math.min(x1 - 0.5, Math.max(x0 + 0.5, x));
+          a.z = free ? z : Math.min(z1 - 0.5, Math.max(z0 + 0.5, z));
         }
       }
     }

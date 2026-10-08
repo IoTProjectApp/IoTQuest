@@ -360,21 +360,35 @@ export function advanceEnvironment(
           ((outputs[d.pin] || 0) === 1 ? 1 : clamp(outputs[d.pin] / 255, 0, 1)),
       0,
     );
+  // On the horse farm, misting sprinklers cool the paddock shelters.
+  const misting =
+    location?.farm && location.style === 'horse'
+      ? devices.some((d) => d.id === 'valve' && (outputs[d.pin] || 0) > 0) && next.tank > 0
+      : false;
   const blind = devices.find((d) => d.id === 'servo'),
     blindShade = blind ? 0.2 * (1 - clamp((outputs[blind.pin] || 0) / 180, 0, 1)) : 0;
   const shade = (location?.shade ?? 0.2) + blindShade,
     insulation = location?.insulation ?? 1;
   const equilibrium = next.outdoorTemp + sun * (1 - shade) * 1.5;
   next.temp = clamp(
-    next.temp + ((equilibrium - next.temp) * dt) / (240 * insulation) - cooling * dt,
+    next.temp +
+      ((equilibrium - next.temp) * dt) / (240 * insulation) -
+      (cooling + (misting ? 0.1 : 0)) * dt,
     -15,
     50,
   );
+  // A pump wired with a level probe fills the trough or pond instead of watering the beds.
+  const refill = devices.some((d) => d.id === 'pond');
+  // The flock slowly drinks the stock trough down.
+  if (location?.farm && location.style === 'sheep')
+    next.pond = clamp((next.pond ?? 60) - 0.15 * dt, 0, 100);
   for (const d of devices)
     if (['pump', 'valve'].includes(d.id) && (outputs[d.pin] || 0) > 0 && next.tank > 0) {
       const rate = d.id === 'pump' ? 1.1 : 0.4,
-        used = Math.min((next.tank / 100) * tankCapacity, rate * dt);
-      next.soil = clamp(next.soil + 2.5 * dt * (dt ? used / (rate * dt) : 0), 0, 100);
+        used = Math.min((next.tank / 100) * tankCapacity, rate * dt),
+        delivered = 2.5 * dt * (dt ? used / (rate * dt) : 0);
+      if (refill && d.id === 'pump') next.pond = clamp((next.pond ?? 60) + delivered, 0, 100);
+      else next.soil = clamp(next.soil + delivered, 0, 100);
       next.tank = clamp(next.tank - (used / tankCapacity) * 100, 0, 100);
     }
   return next;

@@ -7,6 +7,8 @@ import { createRegionalModel } from '../public/regions.js';
 import { victorianFarms } from '../public/farms.js';
 import { updateAnimals } from '../public/animals.js';
 import { resolveMove, toWorld } from '../public/world-math.js';
+import { updateFarm } from '../public/farm-assets.js';
+import { advanceEnvironment } from '../public/weather.js';
 
 const signature = (v) =>
   Object.keys(VARIANT_OPTIONS)
@@ -133,4 +135,120 @@ test('quest names name their destination, and farms use farm quests', () => {
     )[7].title,
     'Fitzroy Connected Home',
   );
+});
+
+test('each farm has a signature quest that passes with its worked example at both levels', async () => {
+  const { defaults, program, baseEnv } = await import('../public/missions.js');
+  const { Runtime } = await import('../public/runtime.js');
+  const expected = {
+    orchard: 'Hen-House Door at Dusk',
+    sheep: 'Fill the Stock Trough',
+    dairy: 'Open the Dairy Gate',
+    horse: 'Cool the Horses',
+  };
+  for (const farm of victorianFarms)
+    for (const difficulty of ['beginner', 'advanced']) {
+      const list = adaptMissions(missions, farm, difficulty),
+        m = list.find((q) => q.farmQuest);
+      assert.equal(m.title, expected[farm.style]);
+      assert.equal(list.filter((q) => q.farmQuest).length, 1);
+      const devices = defaults(m.ids, 'ESP32'),
+        runtime = new Runtime(program(m, 'cpp', devices, true), 'cpp', devices, 'ESP32');
+      for (const [name, env, want] of m.scenarios) {
+        const r = runtime.step({ ...baseEnv, ...env });
+        assert.deepEqual(
+          devices.filter((d) => d.output).map((d) => ((r.outputs[d.pin] || 0) > 0 ? 1 : 0)),
+          want,
+          farm.id + ' ' + difficulty + ': ' + name,
+        );
+      }
+    }
+  // Homes elsewhere keep their usual quests.
+  assert.ok(!adaptMissions(missions, locations[0]).some((q) => q.farmQuest));
+});
+
+const farmModel = (id) => createRegionalModel(id);
+const run = (model, devices, outputs, env, seconds) => {
+  for (let i = 0; i < seconds * 10; i++) {
+    updateFarm(model, devices, outputs, { ...baseEnvLite, ...env }, i / 10, false);
+    updateAnimals(model.animals, i / 10, 0.1);
+  }
+};
+const baseEnvLite = { light: 70, temp: 24, tank: 80, pond: 60 };
+
+test('hens roost at dusk through an open door and wait outside a shut one', () => {
+  const door = [{ id: 'gate', pin: 5 }];
+  let m = farmModel('yarravalley');
+  const hens = () => m.animals.filter((a) => a.kind === 'chicken');
+  run(m, door, { 5: 1 }, { light: 5 }, 120);
+  assert.ok(
+    hens().every((a) => a.hidden),
+    'all hens roosting',
+  );
+  // Door shut in the morning: hens stay in; opened: they come out.
+  run(m, door, { 5: 0 }, { light: 90 }, 10);
+  assert.ok(hens().every((a) => a.hidden));
+  run(m, door, { 5: 1 }, { light: 90 }, 60);
+  assert.ok(hens().every((a) => !a.hidden));
+  m = farmModel('yarravalley');
+  run(m, door, { 5: 0 }, { light: 5 }, 120);
+  assert.ok(hens().every((a) => !a.hidden && a.goalKey === 'waiting'));
+  assert.ok(hens().every((a) => a.z > -21 && a.z < -17 && Math.abs(a.x + 6) < 2.5));
+});
+
+test('the dairy gate lets the herd into the yard and the cows go home when it closes', () => {
+  const m = farmModel('gippsland'),
+    gate = [{ id: 'gate', pin: 5 }],
+    cows = m.animals.filter((a) => a.kind === 'cow');
+  run(m, gate, {}, {}, 2);
+  assert.ok(
+    cows.every((a) => Math.abs(a.x) > 17.6),
+    'cows stay in paddocks while closed',
+  );
+  run(m, gate, { 5: 1 }, {}, 120);
+  assert.ok(m.farm.gates.every((g) => g.angle > 1.5));
+  assert.ok(cows.every((a) => Math.abs(a.x) < 6.5 && a.z < -17));
+  run(m, gate, { 5: 0 }, {}, 120);
+  assert.ok(cows.every((a) => Math.abs(a.x) > 17.6));
+});
+
+test('the trough level shows and thirsty sheep crowd it; pumping refills it', () => {
+  const m = farmModel('westerndistrict'),
+    near = m.animals.filter((a) => a.kind === 'sheep' && a.paddock[0] > 0);
+  run(m, [], {}, { pond: 5 }, 90);
+  assert.ok(m.farm.troughWater.size[1] < 0.1);
+  assert.ok(near.every((a) => Math.hypot(a.x - 23.5, a.z + 20) < 5.5));
+  run(m, [], {}, { pond: 90 }, 1);
+  assert.ok(m.farm.troughWater.size[1] > 0.35);
+  assert.ok(near.every((a) => a.goalKey === 'home'));
+  const farm = victorianFarms.find((f) => f.id === 'westerndistrict'),
+    devices = [
+      { id: 'pond', pin: 34 },
+      { id: 'pump', pin: 26 },
+    ],
+    pumping = advanceEnvironment({ ...baseEnvLite, soil: 30, pond: 20 }, devices, { 26: 1 }, 1, {
+      location: farm,
+    }),
+    idle = advanceEnvironment({ ...baseEnvLite, soil: 30, pond: 20 }, devices, {}, 1, {
+      location: farm,
+    });
+  assert.ok(pumping.pond > 20 && idle.pond < 20, 'pump fills; the flock drinks it down');
+  assert.ok(pumping.soil <= 30, 'the trough pump does not water the beds');
+});
+
+test('horses shelter on hot days and misting runs only when the valve is on', () => {
+  const m = farmModel('macedon'),
+    horses = m.animals.filter((a) => a.kind === 'horse'),
+    valve = [{ id: 'valve', pin: 26 }],
+    mist = () => m.farm.shelters.flatMap((s) => s.mist).some((d) => d.opacity > 0);
+  run(m, valve, {}, { temp: 36 }, 90);
+  assert.ok(!mist());
+  assert.ok(horses.every((a) => Math.abs(Math.abs(a.x) - 31) < 3 && Math.abs(a.z + 25) < 2.5));
+  run(m, valve, { 26: 1 }, { temp: 36 }, 1);
+  assert.ok(mist());
+  const farm = victorianFarms.find((f) => f.id === 'macedon'),
+    env = { ...baseEnvLite, outdoorTemp: 36, temp: 36, soil: 30 },
+    cooled = advanceEnvironment(env, valve, { 26: 1 }, 1, { location: farm }),
+    hot = advanceEnvironment(env, valve, {}, 1, { location: farm });
+  assert.ok(cooled.temp < hot.temp);
 });

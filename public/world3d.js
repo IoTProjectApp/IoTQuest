@@ -19,6 +19,7 @@ const MIRROR = new Float32Array([-1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1
 import { weatherEffects } from './weather.js';
 import { updateSky, lightningFlash } from './sky.js';
 import { updateAnimals } from './animals.js';
+import { updateFarm } from './farm-assets.js';
 const VERTEX = `attribute vec3 aPosition; attribute vec3 aNormal; uniform mat4 uModel; uniform mat4 uViewProjection; uniform mat3 uNormal; varying vec3 vNormal; varying vec3 vWorld; void main(){vec4 world=uModel*vec4(aPosition,1.0);vWorld=world.xyz;vNormal=normalize(uNormal*aNormal);gl_Position=uViewProjection*world;}`;
 const FRAGMENT = `precision mediump float; varying vec3 vNormal; varying vec3 vWorld; uniform vec4 uColor; uniform float uDay; uniform float uEmission; uniform float uWet; uniform vec3 uEye; uniform vec3 uFog; uniform float uHaze; uniform vec3 uLights[8]; uniform vec3 uLightColor[8]; void main(){vec3 n=normalize(vNormal);float sun=max(0.0,dot(n,normalize(vec3(-0.5,1.0,0.65))));float ambient=mix(0.19,0.68,uDay);vec3 lit=uColor.rgb*(ambient+sun*mix(0.12,0.37,uDay));for(int i=0;i<8;i++){float d=distance(vWorld,uLights[i]);float fall=max(0.0,1.0-d/4.0);lit+=uColor.rgb*uLightColor[i]*fall*fall*1.7;}lit=mix(lit,lit*0.83+vec3(0.03,0.07,0.09),uWet*max(0.0,n.y)*0.3);lit=mix(lit,uColor.rgb*1.15,clamp(uEmission,0.0,1.0));float fog=smoothstep(mix(38.0,12.0,uHaze),mix(90.0,52.0,uHaze),distance(vWorld,uEye));gl_FragColor=vec4(mix(lit,uFog,fog*mix(.48,.88,uHaze)),uColor.a);}`;
 // Parsed colours are cached (read-only) because objects are recoloured every frame.
@@ -634,6 +635,7 @@ export class World3D {
     updateSky(this.model.sky, daylight, t, reduced, skyYaw, env, skyDistance);
     // Farm animals roam and graze in real time; windmills turn with the wind.
     const realDt = Math.min(0.1, Math.max(0, dt || 0));
+    updateFarm(this.model, state.devices, outputs, env, this.realTime ?? t, reduced);
     updateAnimals(this.model.animals, this.realTime ?? t, realDt, reduced || state.paused);
     for (const mill of this.model.windmills || []) {
       if (!reduced) mill.angle += realDt * (0.6 + Math.min(4, (env.wind || 0) / 12));

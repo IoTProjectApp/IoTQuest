@@ -1,6 +1,7 @@
 import { extraLocations } from './destination-catalog.js';
 import { melbourneSuburbs } from './melbourne.js';
 import { victorianFarms } from './farms.js';
+import { applyFarmQuest } from './farm-missions.js';
 const initialLocations = [
   {
     id: 'kyoto',
@@ -439,6 +440,6 @@ export function adaptMissions(base, location, difficulty = 'advanced') {
       m.hint = 'Use light < 1800 AND armed == 1.';
       m.scenarios.push(['Lighting manually disabled', { light: 10, armed: 0 }, [0]]);
     }
-    return m;
+    return applyFarmQuest(m, index, location, difficulty);
   });
 }

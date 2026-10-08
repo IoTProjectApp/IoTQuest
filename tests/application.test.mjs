@@ -13,6 +13,19 @@ import { checkPredictions } from '../public/weather-quests.js';
 import { conversationHTML } from '../public/conversation-view.js';
 import { predictionHTML } from '../public/prediction-view.js';
 import { declutterLabels } from '../public/world-labels.js';
+import { simulateDay, dayLogQuestions, dayLogCSV } from '../public/day-log.js';
+import { dayLogHTML } from '../public/day-log-view.js';
+import { securityCases, dashboardQuests } from '../public/challenges.js';
+import { dashboardHTML, dashboardLiveHTML } from '../public/dashboard-view.js';
+import {
+  parseQuestFile,
+  loadCustomQuests,
+  customChallenge,
+  QuestError,
+  QUEST_LIMITS,
+} from '../public/custom-quests.js';
+import { BoardLink, readingsToEnv, outputLine, boardProgram } from '../public/hardware.js';
+import { boardPanelHTML } from '../public/board-view.js';
 import test from 'node:test';
 import { localSkyDate, DEFAULT_OBSERVER } from '../public/astronomy.js';
 import assert from 'node:assert/strict';
@@ -225,6 +238,13 @@ function harness(
         try {
           if (data.type === 'start' || data.type === 'debugStart')
             this.rt = new Runtime(data.code, data.language, data.devices, data.board);
+          // Mirrors sim-worker.js: dashboard messages and broker changes send no state back.
+          if (data.type === 'publish') {
+            this.rt.broker.connect(data.client || 'dashboard');
+            this.rt.broker.publish(data.client || 'dashboard', data.topic, data.payload);
+            return;
+          }
+          if (data.type === 'broker') return this.rt.broker.setAvailable(data.online);
           const result =
             data.type === 'debugStep' || data.type === 'debugStart'
               ? this.rt.debugStep(data.env, data.ms || 200)
@@ -339,6 +359,24 @@ function harness(
     conversationHTML,
     predictionHTML,
     declutterLabels,
+    simulateDay,
+    dayLogQuestions,
+    dayLogCSV,
+    dayLogHTML,
+    securityCases,
+    dashboardQuests,
+    dashboardHTML,
+    dashboardLiveHTML,
+    parseQuestFile,
+    loadCustomQuests,
+    customChallenge,
+    QuestError,
+    QUEST_LIMITS,
+    BoardLink,
+    readingsToEnv,
+    outputLine,
+    boardProgram,
+    boardPanelHTML,
     structuredClone,
     Blob,
     URL,
@@ -359,7 +397,7 @@ function harness(
   });
   vm.runInContext(
     source.replace(/^import [^;]*;\n/gm, '') +
-      '\nglobalThis.api={state,project,mission,selectMission,installDialog,switchTab,testSolution,run,stop,tick,changeBoard,move,code,loadExample,renderCode,renderMission,getOutputs:()=>outputs,getTests:()=>testResults,getPassed:()=>currentPassed,getRunning:()=>running,labState,startFault,exitFault,setClockSpeed,setDifficulty,pauseExecution,stepExecution,resumeExecution,enterLocation,resumeLegacy,returnToGlobe,applyLocalWeather,setWeatherMode,advanceWorld,refreshWeather,missionKey,getPlotSamples:()=>plotSamples,previewImport,exportManifest,startBugHunt,getActiveFault:()=>activeFault,setLayout,renderCoach,downloadProgress,labContext,exportProject,interact,enterArea,getConversation:()=>activeConversation,getTab:()=>tab,declutterLabels};',
+      '\nglobalThis.api={state,project,mission,selectMission,installDialog,switchTab,testSolution,run,stop,tick,changeBoard,move,code,loadExample,renderCode,renderMission,getOutputs:()=>outputs,getTests:()=>testResults,getPassed:()=>currentPassed,getRunning:()=>running,labState,startFault,exitFault,setClockSpeed,setDifficulty,pauseExecution,stepExecution,resumeExecution,enterLocation,resumeLegacy,returnToGlobe,applyLocalWeather,setWeatherMode,advanceWorld,refreshWeather,missionKey,getPlotSamples:()=>plotSamples,previewImport,exportManifest,startBugHunt,getActiveFault:()=>activeFault,setLayout,renderCoach,downloadProgress,labContext,exportProject,interact,enterArea,getConversation:()=>activeConversation,getTab:()=>tab,declutterLabels,startFault,importTeacherQuest,questList,boardLink};',
     ctx,
   );
   return {
@@ -695,6 +733,112 @@ test('a live weather quest asks for a prediction and checks it against the runni
   assert.match(panel.innerHTML, /you predicted off, your program turned it (on|off)/);
   h.api.setWeatherMode('practice');
   assert.equal(panel.hidden, true);
+});
+test('the day log runs the program through a day, offers a CSV and questions from the data', () => {
+  const h = harness();
+  installAndWire(h, 0);
+  h.api.switchTab('code');
+  h.api.loadExample();
+  h.api.switchTab('daylog');
+  const bench = h.document.getElementById('benchContent');
+  assert.match(bench.innerHTML, /Run a simulated day/);
+  h.document.getElementById('runDay').click();
+  assert.match(bench.innerHTML, /<table class="day-log-table">/);
+  assert.equal((bench.innerHTML.match(/<tr( class="on")?><th scope="row">/g) || []).length, 24);
+  assert.match(bench.innerHTML, /Read the data/);
+  const choice = h.document.querySelectorAll('[data-day-q]').find((b) => b.dataset.dayQ === '0');
+  choice.click();
+  assert.match(bench.innerHTML, /day-log-feedback/);
+  assert.ok(h.document.getElementById('downloadDayLog'));
+});
+test('the day log explains why it cannot run before the circuit is ready', () => {
+  const h = harness();
+  h.api.switchTab('daylog');
+  h.document.getElementById('runDay').click();
+  assert.match(h.document.getElementById('benchContent').innerHTML, /day-log-error/);
+});
+test('a security repair starts from the unsafe program and passes once it is fixed', () => {
+  const h = harness();
+  h.api.startFault('spoof');
+  assert.match(h.api.code(), /command != 0/);
+  h.api.testSolution();
+  assert.equal(h.api.getPassed(), false);
+  assert.ok(h.api.getTests().some((t) => t.name === 'A stranger sends 1' && !t.pass));
+  h.api.loadExample();
+  h.api.testSolution();
+  assert.equal(h.api.getPassed(), true);
+  assert.ok(h.api.state.completed['fault:spoof']);
+});
+test('the dashboard shows the running program’s messages and its switch controls the fan', () => {
+  const h = harness();
+  h.api.startFault('remote-fan');
+  assert.equal(h.api.getTab(), 'dashboard');
+  const bench = () => h.document.getElementById('benchContent').innerHTML;
+  assert.match(bench(), /Run your program/);
+  h.api.loadExample();
+  h.api.run();
+  h.api.tick();
+  h.api.switchTab('dashboard');
+  const fanSwitch = h.document
+    .querySelectorAll('[data-publish-topic]')
+    .find((b) => b.dataset.publishTopic === 'home/fan/set');
+  fanSwitch.click();
+  h.api.tick();
+  h.api.tick();
+  const fan = h.api.project().devices.find((d) => d.id === 'fan');
+  assert.ok(h.api.getOutputs()[fan.pin] > 0);
+  assert.match(h.document.getElementById('dashLive').innerHTML, /home\/fan\/state/);
+  h.api.testSolution();
+  assert.equal(h.api.getPassed(), true);
+});
+test('a student imports a teacher quest, writes it with the Guide and passes its tests', async () => {
+  const h = harness();
+  const { buildCustomQuest, questFile } = await import('../public/custom-quests.js');
+  const quest = buildCustomQuest({
+    title: 'Frost guard',
+    sensor: 'temp',
+    output: 'buzzer',
+    operator: '<=',
+    threshold: 2,
+  });
+  h.api.importTeacherQuest(questFile(quest));
+  h.api.importTeacherQuest(questFile(quest));
+  assert.equal(h.api.state.customQuests.length, 1, 'importing twice keeps one copy');
+  h.api.importTeacherQuest('not a quest');
+  assert.equal(h.api.state.customQuests.length, 1);
+  h.api.questList();
+  h.document
+    .querySelectorAll('[data-teacher-quest]')
+    .find((b) => b.dataset.teacherQuest === quest.id)
+    .click();
+  assert.equal(h.api.mission().title, 'Frost guard');
+  assert.equal(h.document.getElementById('coach').hidden, false, 'the Guide helps');
+  assert.equal(h.api.project().devices.length, 0, 'students install the components themselves');
+  h.api.switchTab('inventory');
+  for (const id of quest.ids) {
+    h.api.installDialog(id);
+    h.document.getElementById('confirmInstall').click();
+  }
+  h.api.switchTab('wiring');
+  h.document.getElementById('connectAll').click();
+  h.api.loadExample();
+  h.api.testSolution();
+  assert.equal(h.api.getPassed(), true);
+  assert.ok(h.api.state.completed['fault:' + quest.id]);
+});
+test('a real board’s readings replace the simulated sensor while the program runs', () => {
+  const h = harness();
+  installAndWire(h, 0);
+  h.api.switchTab('code');
+  h.api.loadExample();
+  h.api.run();
+  h.api.boardLink.onReadings({ light: 100 });
+  for (let i = 0; i < 3; i++) h.api.tick();
+  assert.ok(Math.abs(h.api.state.env.light - 100 / 40.95) < 1e-9, 'the board’s dark reading holds');
+  const lamp = h.api.project().devices.find((d) => d.output);
+  assert.ok(h.api.getOutputs()[lamp.pin] > 0, 'the program sees darkness and lights the path');
+  h.api.switchTab('circuit');
+  assert.ok(h.document.getElementById('boardPanel'));
 });
 test('regional rain-aware watering keeps installation, wiring, student code and deterministic tests', async () => {
   const h = harness();

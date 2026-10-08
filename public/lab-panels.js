@@ -1,5 +1,6 @@
 import { esc, setHTML } from './html.js';
 import { circuitSnapshot, faultCases, scenarios, RESOURCE_ASSUMPTIONS } from './lab.js';
+import { securityCases } from './challenges.js';
 const $ = (id) => document.getElementById(id);
 export function renderLabPanel(tab, ctx) {
   const { lab, devices, outputs, inputs, kinds, env } = ctx;
@@ -7,7 +8,7 @@ export function renderLabPanel(tab, ctx) {
     $('benchContent').innerHTML =
       '<div class="lab-panel"><div class="bench-heading"><div><h3>Live circuit · ' +
       esc(ctx.board) +
-      '</h3><p>Indicators use executed GPIO reads and writes. Select a world device to trace its connection.</p></div><button class="outline" id="circuitWire">Edit wiring</button></div><div id="circuitRows"></div><div id="circuitSelection" class="circuit-selection"></div></div>';
+      '</h3><p>Indicators use executed GPIO reads and writes. Select a world device to trace its connection.</p></div><button class="outline" id="circuitWire">Edit wiring</button></div><div id="circuitRows"></div><div id="circuitSelection" class="circuit-selection"></div><div id="boardPanel"></div></div>';
     $('circuitWire').onclick = () => ctx.switchTab('wiring');
     updateCircuit(ctx);
   } else if (tab === 'faults') {
@@ -32,11 +33,30 @@ export function renderLabPanel(tab, ctx) {
           esc(ctx.huntTitle) +
           '</strong><small>Find 3 planted bugs → fix → test</small></button>'
         : '') +
+      '</div><h4 class="fault-section">Security repairs</h4><p class="fault-section-note">Programs that work but are not safe on a network. Find the weakness, fix it, and pass the attack tests.</p><div class="fault-grid">' +
+      securityCases
+        .map(
+          (f) =>
+            '<button class="fault-card security-card" data-fault="' +
+            f.id +
+            '"><span>' +
+            f.type +
+            '</span><strong>' +
+            f.title +
+            '</strong><small>Find the weakness → fix → test</small></button>',
+        )
+        .join('') +
       '</div>' +
       (ctx.fault
         ? '<div class="debug-card"><strong>' +
           esc(ctx.fault.title) +
-          '</strong><p>Inspect Components, Wiring, Code and Live circuit. Repairs must pass bright, dark, and boundary tests.</p><button class="outline" id="progressiveHint">Reveal next hint</button><p id="faultHint"></p><button class="primary" id="testFault">Test the repair</button></div>'
+          '</strong><p>' +
+          esc(
+            ctx.fault.goal ||
+              'Inspect Components, Wiring, Code and Live circuit. Repairs must pass bright, dark, and boundary tests.',
+          ) +
+          (ctx.fault.track ? ' Try it live in the Dashboard tab.' : '') +
+          '</p><button class="outline" id="progressiveHint">Reveal next hint</button><p id="faultHint"></p><button class="primary" id="testFault">Test the repair</button></div>'
         : '') +
       '</div>';
     document

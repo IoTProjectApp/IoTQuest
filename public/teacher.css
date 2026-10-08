@@ -444,3 +444,76 @@ input {
     flex: 1 1 100%;
   }
 }
+.t-create {
+  margin: 0 0 20px;
+  padding: 14px 18px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--panel);
+}
+.t-create summary {
+  cursor: pointer;
+  font-weight: 700;
+}
+.t-create p {
+  color: var(--muted);
+}
+.t-quest-form {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 12px;
+  margin: 12px 0;
+}
+.t-quest-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 13px;
+  font-weight: 600;
+}
+.t-quest-form .t-wide {
+  grid-column: 1 / -1;
+}
+.t-quest-form input,
+.t-quest-form select,
+.t-quest-form textarea {
+  padding: 7px 9px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--bg);
+  color: var(--ink);
+  font: inherit;
+  font-weight: 400;
+}
+.t-quest-form small {
+  color: var(--muted);
+  font-weight: 400;
+}
+.t-quest-preview {
+  margin-bottom: 12px;
+}
+.t-quest-preview p {
+  color: var(--ink);
+}
+.t-quest-error {
+  color: var(--help) !important;
+}
+.t-quest-tests {
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.t-quest-tests caption {
+  padding-bottom: 6px;
+  color: var(--muted);
+  text-align: left;
+}
+.t-quest-tests th,
+.t-quest-tests td {
+  padding: 4px 14px 4px 0;
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+}
+.t-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}

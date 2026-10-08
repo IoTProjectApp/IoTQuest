@@ -2,6 +2,7 @@ import { missions, defaults } from './missions.js';
 import { locationById, adaptMissions } from './locations.js';
 import { coachSteps } from './code-coach.js';
 import { understandingQuestions, understandingScore } from './understanding.js';
+import { loadCustomQuests } from './custom-quests.js';
 // Progress reports: a student downloads one small file and hands it in; a teacher loads the
 // class's files into the class progress view (teacher.html). Nothing is sent anywhere.
 
@@ -12,7 +13,8 @@ export const PROGRESS_FORMAT = 'iotquest-progress',
 export class ProgressError extends Error {}
 
 const isRecord = (v) => !!v && typeof v === 'object' && !Array.isArray(v);
-const LEGACY_NAME = 'Willowbrook (original home)';
+const LEGACY_NAME = 'Willowbrook (original home)',
+  TEACHER_NAME = 'Teacher quests';
 // Code the student wrote, ignoring comments and blank lines.
 const ownCode = (source = '', language) =>
   String(source)
@@ -20,11 +22,12 @@ const ownCode = (source = '', language) =>
     .map((line) => line.replace(language === 'python' ? /#.*$/ : /\/\/.*$/, '').trim())
     .filter(Boolean).length > 0;
 
-function questRecord(profile, location, index, difficulty, state) {
+// `custom` describes a teacher quest: { mission, key }.
+function questRecord(profile, location, index, difficulty, state, custom = null) {
   const legacy = !location,
-    key = (difficulty === 'advanced' ? 'advanced:' : '') + index,
+    key = custom ? custom.key : (difficulty === 'advanced' ? 'advanced:' : '') + index,
     list = legacy ? missions : adaptMissions(missions, location, difficulty),
-    m = list[index],
+    m = custom ? custom.mission : list[index],
     project = profile.projects?.[key],
     done = profile.completed?.[key],
     languages = Object.keys(project?.code || {}).filter((l) => ownCode(project.code[l], l)),
@@ -71,8 +74,12 @@ function questRecord(profile, location, index, difficulty, state) {
   }
   const code = String(done?.code ?? project?.code?.[language] ?? '').slice(0, PROGRESS_LIMITS.code);
   return {
-    location: legacy ? 'legacy' : location.id,
-    locationName: legacy ? LEGACY_NAME : location.city + ' · ' + location.country,
+    location: custom ? 'teacher' : legacy ? 'legacy' : location.id,
+    locationName: custom
+      ? TEACHER_NAME
+      : legacy
+        ? LEGACY_NAME
+        : location.city + ' · ' + location.country,
     difficulty: legacy ? 'original' : difficulty,
     index,
     title: m.title,
@@ -109,6 +116,16 @@ export function buildProgressReport(state, { student, classCode = '', now = new 
         quests.push(questRecord(profile, location, i, difficulty, state));
     }
   }
+  // Teacher quests can be played at any destination: report the profile that holds the work.
+  const profiles = [state, ...Object.values(state.locationProgress || {}).filter(isRecord)];
+  loadCustomQuests(state.customQuests).forEach((mission, i) => {
+    const key = 'fault:' + mission.id,
+      profile =
+        profiles.find((p) => p.completed?.[key]) ||
+        profiles.find((p) => p.projects?.[key]) ||
+        state;
+    quests.push(questRecord(profile, null, i, 'original', state, { mission, key }));
+  });
   return {
     format: PROGRESS_FORMAT,
     version: PROGRESS_VERSION,

@@ -7,6 +7,10 @@
     <script src="./theme-init.js"></script>
     <link rel="stylesheet" href="./teacher.css" />
     <link rel="icon" href="./favicon.svg" />
+    <link rel="manifest" href="./manifest.webmanifest" />
+    <link rel="apple-touch-icon" href="./icons/icon-192.png" />
+    <meta name="theme-color" content="#5260df" />
+    <script type="module" src="./offline.js"></script>
   </head>
   <body>
     <header class="t-head">
@@ -31,6 +35,41 @@
         </label>
       </section>
       <ul class="t-errors" id="fileErrors" aria-live="polite" hidden></ul>
+      <details class="t-create">
+        <summary>Create a quest for your class</summary>
+        <p>
+          Describe a rule with one sensor and one output. Students import the quest file (<strong
+            >Quests → All quests → Import a teacher quest</strong
+          >), write the code with the Guide, and are tested at the exact threshold. Their results
+          appear here under <strong>Teacher quests</strong>.
+        </p>
+        <form class="t-quest-form" id="createQuest" onsubmit="return false;">
+          <label>Quest title <input id="qTitle" maxlength="60" value="Night light" /></label>
+          <label>Resident’s name <input id="qResident" maxlength="30" value="Ms Rivera" /></label>
+          <label class="t-wide"
+            >What the resident asks (optional)
+            <textarea id="qRequest" maxlength="240" rows="2"></textarea>
+          </label>
+          <label
+            >Sensor
+            <select id="qSensor"></select
+          ></label>
+          <label
+            >Output
+            <select id="qOutput"></select
+          ></label>
+          <label
+            >Turn the output on when the reading
+            <select id="qOperator"></select>
+          </label>
+          <label
+            >Threshold <input id="qThreshold" type="number" />
+            <small id="qRange"></small>
+          </label>
+        </form>
+        <div class="t-quest-preview" id="qPreview" aria-live="polite"></div>
+        <button class="t-button" id="qDownload">Download quest file</button>
+      </details>
       <section id="view" hidden>
         <div class="t-toolbar">
           <label
@@ -67,5 +106,6 @@
       </section>
     </main>
     <script type="module" src="./teacher.js"></script>
+    <script type="module" src="./teacher-quests.js"></script>
   </body>
 </html>

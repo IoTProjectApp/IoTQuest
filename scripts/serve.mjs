@@ -5,13 +5,17 @@ import { readFile, stat } from 'node:fs/promises';
 import { resolve, extname, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 // Serve public/ beside this script, wherever the server is started from.
-const root = fileURLToPath(new URL('../public', import.meta.url)),
+// ROOT=dist/client serves the built site instead (used to test offline support).
+const root = process.env.ROOT
+    ? resolve(process.env.ROOT)
+    : fileURLToPath(new URL('../public', import.meta.url)),
   port = Number(process.env.PORT || process.argv[2] || 5173);
 const mime = {
   '.html': 'text/html; charset=utf-8',
   '.js': 'text/javascript; charset=utf-8',
   '.css': 'text/css; charset=utf-8',
   '.png': 'image/png',
+  '.webmanifest': 'application/manifest+json',
   '.svg': 'image/svg+xml',
   '.json': 'application/json',
 };

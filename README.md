@@ -83,6 +83,27 @@ After a quest is passed, the Tests panel asks three questions built from that qu
 
 Every answer, right or wrong, is explained; students keep trying until they get it right. A right first try earns 10 XP. Results are saved with the quest, included in progress reports, and shown in the class view.
 
+### Day log
+
+The **Day log** tab runs the student's program through a stylised 24-hour day (sun from 06:00 to 18:00, warmest mid-afternoon, afternoon rain in wet scenarios, resident routines for motion and occupancy) and logs every sensor and output every 10 minutes. Soil and tank levels respond to pumps and rain between readings. Students see an hourly table, download all 144 readings as CSV, and answer up to three questions that can only be answered from their own data: when an output first turned on, how long it was on in total, and the day's highest reading. Each answer is explained. The program gets the same 25 steps per reading as the mission tests, so the log shows exactly what the tests would decide.
+
+### Connected challenges: dashboards and security
+
+Programs can use a simulated MQTT broker (`mqttConnect`, `mqttPublish`, `mqttSubscribe`, `mqttRead`, `mqttConnected`, `mqttReconnect`). Nothing is sent online.
+
+- **Dashboard** tab: three quests where students write the program a phone-style dashboard talks to. They publish temperature on a timer, follow a fan switch and report the fan's state back, and send a plant alert once per change instead of on every loop. While the program runs, the dashboard shows each published topic as a tile, offers the quest's switches, and lists recent messages. **Test like an attacker or a network fault** sends any number to any topic as the dashboard or as a stranger, and turns the broker off and on.
+- **Fault finding → Security repairs**: four programs that work but are unsafe. A gate opens for any message (it should check the shared code). A thermometer publishes the door code on a debug topic. An irrigation valve stays open when the network drops (it should fail safe, then reconnect and resubscribe). A soil sensor floods the broker on every loop (it should publish about once a second). Each has hints and attack tests.
+
+The game's simulator ends a step at any `delay`, but these challenge tests honour delay lengths as real hardware does, so a `delay(1000)` fix and a `millis()` timer both pass. Like the other repairs, security repairs unlock after the first quest is passed with the student's own code.
+
+### Real board (Web Serial)
+
+In **Live circuit → Real board**, **Download board program** generates a program for the student's installed devices: an Arduino sketch for ESP32 or `main.py` for the Pico. Sensors that need a library (temperature, humidity, distance) are left as TODOs. Once it is flashed, **Connect a real board** (Chrome or Edge on a computer) reads lines such as `IOTQ light=2310 motion=1`. Those real readings replace the simulated sensors while the student's simulated program runs. With **Send outputs to the board**, the program's outputs come back as `OUT 26=1 25=128` lines, and the board sets only its circuit's output pins. Outputs are switched off when the program stops or the board disconnects. Other browsers keep everything else working.
+
+### Install and play offline
+
+The game can be installed as an app (browser menu, or **Settings → Install app** when offered) and opens offline after the first visit. The build stamps the service worker (`public/sw.js`) with every file and a content version, so a deploy replaces the cached copy on the next visit. Live weather still needs the network; offline, the header shows **Offline · practice weather**. The unbuilt `sw.js` served by `npm run dev` caches nothing, so development is never affected. To try offline locally, run `npm run build`, then `ROOT=dist/client npm run dev`.
+
 ### Class progress for teachers
 
 Progress is saved in each student's browser, so students hand it in as a file:
@@ -94,4 +115,5 @@ Progress is saved in each student's browser, so students hand it in as a file:
   - a **Who needs help** list, most attempts and hints first;
   - each student's details and code when you select a cell;
   - a filter by class code, and **Download CSV** (one row per student and quest) for the gradebook.
+- **Teacher quests:** in `teacher.html`, **Create a quest for your class** builds a quest from one sensor, one output and a rule (for example "turn the buzzer on when the temperature is at or below 2 °C"). The preview shows the goal and the exact tests: well below, just below, at, just above and well above the threshold. **Download quest file** saves a small JSON file to share. Students use **Quests → All quests → Import a teacher quest**, then install, wire and write the code with the Guide like any quest. Results appear in the class view under **Teacher quests**. Quest files store only the teacher's choices, and every import rebuilds and re-checks the quest, so an edited file cannot produce a broken quest.
 - Reports stay in memory on the teacher's computer and are gone when the page closes. Damaged or edited files are rejected or cleaned up; if a student hands in more than once, the newest report is used. Student names in the CSV cannot run spreadsheet formulas.

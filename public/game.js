@@ -45,6 +45,19 @@ import { checkPredictions } from './weather-quests.js';
 import { conversationHTML } from './conversation-view.js';
 import { predictionHTML } from './prediction-view.js';
 import { declutterLabels } from './world-labels.js';
+import { simulateDay, dayLogQuestions, dayLogCSV } from './day-log.js';
+import { dayLogHTML } from './day-log-view.js';
+import { securityCases, dashboardQuests } from './challenges.js';
+import { dashboardHTML, dashboardLiveHTML } from './dashboard-view.js';
+import { BoardLink, readingsToEnv, outputLine, boardProgram } from './hardware.js';
+import { boardPanelHTML } from './board-view.js';
+import {
+  parseQuestFile,
+  loadCustomQuests,
+  customChallenge,
+  QuestError,
+  QUEST_LIMITS,
+} from './custom-quests.js';
 import { buildProgressReport, progressFileName } from './progress-report.js';
 import { understandingQuestions, answerQuestion, understandingScore } from './understanding.js';
 const $ = (id) => document.getElementById(id);
@@ -158,33 +171,55 @@ let tab = 'code',
 let activeConversation = null;
 const greetingTracker = createGreetingTracker();
 const mission = () =>
-  activeFault
-    ? {
-        ...(activeFault.mission || missions[0]),
-        title: activeFault.title,
-        quote: activeFault.mission
-          ? '“Someone broke my program. Can you spot what is wrong before you fix it?”'
-          : '“Find the fault, repair it, and show why the circuit works.”',
-        xp: 40,
-      }
-    : free
+  activeFault?.track === 'custom'
+    ? activeFault.mission
+    : activeFault?.track
       ? {
-          title: 'Your smart world',
-          area: 'House & garden',
-          resident: 'Maya',
-          role: 'Your creative companion',
+          ...missions[0],
+          title: activeFault.title,
+          goal: activeFault.goal,
+          ids: activeFault.ids,
           quote:
-            '“What would you like to make smarter? Explore, try an idea, and see what happens. Your toolkit is open.”',
-          goal: 'Build your own connected home. Choose any components and use the language guide to program them.',
-          ids: [],
-          xp: 0,
-          badge: 'Maker',
-          learn: ['Experiment', 'Create', 'Debug'],
-          hint: 'Start with one sensor and one output. Install both, connect 3.3 V, GND and signal pins, then read the sensor and write to the output.',
-          conditions: ['light < 1800'],
+            activeFault.track === 'security'
+              ? '“This works, but it is not safe. Can you find the weakness and fix it?”'
+              : '“I would love to see and control the house from my phone. Can you connect it?”',
+          hint: activeFault.hints[0],
+          learn:
+            activeFault.track === 'security'
+              ? ['MQTT', 'Security', 'Testing']
+              : ['MQTT', 'Publish', 'Subscribe'],
+          badge: activeFault.track === 'security' ? 'Security fixer' : 'Dashboard builder',
+          conditions: [],
           scenarios: [],
+          xp: 40,
         }
-      : activeMissions()[state.mission];
+      : activeFault
+        ? {
+            ...(activeFault.mission || missions[0]),
+            title: activeFault.title,
+            quote: activeFault.mission
+              ? '“Someone broke my program. Can you spot what is wrong before you fix it?”'
+              : '“Find the fault, repair it, and show why the circuit works.”',
+            xp: 40,
+          }
+        : free
+          ? {
+              title: 'Your smart world',
+              area: 'House & garden',
+              resident: 'Maya',
+              role: 'Your creative companion',
+              quote:
+                '“What would you like to make smarter? Explore, try an idea, and see what happens. Your toolkit is open.”',
+              goal: 'Build your own connected home. Choose any components and use the language guide to program them.',
+              ids: [],
+              xp: 0,
+              badge: 'Maker',
+              learn: ['Experiment', 'Create', 'Debug'],
+              hint: 'Start with one sensor and one output. Install both, connect 3.3 V, GND and signal pins, then read the sensor and write to the output.',
+              conditions: ['light < 1800'],
+              scenarios: [],
+            }
+          : activeMissions()[state.mission];
 // Key for a quest's project and completion record in the current location profile.
 const missionKey = (index = state.mission) =>
   (state.difficulty === 'advanced' && currentLocation() ? 'advanced:' : '') + index;
@@ -888,14 +923,171 @@ document
   .querySelectorAll('[data-tab]')
   .forEach((b) => (b.onclick = () => switchTab(b.dataset.tab)));
 function renderBench() {
+  if (tab === 'dashboard') return renderDashboard();
   if (['circuit', 'faults', 'resources', 'export'].includes(tab)) {
     renderLabPanel(tab, labContext());
+    if (tab === 'circuit') renderBoardPanel();
     return;
   }
   if (tab === 'code') renderCode();
+  else if (tab === 'daylog') renderDayLog();
   else if (tab === 'inventory') renderInventory();
   else if (tab === 'wiring') renderWiring();
   else renderTests();
+}
+// Real board over Web Serial: its readings replace the simulated sensors (withBoard), and the
+// running program's outputs can be sent back to drive real pins.
+let boardReadings = null,
+  boardSendOutputs = true;
+const withBoard = (env) => (boardReadings ? { ...env, ...boardReadings } : env);
+const boardLink = new BoardLink({
+  onReadings(readings) {
+    boardReadings = { ...boardReadings, ...readingsToEnv(readings) };
+    state.env = withBoard(state.env);
+    updateReadings();
+    if ($('boardStatus')) $('boardStatus').innerHTML = boardStatusHTML();
+  },
+  onStatus(status) {
+    if (status === 'disconnected') boardReadings = null;
+    if (tab === 'circuit') renderBoardPanel();
+    toast(status === 'connected' ? 'Board connected.' : 'Board disconnected.');
+  },
+});
+const boardStatusHTML = () =>
+  (boardLink.port ? '● Connected' : '○ Not connected') +
+  (boardLink.port && boardLink.lastLine ? ' · <code>' + esc(boardLink.lastLine) + '</code>' : '');
+function sendBoardOutputs(current = outputs) {
+  if (boardLink.port && boardSendOutputs) boardLink.send(outputLine(current, project().devices));
+}
+function renderBoardPanel() {
+  if (!$('boardPanel')) return;
+  $('boardPanel').innerHTML = boardPanelHTML({
+    supported: BoardLink.supported(),
+    connected: !!boardLink.port,
+    lastLine: boardLink.lastLine,
+    sendOutputs: boardSendOutputs,
+    board: state.board,
+  });
+  if (!BoardLink.supported()) return;
+  $('boardProgram').onclick = () =>
+    state.board === 'ESP32'
+      ? download('iotquest-board.ino', boardProgram(project().devices, state.board))
+      : download('main.py', boardProgram(project().devices, state.board));
+  if ($('boardConnect'))
+    $('boardConnect').onclick = () =>
+      boardLink.connect().catch((e) => {
+        // Closing the port picker is not an error worth reporting.
+        if (e?.name !== 'NotFoundError') toast('Could not open the board: ' + e.message);
+      });
+  if ($('boardDisconnect'))
+    $('boardDisconnect').onclick = () => {
+      sendBoardOutputs({});
+      boardLink.disconnect();
+    };
+  $('boardOutputs').onchange = () => {
+    boardSendOutputs = $('boardOutputs').checked;
+    if (!boardSendOutputs) sendBoardOutputs({});
+  };
+}
+// Dashboard: MQTT traffic from the running program, and controls that publish back to it.
+let mqttMessages = [],
+  brokerOnline = true,
+  dashboardSwitches = {};
+function dashboardPublish(topic, payload, client = 'dashboard') {
+  if (!worker || !running) return toast('Run your program first.');
+  worker.postMessage({ type: 'publish', topic, payload, client });
+}
+function renderDashboard() {
+  const completions = currentCompletions();
+  $('benchContent').innerHTML = dashboardHTML({
+    quests: dashboardQuests,
+    active: activeFault?.track ? activeFault : null,
+    passed: Object.fromEntries(dashboardQuests.map((q) => [q.id, !!completions['fault:' + q.id]])),
+    running: !!(worker && running),
+    brokerOnline,
+    switches: dashboardSwitches,
+    messages: mqttMessages,
+  });
+  document
+    .querySelectorAll('[data-dashboard-quest]')
+    .forEach((b) => (b.onclick = () => startFault(b.dataset.dashboardQuest)));
+  if ($('exitFault')) $('exitFault').onclick = exitFault;
+  if ($('testFault')) $('testFault').onclick = testSolution;
+  $('progressiveHint')?.addEventListener('click', () => {
+    const lab = labState(),
+      index = Math.min(lab.hintIndex || 0, activeFault.hints.length - 1);
+    $('faultHint').textContent = activeFault.hints[index];
+    lab.hintIndex = index + 1;
+    save();
+  });
+  document.querySelectorAll('[data-publish-topic]').forEach(
+    (b) =>
+      (b.onclick = () => {
+        const topic = b.dataset.publishTopic;
+        dashboardSwitches[topic] = !dashboardSwitches[topic];
+        dashboardPublish(topic, dashboardSwitches[topic] ? 1 : 0);
+        renderDashboard();
+      }),
+  );
+  $('dashSend').onsubmit = (event) => {
+    event.preventDefault();
+    const topic = $('dashTopic').value.trim();
+    if (topic) dashboardPublish(topic, Number($('dashPayload').value), $('dashClient').value);
+  };
+  $('dashBroker').onchange = () => {
+    brokerOnline = $('dashBroker').checked;
+    worker?.postMessage({ type: 'broker', online: brokerOnline });
+  };
+}
+function updateDashboard() {
+  if ($('dashLive'))
+    $('dashLive').innerHTML = dashboardLiveHTML(
+      mqttMessages,
+      activeFault?.track ? activeFault.widgets : [],
+    );
+}
+// Day log: the student's program run through a simulated day, kept until the quest changes.
+let dayLog = null;
+function renderDayLog() {
+  const key = state.activeLocation + '|' + activeKey() + '|' + state.language;
+  if (dayLog?.key !== key) dayLog = null;
+  const devices = project().devices;
+  $('benchContent').innerHTML = dayLogHTML(dayLog, devices);
+  $('runDay').onclick = () => {
+    const scenario = $('dayScenario').value,
+      errors = prerequisites();
+    if (errors.length) {
+      dayLog = { key, scenario, error: errors[0] };
+      return renderDayLog();
+    }
+    const result = simulateDay(code(), state.language, devices, state.board, { scenario });
+    dayLog = result.error
+      ? { key, scenario, error: result.error }
+      : {
+          key,
+          scenario,
+          rows: result.rows,
+          questions: dayLogQuestions(result.rows, devices),
+          answers: {},
+        };
+    renderDayLog();
+  };
+  if ($('downloadDayLog'))
+    $('downloadDayLog').onclick = () =>
+      download(
+        'iot-quest-day-log-' + dayLog.scenario + '.csv',
+        dayLogCSV(dayLog.rows, devices),
+        'text/csv',
+      );
+  document.querySelectorAll('[data-day-q]').forEach(
+    (b) =>
+      (b.onclick = () => {
+        // The first choice counts; the explanation then shows how to read the answer.
+        const q = Number(b.dataset.dayQ);
+        if (dayLog.answers[q] === undefined) dayLog.answers[q] = Number(b.dataset.dayChoice);
+        renderDayLog();
+      }),
+  );
 }
 // The step-by-step coding guide: explains each part of the program as the student writes it,
 // checks each step against the code, and reveals hints one at a time.
@@ -907,7 +1099,12 @@ function renderCoach() {
   const el = $('coach'),
     button = $('coachBtn');
   if (!el) return;
-  const available = !free && !activeFault && !huntPhase() && mission().ids.length > 0;
+  // Teacher quests are written from scratch, so the Guide helps with them too.
+  const available =
+    !free &&
+    (!activeFault || activeFault.track === 'custom') &&
+    !huntPhase() &&
+    mission().ids.length > 0;
   if (button) {
     button.hidden = !available;
     button.setAttribute('aria-pressed', String(!state.coachHidden));
@@ -1373,7 +1570,11 @@ function blockedByHunt(action, phases = ['spot', 'fix']) {
 function loadExample() {
   if (!canEdit('Programmer') || blockedByHunt('The worked example')) return;
   let ds = project().devices.length ? project().devices : planned();
-  project().code[state.language] = program(mission(), state.language, ds, true);
+  project().code[state.language] = activeFault?.solution
+    ? activeFault.solution(state.language, ds)
+    : activeFault?.source
+      ? activeFault.source(state.language, ds, true)
+      : program(mission(), state.language, ds, true);
   stop(false);
   markEdited();
   renderCode();
@@ -1673,6 +1874,10 @@ function run() {
   logs = ['Controller connected. Program started.'];
   simTime = 0;
   worker = new Worker('sim-worker.js', { type: 'module' });
+  // Each run starts with a fresh broker: no messages, network online, switches off.
+  mqttMessages = [];
+  brokerOnline = true;
+  dashboardSwitches = {};
   worker.onmessage = ({ data }) => {
     clearTimeout(watchdog);
     inFlight = false;
@@ -1686,6 +1891,11 @@ function run() {
       return;
     }
     outputs = data.outputs;
+    sendBoardOutputs();
+    if (data.messages) {
+      mqttMessages = data.messages;
+      if (tab === 'dashboard') updateDashboard();
+    }
     simTime = data.time;
     lastInputs = data.inputs || {};
     outputKinds = data.outputKinds || {};
@@ -1696,7 +1906,7 @@ function run() {
             Object.entries(state.env).filter(([key, value]) => !Object.is(value, requestEnv[key])),
           )
         : {};
-      state.env = { ...data.env, ...changes };
+      state.env = withBoard({ ...data.env, ...changes });
     }
     if (data.lab) {
       adoptSimulatedLab(data.lab);
@@ -1712,11 +1922,13 @@ function run() {
         0.2,
         lab.upgrades,
       );
-      state.env = advanceEnvironment(state.env, project().devices, outputs, 0.2, {
-        mode: state.weatherMode,
-        weather: state.weatherByLocation[state.activeLocation],
-        location: currentLocation(),
-      });
+      state.env = withBoard(
+        advanceEnvironment(state.env, project().devices, outputs, 0.2, {
+          mode: state.weatherMode,
+          weather: state.weatherByLocation[state.activeLocation],
+          location: currentLocation(),
+        }),
+      );
       lab.elapsedMs += 200;
     }
     refreshDebugView(data.line);
@@ -1757,6 +1969,7 @@ function run() {
   }, 1500);
   renderSteps();
   updateReadings();
+  if (tab === 'dashboard') renderDashboard();
   toast('Your program is running. Try changing the conditions.');
 }
 function batchOptions(count = speed) {
@@ -1784,7 +1997,7 @@ function advanceWorld() {
     },
   };
   const result = simulateBatch(passive, batchOptions());
-  state.env = result.env;
+  state.env = withBoard(result.env);
   adoptSimulatedLab(result.lab);
   updateReadings();
   renderEffects();
@@ -1813,9 +2026,11 @@ function stop(notify = false) {
   outputs = {};
   lastInputs = {};
   outputKinds = {};
+  sendBoardOutputs({});
   renderEffects();
   renderSteps();
   updateReadings();
+  if (tab === 'dashboard') renderDashboard();
   if (notify) {
     logs.push('Stopped. Outputs reset to OFF.');
     updateReadings();
@@ -2046,79 +2261,83 @@ function testSolution() {
   const m = mission(),
     ds = project().devices,
     outs = ds.filter((d) => d.output);
-  let assessment = createLabState().resources;
-  try {
-    const runtime = new Runtime(code(), state.language, ds, state.board);
-    for (const [name, env, expected] of m.scenarios) {
-      let result;
-      for (let i = 0; i < 25; i++) {
-        result = runtime.step({ ...baseEnv, ...env });
-        assessment = updateResources(assessment, ds, result.outputs, { ...baseEnv, ...env }, 0.2);
-      }
-      let actual = m.ids
-        .map((id) => ds.find((d) => d.id === id))
-        .filter((d) => d.output)
-        .map((d) => ((result.outputs[d.pin] || 0) > 0 ? 1 : 0));
-      let pass = expected.every((v, i) => v === actual[i]);
-      testResults.push({
-        name,
-        pass,
-        detail:
-          'Expected ' +
-          expected.map((v) => (v ? 'ON' : 'OFF')).join(', ') +
-          ' · observed ' +
-          actual.map((v) => (v ? 'ON' : 'OFF')).join(', '),
-        env,
-      });
-    }
-    if (!activeFault && state.mission === 2) {
-      const dynamic = new Runtime(code(), state.language, ds, state.board);
-      let env = { ...baseEnv, soil: 20, tank: 80 },
-        first = false,
-        reached = false,
-        stopped = false;
-      const pump = ds.find((d) => d.id === 'pump');
-      for (let i = 0; i < 220; i++) {
-        let r = dynamic.step(env);
-        assessment = updateResources(assessment, ds, r.outputs, env, 0.2);
-        let on = (r.outputs[pump.pin] || 0) > 0;
-        if (i === 0) first = on;
-        if (on && env.tank > 0) {
-          env.soil += 0.5;
-          env.tank -= 0.2;
+  // Connected challenges (security repairs, dashboard quests) bring their own MQTT tests.
+  if (activeFault?.tests) testResults = activeFault.tests(code(), state.language, ds, state.board);
+  else {
+    let assessment = createLabState().resources;
+    try {
+      const runtime = new Runtime(code(), state.language, ds, state.board);
+      for (const [name, env, expected] of m.scenarios) {
+        let result;
+        for (let i = 0; i < 25; i++) {
+          result = runtime.step({ ...baseEnv, ...env });
+          assessment = updateResources(assessment, ds, result.outputs, { ...baseEnv, ...env }, 0.2);
         }
-        if (Math.round(env.soil * ADC_SCALE) >= 2400) {
-          reached = true;
-          if (!on) stopped = true;
-        }
+        let actual = m.ids
+          .map((id) => ds.find((d) => d.id === id))
+          .filter((d) => d.output)
+          .map((d) => ((result.outputs[d.pin] || 0) > 0 ? 1 : 0));
+        let pass = expected.every((v, i) => v === actual[i]);
+        testResults.push({
+          name,
+          pass,
+          detail:
+            'Expected ' +
+            expected.map((v) => (v ? 'ON' : 'OFF')).join(', ') +
+            ' · observed ' +
+            actual.map((v) => (v ? 'ON' : 'OFF')).join(', '),
+          env,
+        });
       }
-      testResults.push({
-        name: 'Water reaches target and stops',
-        pass: first && reached && stopped && env.soil < 65,
-        detail:
-          'Final soil: ' +
-          env.soil.toFixed(1) +
-          '%. Pump must start dry, reach the target, and switch off before overwatering.',
-      });
+      if (!activeFault && state.mission === 2) {
+        const dynamic = new Runtime(code(), state.language, ds, state.board);
+        let env = { ...baseEnv, soil: 20, tank: 80 },
+          first = false,
+          reached = false,
+          stopped = false;
+        const pump = ds.find((d) => d.id === 'pump');
+        for (let i = 0; i < 220; i++) {
+          let r = dynamic.step(env);
+          assessment = updateResources(assessment, ds, r.outputs, env, 0.2);
+          let on = (r.outputs[pump.pin] || 0) > 0;
+          if (i === 0) first = on;
+          if (on && env.tank > 0) {
+            env.soil += 0.5;
+            env.tank -= 0.2;
+          }
+          if (Math.round(env.soil * ADC_SCALE) >= 2400) {
+            reached = true;
+            if (!on) stopped = true;
+          }
+        }
+        testResults.push({
+          name: 'Water reaches target and stops',
+          pass: first && reached && stopped && env.soil < 65,
+          detail:
+            'Final soil: ' +
+            env.soil.toFixed(1) +
+            '%. Pump must start dry, reach the target, and switch off before overwatering.',
+        });
+      }
+    } catch (e) {
+      testResults.push({ name: 'Program execution', pass: false, detail: e.message });
     }
-  } catch (e) {
-    testResults.push({ name: 'Program execution', pass: false, detail: e.message });
+    const budget = { wh: m.ids.includes('pump') ? 0.35 : 0.15, litres: 45 };
+    testResults.push({
+      name: 'Energy and water budget',
+      pass: assessment.wh <= budget.wh && assessment.litres <= budget.litres,
+      detail:
+        assessment.wh.toFixed(3) +
+        ' / ' +
+        budget.wh +
+        ' Wh · ' +
+        assessment.litres.toFixed(2) +
+        ' / ' +
+        budget.litres +
+        ' L across 5-second scenarios and the irrigation feedback test',
+    });
+    labState().assessment = { budget, consumption: assessment };
   }
-  const budget = { wh: m.ids.includes('pump') ? 0.35 : 0.15, litres: 45 };
-  testResults.push({
-    name: 'Energy and water budget',
-    pass: assessment.wh <= budget.wh && assessment.litres <= budget.litres,
-    detail:
-      assessment.wh.toFixed(3) +
-      ' / ' +
-      budget.wh +
-      ' Wh · ' +
-      assessment.litres.toFixed(2) +
-      ' / ' +
-      budget.litres +
-      ' L across 5-second scenarios and the irrigation feedback test',
-  });
-  labState().assessment = { budget, consumption: assessment };
   currentPassed = testResults.length > 0 && testResults.every((r) => r.pass);
   if (currentPassed) {
     if (!currentCompletions()[completionKey()]) {
@@ -2396,11 +2615,69 @@ function questList() {
           (currentCompletions()[missionKey(i)] ? '✓ Complete' : m.xp + ' XP') +
           '</em></button>',
       )
-      .join(''),
+      .join('') +
+      '<h3 class="quest-section">Teacher quests</h3>' +
+      teacherQuests()
+        .map(
+          (q) =>
+            '<button class="quest-option ' +
+            (activeFault?.id === q.id ? 'selected' : '') +
+            '" data-teacher-quest="' +
+            q.id +
+            '"><span>✎</span><div><strong>' +
+            esc(q.title) +
+            '</strong><small>' +
+            esc(q.resident) +
+            ' · ' +
+            esc(q.learn.join(' · ')) +
+            '</small></div><em>' +
+            (currentCompletions()['fault:' + q.id] ? '✓ Complete' : q.xp + ' XP') +
+            '</em></button>',
+        )
+        .join('') +
+      '<button class="outline" id="importTeacherQuest">Import a teacher quest…</button>',
   );
   document
     .querySelectorAll('[data-quest]')
     .forEach((b) => (b.onclick = () => selectMission(Number(b.dataset.quest))));
+  document.querySelectorAll('[data-teacher-quest]').forEach(
+    (b) =>
+      (b.onclick = () => {
+        $('modal').close();
+        startFault(b.dataset.teacherQuest);
+      }),
+  );
+  $('importTeacherQuest').onclick = () => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.json,application/json';
+    input.onchange = async () => {
+      const file = input.files?.[0];
+      if (file) importTeacherQuest(await file.text());
+    };
+    input.click();
+  };
+}
+// Quests a teacher shared as files (see teacher.html → Create a quest), kept as their choices.
+const teacherQuests = () => loadCustomQuests(state.customQuests);
+function importTeacherQuest(source) {
+  let quest;
+  try {
+    quest = parseQuestFile(source);
+  } catch (e) {
+    if (!(e instanceof QuestError)) throw e;
+    return toast(e.message);
+  }
+  const quests = teacherQuests();
+  if (quests.some((q) => q.id === quest.id))
+    toast('“' + quest.title + '” is already in your quests.');
+  else if (quests.length >= QUEST_LIMITS.quests) toast('You have the most teacher quests allowed.');
+  else {
+    state.customQuests = [...quests.map((q) => q.fields), quest.fields];
+    save();
+    toast('Added “' + quest.title + '” to your teacher quests.');
+  }
+  questList();
 }
 $('questList').onclick = questList;
 $('hintBtn').onclick = () => {
@@ -2482,7 +2759,11 @@ function settings() {
       (state.reduced ? 'checked' : '') +
       '></label><label class="setting-row"><span>Sound effects<small>Optional buzzer alerts. Sound is off by default.</small></span><input id="soundSetting" type="checkbox" ' +
       (state.sound ? 'checked' : '') +
-      '></label><div class="guide"><p>Progress is stored in this browser. Export your project to keep a portable copy.</p></div><div class="bench-actions"><button class="outline" id="exportSettings">Export project</button><button class="outline" id="importSettings">Import project…</button></div><button class="outline" id="resetProgress">Reset local progress…</button>',
+      '></label>' +
+      (globalThis.iotQuestInstall?.available()
+        ? '<div class="setting-row"><span>Install app<small>Add IoT Quest to this device so it opens in its own window and works offline.</small></span><button class="outline" id="installApp">Install</button></div>'
+        : '') +
+      '<div class="guide"><p>Progress is stored in this browser. Export your project to keep a portable copy.</p></div><div class="bench-actions"><button class="outline" id="exportSettings">Export project</button><button class="outline" id="importSettings">Import project…</button></div><button class="outline" id="resetProgress">Reset local progress…</button>',
   );
   $('resetProgress').onclick = () => {
     if (!confirm('Delete all saved progress, projects and badges in this browser?')) return;
@@ -2491,6 +2772,12 @@ function settings() {
     } catch {}
     window.location.reload();
   };
+  if ($('installApp'))
+    $('installApp').onclick = async () => {
+      if (await globalThis.iotQuestInstall.prompt())
+        toast('IoT Quest is installed on this device.');
+      $('installApp').closest('.setting-row').remove();
+    };
   $('themeSetting').value = state.theme;
   $('themeSetting').onchange = () => setTheme($('themeSetting').value);
   $('reducedSetting').onchange = () => {
@@ -3284,11 +3571,30 @@ function selectDevice(id) {
 }
 function startFault(id) {
   stop(false);
-  activeFault = faultCases.find((f) => f.id === id);
+  activeFault = [
+    ...faultCases,
+    ...securityCases,
+    ...dashboardQuests,
+    ...teacherQuests().map(customChallenge),
+  ].find((f) => f.id === id);
   if (!activeFault) return;
   const key = 'fault:' + id,
     profile = locationProfile();
-  if (!profile.projects[key]) {
+  if (!profile.projects[key] && activeFault.track) {
+    // Security repairs start from the unsafe program; dashboard quests from a blank starter.
+    const devices = defaults(activeFault.ids, state.board),
+      make = (lang) =>
+        activeFault.source
+          ? activeFault.source(lang, devices)
+          : activeFault.starter
+            ? activeFault.starter(lang, devices)
+            : program(activeFault.mission, lang, devices);
+    profile.projects[key] = {
+      // Teacher quests are full quests: students install and wire the components themselves.
+      devices: activeFault.track === 'custom' ? [] : devices,
+      code: { cpp: make('cpp'), python: make('python') },
+    };
+  } else if (!profile.projects[key]) {
     const devices = defaults(missions[0].ids, state.board),
       source = {
         cpp: program(missions[0], 'cpp', devices, true),
@@ -3305,7 +3611,13 @@ function startFault(id) {
   currentPassed = false;
   testResults = [];
   renderMission();
-  switchTab('faults');
+  switchTab(
+    activeFault.track === 'dashboard'
+      ? 'dashboard'
+      : activeFault.track === 'custom'
+        ? 'code'
+        : 'faults',
+  );
   save();
 }
 function exitFault() {

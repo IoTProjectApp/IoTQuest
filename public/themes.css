@@ -135,6 +135,23 @@ html[data-theme='dark'] .predict-result .correct {
 html[data-theme='dark'] .predict-result .wrong {
   color: #f0a08c;
 }
+html[data-theme='dark'] .offline-badge {
+  background: #3a2e1b;
+  color: #f2c784;
+}
+html[data-theme='dark'] .day-log-feedback.correct {
+  color: #7fd6a2;
+}
+html[data-theme='dark'] .day-log-feedback.wrong,
+html[data-theme='dark'] .day-log-error {
+  color: #f0a08c;
+}
+html[data-theme='dark'] .dash-tile.alert {
+  border-color: #f0a08c;
+}
+html[data-theme='dark'] .dash-tile.alert strong {
+  color: #f0a08c;
+}
 html[data-theme='dark'] .brand-quest {
   color: #9da8ff;
 }

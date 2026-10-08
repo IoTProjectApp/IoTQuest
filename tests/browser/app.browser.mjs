@@ -3,7 +3,7 @@
 // Run with `npm run test:browser` (needs `npx playwright install chromium` once).
 import test, { before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { spawn } from 'node:child_process';
+import { spawn, execFileSync } from 'node:child_process';
 import { chromium } from 'playwright';
 
 let server, browser, origin;
@@ -176,6 +176,86 @@ test('the system reduced-motion setting is honoured', async () => {
     () => getComputedStyle(document.querySelector('button')).transitionDuration,
   );
   assert.match(transition, /^0s(, 0s)*$/);
+  assert.deepEqual(errors, []);
+  await page.close();
+});
+
+test('the built game installs for offline use and still opens with no network', async () => {
+  execFileSync(process.execPath, ['scripts/build.mjs']);
+  const built = spawn(process.execPath, ['scripts/serve.mjs', '0'], {
+    env: { ...process.env, ROOT: 'dist/client' },
+    stdio: ['ignore', 'pipe', 'inherit'],
+  });
+  const url = await new Promise((resolve) =>
+    built.stdout.on('data', (d) => {
+      const m = String(d).match(/http:\/\/127\.0\.0\.1:\d+/);
+      if (m) resolve(m[0]);
+    }),
+  );
+  const context = await browser.newContext();
+  const page = await context.newPage();
+  try {
+    await page.goto(url + '/');
+    // Wait until the service worker has stored the game and controls the page.
+    await page.evaluate(() => navigator.serviceWorker.ready);
+    await page.reload();
+    assert.ok(await page.evaluate(() => !!navigator.serviceWorker.controller));
+    const manifest = await page.evaluate(() =>
+      fetch(document.querySelector('link[rel=manifest]').href).then((r) => r.json()),
+    );
+    assert.equal(manifest.display, 'standalone');
+    await context.setOffline(true);
+    await page.reload();
+    await page.click('#resumeLegacy');
+    await page.locator('#worldCanvas').waitFor();
+    assert.equal(await page.locator('#offlineBadge').isVisible(), true);
+    assert.match(await page.textContent('#missionTitle'), /\S/);
+  } finally {
+    await context.close();
+    built.kill();
+  }
+});
+
+test('a teacher builds a quest, sees its tests, and downloads a file students can import', async () => {
+  const page = await browser.newPage();
+  await page.goto(origin + '/teacher.html');
+  await page.click('.t-create summary');
+  await page.fill('#qTitle', 'Frost guard');
+  await page.selectOption('#qSensor', 'temp');
+  await page.selectOption('#qOutput', 'buzzer');
+  await page.selectOption('#qOperator', '<=');
+  await page.fill('#qThreshold', '2');
+  assert.match(await page.textContent('#qPreview'), /at or below 2 °C/);
+  assert.equal(await page.locator('.t-quest-tests tbody tr').count(), 5);
+  await page.fill('#qThreshold', '99');
+  assert.match(await page.textContent('#qPreview'), /between -10 and 50/);
+  assert.equal(await page.locator('#qDownload').isDisabled(), true);
+  await page.fill('#qThreshold', '2');
+  const [download] = await Promise.all([page.waitForEvent('download'), page.click('#qDownload')]);
+  const { parseQuestFile } = await import('../../public/custom-quests.js');
+  const { readFile } = await import('node:fs/promises');
+  const quest = parseQuestFile(await readFile(await download.path(), 'utf8'));
+  assert.equal(quest.title, 'Frost guard');
+  assert.equal(download.suggestedFilename(), 'iotquest-quest-frost-guard.json');
+  await page.close();
+});
+
+test('the dashboard switch controls a running program and shows what it reports', async () => {
+  const { page, errors } = await openHome();
+  await page.click('[data-tab="dashboard"]');
+  await page.click('[data-dashboard-quest="remote-fan"]');
+  const { dashboardQuests } = await import('../../public/challenges.js');
+  const { defaults } = await import('../../public/missions.js');
+  await page.click('[data-tab="code"]');
+  await page.fill('#codeInput', dashboardQuests[1].solution('cpp', defaults(['fan'], 'ESP32')));
+  await page.dispatchEvent('#codeInput', 'input');
+  await page.click('#runBtn');
+  await page.click('[data-tab="dashboard"]');
+  await page.click('[data-publish-topic="home/fan/set"]');
+  await page.locator('#dashLive', { hasText: 'Fan reports' }).waitFor();
+  await page.waitForFunction(() =>
+    /Fan reports\s*On/.test(document.getElementById('dashLive').innerText),
+  );
   assert.deepEqual(errors, []);
   await page.close();
 });

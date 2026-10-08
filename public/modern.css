@@ -280,6 +280,14 @@ header {
   font-size: 11px;
   color: #557768;
 }
+.offline-badge {
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: #fff4e5;
+  color: #8a5a12;
+  font-size: 11px;
+  font-weight: 600;
+}
 .xp {
   padding: 10px 14px;
   border: 1px solid #e1e5fb;
@@ -2882,4 +2890,210 @@ html[data-theme='dark'] .u-feedback.no {
   clip-path: inset(50%);
   white-space: nowrap;
   border: 0;
+}
+.day-log-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+.day-log-controls select {
+  margin-left: 6px;
+}
+.day-log-error {
+  color: #b5533c;
+}
+.day-log-table-wrap {
+  max-height: 320px;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+.day-log-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.day-log-table caption {
+  padding: 8px 10px;
+  color: var(--muted);
+  text-align: left;
+}
+.day-log-table th,
+.day-log-table td {
+  padding: 5px 10px;
+  border-top: 1px solid var(--line);
+  text-align: left;
+}
+.day-log-table thead th {
+  position: sticky;
+  top: 0;
+  background: var(--cream);
+}
+.day-log-table tr.on td:last-child {
+  color: var(--green);
+  font-weight: 600;
+}
+.day-log-questions {
+  padding-left: 20px;
+}
+.day-log-questions li {
+  margin-bottom: 14px;
+}
+.day-log-choices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.day-log-choices button {
+  padding: 5px 12px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+}
+.day-log-choices button[aria-pressed='true'] {
+  border-color: #b5533c;
+}
+.day-log-choices button[data-correct] {
+  border-color: var(--green);
+  background: var(--green);
+  color: #fff;
+}
+.day-log-feedback.correct {
+  color: #2f7a4f;
+}
+.day-log-feedback.wrong {
+  color: #b5533c;
+}
+.fault-section {
+  margin: 18px 0 4px;
+}
+.fault-section-note {
+  margin: 0 0 10px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.fault-card.selected {
+  border-color: var(--green);
+}
+.dash-phone {
+  max-width: 420px;
+  margin-top: 16px;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 24px;
+  background: var(--cream);
+}
+.dash-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.dash-switch {
+  padding: 10px 16px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--white, #fff);
+  color: var(--ink);
+  font-weight: 600;
+}
+.dash-switch[aria-pressed='true'] {
+  border-color: var(--green);
+  background: var(--green);
+  color: #fff;
+}
+.dash-tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 10px;
+}
+.dash-tile {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--white, #fff);
+}
+.dash-tile span {
+  color: var(--muted);
+  font-size: 12px;
+}
+.dash-tile strong {
+  color: var(--ink);
+  font-size: 22px;
+  font-variant-numeric: tabular-nums;
+}
+.dash-tile small {
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 10px;
+}
+.dash-tile.alert {
+  border-color: #b5533c;
+}
+.dash-tile.alert strong {
+  color: #b5533c;
+  font-size: 16px;
+}
+.dash-empty {
+  color: var(--muted);
+  font-size: 12px;
+}
+.dash-log {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 12px;
+}
+.dash-log small {
+  color: var(--muted);
+}
+.dash-tools {
+  margin-top: 12px;
+  font-size: 12px;
+}
+.dash-tools summary {
+  cursor: pointer;
+  color: var(--muted);
+}
+.dash-send {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 8px;
+  margin: 8px 0;
+}
+.dash-send input,
+.dash-send select {
+  display: block;
+  max-width: 140px;
+}
+.board-panel {
+  margin-top: 16px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--cream);
+}
+.board-panel h4 {
+  margin: 0 0 6px;
+}
+.board-panel p {
+  margin: 6px 0;
+  font-size: 12px;
+}
+.board-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+.board-actions label {
+  font-size: 12px;
+}
+.board-status code {
+  font-size: 11px;
 }

@@ -10,6 +10,10 @@
     <link rel="stylesheet" href="./layout.css" />
     <link rel="stylesheet" href="./themes.css" />
     <link rel="icon" href="./favicon.svg" />
+    <link rel="manifest" href="./manifest.webmanifest" />
+    <link rel="apple-touch-icon" href="./icons/icon-192.png" />
+    <meta name="theme-color" content="#5260df" />
+    <script type="module" src="./offline.js"></script>
   </head>
   <body>
     <header>
@@ -34,6 +38,8 @@
       </div>
       <div class="header-actions">
         <span class="saved" id="saved">✓ Progress saved locally</span
+        ><span class="offline-badge" id="offlineBadge" role="status" hidden
+          >Offline · practice weather</span
         ><button class="xp" id="progressBtn">✦ <span id="xp">0</span> XP</button
         ><button class="avatar" id="characterBtn" aria-label="Customize technician">T</button
         ><button
@@ -373,6 +379,8 @@
                     ><button data-tab="circuit"><span>⌁</span> Live circuit</button
                     ><button data-tab="faults"><span>⚒</span> Fault finding</button
                     ><button data-tab="resources"><span>≋</span> Budgets</button
+                    ><button data-tab="daylog"><span>◷</span> Day log</button
+                    ><button data-tab="dashboard"><span>▦</span> Dashboard</button
                     ><button data-tab="export"><span>↓</span> Package</button>
                   </div>
                   <button class="text-btn" id="advancedTools">Advanced tools</button>

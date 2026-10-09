@@ -307,10 +307,11 @@ function harness(
       matches: darkPreference,
       addEventListener: (type, listener) => themeListeners.push(listener),
     };
+  const windowListeners = {};
   const ctx = vm.createContext({
     document,
     fetch: weatherFetch,
-    window: { addEventListener() {} },
+    window: { addEventListener: (type, fn) => (windowListeners[type] = fn) },
     navigator: {},
     matchMedia: (query) => (query.includes('color-scheme') ? themeMedia : { matches: wideScreen }),
     localStorage: { getItem: (k) => storage.get(k), setItem: (k, v) => storage.set(k, v) },
@@ -442,6 +443,7 @@ function harness(
     api: ctx.api,
     document,
     storage,
+    windowEvent: (type, event) => windowListeners[type]?.(event),
     flushWorker: () => pending.shift()?.(),
     advanceTimer: () => intervals.find((i) => i.ms === 200).fn(),
     changeSystemTheme: (dark) => {
@@ -1615,6 +1617,21 @@ test('importing a project for another quest at the same place opens it in that q
     'Nothing in quest 1 was replaced',
   );
 });
+test('a tab stops saving once another tab saves newer progress', () => {
+  const h = harness();
+  installAndWire(h, 0);
+  h.api.state.xp = 50;
+  h.document.getElementById('connectAll').click();
+  const newer = JSON.stringify({ ...JSON.parse(h.storage.get('iotquest-v1')), xp: 900 });
+  h.storage.set('iotquest-v1', newer);
+  h.windowEvent('storage', { key: 'iotquest-v1', newValue: newer });
+  h.api.state.xp = 60;
+  h.api.switchTab('code');
+  h.document.getElementById('connectAll')?.click();
+  h.api.selectMission(1);
+  assert.equal(h.storage.get('iotquest-v1'), newer, "The other tab's progress is kept");
+  assert.match(h.document.getElementById('saved').textContent, /another tab/);
+});
 test('a rejected import explains why and leaves the project untouched', async () => {
   const h = harness();
   installAndWire(h, 0);
@@ -1722,6 +1739,19 @@ test('bug hunts cannot be short-circuited and follow the board, roles and free b
   h.api.changeBoard('Raspberry Pi Pico');
   h.api.startBugHunt();
   assert.deepEqual(validate(h.api.project().devices, 'Raspberry Pi Pico'), []);
+});
+test('code being checked in Spot the bugs cannot be edited', () => {
+  const h = harness();
+  installAndWire(h, 0);
+  h.api.startBugHunt();
+  h.api.switchTab('code');
+  const before = h.api.code(),
+    input = h.document.getElementById('codeInput');
+  assert.equal(input.readOnly, true);
+  input.value = '\n' + before;
+  input.dispatchEvent({ type: 'input' });
+  assert.equal(h.api.code(), before, 'Line numbers of the flagged bugs stay put');
+  assert.equal(input.value, before);
 });
 test('bug hunt XP is awarded once per mission across languages', () => {
   const h = harness();

@@ -295,6 +295,27 @@ function saveSoon() {
   saveTimer = setTimeout(save, 600);
 }
 window.addEventListener('pagehide', () => saveTimer && save());
+// All progress is one saved copy. When another tab (or the installed app) saves, this tab's copy
+// is out of date: saving it would write older progress back over the newer one (a forgotten tab
+// saves live weather every minute). So this tab stops saving and offers a reload instead.
+let staleTab = false;
+window.addEventListener('storage', (e) => {
+  if (e.key !== STORAGE_KEY || staleTab) return;
+  staleTab = true;
+  clearTimeout(saveTimer);
+  saveTimer = null;
+  stop(false);
+  $('saved').textContent = 'Not saved: progress changed in another tab';
+  document.getElementById('updateBar')?.remove();
+  const bar = document.createElement('div');
+  bar.id = 'updateBar';
+  bar.className = 'update-bar';
+  bar.setAttribute('role', 'status');
+  bar.innerHTML =
+    '<span>Your progress changed in another tab.</span><button type="button">Reload</button>';
+  bar.querySelector('button').onclick = () => location.reload();
+  document.body.append(bar);
+});
 // Adopt simulation-owned fields from a worker/batch result without replacing the lab object,
 // so panels holding a reference keep writing to the saved state.
 function adoptSimulatedLab(next) {
@@ -327,6 +348,7 @@ function recordEvidence(entry) {
 function save() {
   clearTimeout(saveTimer);
   saveTimer = null;
+  if (staleTab) return;
   if (state.activeLocation !== 'legacy') {
     const p = locationProfile();
     p.mission = state.mission;
@@ -1366,7 +1388,7 @@ function renderCode() {
   updateHighlight();
   updateReadings();
   $('codeInput').addEventListener('input', () => {
-    if (!canEdit('Programmer')) {
+    if (!canEdit('Programmer') || huntPhase() === 'spot') {
       $('codeInput').value = code();
       return;
     }
@@ -1395,7 +1417,9 @@ function renderCode() {
     }
     if (e.key === 'Tab' && (tabReleased || e.ctrlKey || e.metaKey || e.altKey)) return;
     if (e.key !== 'Tab' && e.key !== 'Shift') tabReleased = false;
-    if (e.isComposing) return;
+    // Read-only code (Spot the bugs, another role's turn) must not change: browsers let
+    // setRangeText edit a read-only field, so the editing keys below are skipped.
+    if (e.isComposing || (e.target.readOnly && e.key !== 'F8')) return;
     const el = e.target,
       unit = INDENT[state.language] || '    ',
       start = el.selectionStart,

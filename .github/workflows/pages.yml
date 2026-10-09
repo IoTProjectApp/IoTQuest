@@ -1,10 +1,10 @@
-# Runs the test suite on every push and pull request, and publishes the built
-# game to GitHub Pages when main passes.
+# Runs the test suite on pushes to main and dev and on every pull request, and
+# publishes the built game to GitHub Pages when main passes.
 name: Test and deploy
 
 on:
   push:
-    branches: [main]
+    branches: [main, dev]
   pull_request:
   workflow_dispatch:
 

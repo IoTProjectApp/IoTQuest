@@ -4,8 +4,10 @@ import { ADC_SIGNALS as ADC_LIST } from './signals.js';
 // Warnings predict a runtime error or a condition that can never change; tips flag
 // habits that matter on real hardware. Nothing here blocks Run.
 const ADC_SIGNALS = new Set(ADC_LIST),
-  DIGITAL_SIGNALS = new Set(['motion', 'door', 'armed', 'occupied']),
+  DIGITAL_SIGNALS = new Set(['motion', 'door', 'armed', 'occupied', 'bay', 'pedRequest']),
   RANGES = {
+    vibration: [0, 100, 'vibration units'],
+    spaces: [0, 1, 'spaces'],
     temp: [-10, 50, '°C'],
     outdoorTemp: [-20, 50, '°C'],
     humidity: [0, 100, '%'],

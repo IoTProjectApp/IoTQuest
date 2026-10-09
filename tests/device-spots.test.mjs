@@ -1,3 +1,4 @@
+import { addCommunityWorld } from '../public/community-world.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createRegionalModel } from '../public/regions.js';
@@ -17,13 +18,17 @@ const base = sectionResidents.map(([area, , x, y]) => [area, x, y]);
 const homes = ['legacy', ...locations.map((l) => l.id)].map((id) => {
   const model = createRegionalModel(id),
     location = locations.find((l) => l.id === id);
+  addCommunityWorld(model, location);
   return {
     id,
     model,
-    areas: base.map(([a, x, y]) => [
-      a,
-      ...(model.areaOverrides?.[a] || location?.areaOverrides?.[a] || [x, y]),
-    ]),
+    areas: [
+      ...model.community.areas,
+      ...base.map(([a, x, y]) => [
+        a,
+        ...(model.areaOverrides?.[a] || location?.areaOverrides?.[a] || [x, y]),
+      ]),
+    ],
   };
 });
 // Where the game installs a quest's devices (see installDialog).
@@ -31,7 +36,9 @@ const questDevices = (m) =>
   m.ids.map((id) => ({
     id,
     area:
-      m.sectionQuest || m.area === 'Greenhouse' ? m.area : components.find((c) => c.id === id).area,
+      m.sectionQuest || m.communityQuest || m.area === 'Greenhouse'
+        ? m.area
+        : components.find((c) => c.id === id).area,
   }));
 function check(home, devices, minGap) {
   const spots = deviceSpots(devices, home.areas, home.model.colliders, home.model.rooms);

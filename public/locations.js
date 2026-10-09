@@ -174,7 +174,7 @@ function regionalBaseMissions(base, location) {
   return base.map((mission, index) => {
     const m = structuredClone(mission);
     m.resident = location.names[m.resident] || m.resident;
-    if (m.weatherQuest || m.sectionQuest) {
+    if (m.weatherQuest || m.sectionQuest || m.communityQuest) {
       m.title = location.city + ' · ' + m.title;
       return m;
     }

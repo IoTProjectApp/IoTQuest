@@ -30,7 +30,7 @@ function outcomes(m, code, language = 'cpp', board = 'ESP32') {
 test('logic quests come after the component quests (26–33), keeping earlier numbers', () => {
   const first = missions.indexOf(logicQuests[0]);
   assert.equal(first, 17 + componentQuests.length);
-  assert.deepEqual(missions.slice(first), logicQuests);
+  assert.deepEqual(missions.slice(first, first + logicQuests.length), logicQuests);
 });
 
 test('each logic quest belongs to a section with a resident', () => {

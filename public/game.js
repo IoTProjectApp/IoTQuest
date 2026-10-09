@@ -1,3 +1,5 @@
+import { residentialLots } from './community-residences.js';
+import { communityStations, COMMUNITY_ORIGIN } from './community-world.js';
 import { residentsForSections, createGreetingTracker } from './section-residents.js';
 import {
   createConversation,
@@ -159,6 +161,47 @@ let activeFault = null,
   inspectionVariables = {};
 const labState = () => (project().lab ??= createLabState());
 let world3d = null;
+
+const communityAreaNames = Object.fromEntries(
+  Object.entries(communityStations).map(([type, [name]]) => [type, name]),
+);
+// Without the 3D world (before it loads, or without WebGL) the areas still exist for quests and
+// installs; they lie beside the property, off the map, so renderAreas shows no marker for them.
+function nativeAreas() {
+  return (
+    world3d?.model.community?.areas ||
+    Object.entries(communityStations).map(([type, [name, x, z]]) => {
+      const p = fromWorld(COMMUNITY_ORIGIN.x + x, COMMUNITY_ORIGIN.z + z);
+      return [name, p.x, p.y, { communityType: type }];
+    })
+  );
+}
+function allAreas() {
+  return [...areas, ...nativeAreas()];
+}
+function isNativeCommunityProject() {
+  return (
+    !activeFault &&
+    ((!free && missions[state.mission]?.communityQuest) ||
+      project().devices.some((d) => Object.values(communityAreaNames).includes(d.area)))
+  );
+}
+// Slider values the student set for scene-driven channels; kept for this quest only, not saved.
+let sensorOverrides = {};
+function refreshCommunityInputs() {
+  delete project().sensorOverrides;
+  const sim = world3d?.model.community?.sim;
+  if (!sim || !isNativeCommunityProject()) return;
+  const sensors = sim.sensors();
+  state.env = withBoard({
+    ...state.env,
+    bay: sensors.bay,
+    spaces: sensors.spaces,
+    pedRequest: sensors.request,
+    vibration: sensors.vibration,
+    ...sensorOverrides,
+  });
+}
 let allConditions = false;
 let tab = 'code',
   free = false,
@@ -415,6 +458,10 @@ const envMeta = {
   distance: ['◍', 'Distance', 'cm', 0, 300, 'Near', 'Far'],
   pot: ['◴', 'Potentiometer', '%', 0, 100, 'Minimum', 'Maximum'],
   humidity: ['≋', 'Humidity', '%', 0, 100, 'Dry', 'Humid'],
+  vibration: ['≋', 'Machine vibration', '', 0, 100, 'Normal', 'Fault'],
+  bay: ['▣', 'Loading bay occupied', '', 0, 1, 'Clear', 'Vehicle present'],
+  pedRequest: ['🚶', 'Pedestrian request', '', 0, 1, 'Released', 'Requested'],
+  spaces: ['P', 'Available spaces', '', 0, 1, 'Occupied', 'Free'],
   pond: ['≈', 'Pond level', '%', 0, 100, 'Low', 'Full'],
 };
 // Conditions shown in the panel: only what this quest's sensors (and any extra sensors
@@ -572,6 +619,11 @@ function renderEnvironment() {
   document.querySelectorAll('[data-env]').forEach((el) =>
     el.addEventListener('input', () => {
       state.env[el.dataset.env] = el.type === 'checkbox' ? Number(el.checked) : Number(el.value);
+      if (
+        isNativeCommunityProject() &&
+        ['bay', 'spaces', 'pedRequest', 'vibration'].includes(el.dataset.env)
+      )
+        sensorOverrides[el.dataset.env] = state.env[el.dataset.env];
       updateReadings();
       renderEffects();
       save();
@@ -579,7 +631,9 @@ function renderEnvironment() {
   );
 }
 function renderAreas() {
-  $('areas').innerHTML = areas
+  $('areas').innerHTML = allAreas()
+    // The 3D world places every marker; the flat map can only show the ones on the property.
+    .filter(([, x, y]) => world3d || (x >= 0 && x <= 100 && y >= 0 && y <= 100))
     .map(
       ([name, x, y]) =>
         '<button class="area-marker ' +
@@ -599,9 +653,21 @@ function renderAreas() {
     .querySelectorAll('[data-area]')
     .forEach((b) => (b.onclick = () => enterArea(b.dataset.area)));
 }
-function enterArea(name) {
-  let a = areas.find((a) => a[0] === name);
+function enterArea(name, { keepProject = false } = {}) {
+  let a = allAreas().find((a) => a[0] === name);
   if (!a) return;
+  const native = a[3]?.communityType;
+  // Selecting a workstation uses the same immediate placement as home/garden areas.
+  if (
+    native &&
+    !keepProject &&
+    (free || activeFault || !mission().communityQuest || mission().area !== name)
+  ) {
+    const index = activeMissions().findIndex((m) => m.communityQuest && m.area === name);
+    if (index >= 0) selectMission(index);
+  }
+  world3d?.returnToProperty();
+  if (native) world3d?.focusCommunityArea(name);
   focusArea = a;
   view = 'detail';
   zoom = 1.9;
@@ -611,6 +677,12 @@ function enterArea(name) {
   save();
   $('worldTip').textContent = 'Press E to install devices here';
   setMapView();
+  if (native) {
+    world3d?.snapCamera();
+    setLayout('split');
+    renderMission();
+    switchTab('inventory');
+  }
   updatePlayer();
   $('world').focus();
 }
@@ -650,8 +722,16 @@ function setMapView() {
       ),
     );
 }
+// Leaving a community workstation drops its room bounds and brings the player back home.
+function leaveCommunityArea() {
+  if (!world3d?.indoorArea) return;
+  world3d.returnToProperty();
+  state.player = world3d.findFree({ x: 48, y: 77 });
+  updatePlayer();
+}
 function changeView(v) {
   if (state.layout === 'code') setLayout('split');
+  leaveCommunityArea();
   view = v;
   focusArea = v === 'house' ? ['House', 34, 25] : v === 'garden' ? ['Garden', 74, 52] : null;
   zoom = v === 'world' || v === 'sky' || v === 'landscape' ? 1 : 1.5;
@@ -671,7 +751,8 @@ $('zoomIn').onclick = () => {
 };
 $('zoomOut').onclick = () => {
   zoom = Math.max(view === 'landscape' ? 0.6 : 1, zoom - 0.25);
-  if (zoom === 1 && !['sky', 'landscape'].includes(view)) {
+  if (zoom === 1 && !['sky', 'landscape', 'community'].includes(view)) {
+    leaveCommunityArea();
     view = 'world';
     focusArea = null;
   }
@@ -820,7 +901,7 @@ document.querySelectorAll('[data-move]').forEach((b) => {
 const INSTALL_RADIUS = 6;
 function nearestArea() {
   const distance = (a) => Math.hypot(a[1] - state.player.x, a[2] - state.player.y);
-  const area = areas.reduce((best, a) => (distance(a) < distance(best) ? a : best), areas[0]);
+  const area = allAreas().reduce((best, a) => (distance(a) < distance(best) ? a : best), areas[0]);
   return { area, distance: distance(area) };
 }
 // The nearest resident within talking range and not behind a wall.
@@ -847,6 +928,11 @@ function talk() {
 $('worldTalk').onclick = talk;
 function interact() {
   if ($('modal').open || view === 'sky') return;
+  if (world3d?.indoorArea) {
+    switchTab('inventory');
+    toast('Choose a component for ' + world3d.indoorArea + '.');
+    return;
+  }
   const character = talkTarget();
   if (character) {
     openConversation(character.key);
@@ -1708,8 +1794,12 @@ function installDialog(id) {
   if (!canEdit('Installer')) return;
   let c = components.find((c) => c.id === id);
   let valid = free
-    ? areas.map((a) => a[0])
-    : [mission().sectionQuest || mission().area === 'Greenhouse' ? mission().area : c.area];
+    ? allAreas().map((a) => a[0])
+    : [
+        mission().sectionQuest || mission().communityQuest || mission().area === 'Greenhouse'
+          ? mission().area
+          : c.area,
+      ];
   modal(
     'Install ' + c.name,
     '<div class="install-dialog"><div class="component-icon">' +
@@ -1720,11 +1810,16 @@ function installDialog(id) {
       valid.map((a) => '<option>' + esc(a) + '</option>').join('') +
       '</select><p>Signal → GPIO &nbsp; · &nbsp; VCC → 3.3 V &nbsp; · &nbsp; GND → GND' +
       (c.resistor ? '<br>Include a ' + esc(c.resistor) + ' resistor.' : '') +
-      '</p><button class="primary" id="confirmInstall">Walk here & install</button></div>',
+      '</p><button class="primary" id="confirmInstall">Install here</button></div>',
   );
   $('confirmInstall').onclick = () => {
     const area = $('installArea').value;
-    let base =
+    if (nativeAreas().some((a) => a[0] === area)) enterArea(area, { keepProject: true });
+    if (project().devices.some((d) => d.id === id)) {
+      $('modal').close();
+      return;
+    }
+    const base =
       planned().find((d) => d.id === id) ||
       defaults([...project().devices.map((d) => d.id), id], state.board).at(-1);
     project().devices.push({
@@ -1734,7 +1829,7 @@ function installDialog(id) {
       ground: false,
       resistorConnected: false,
     });
-    enterArea(area);
+    enterArea(area, { keepProject: true });
     $('modal').close();
     markEdited();
     renderBench();
@@ -1968,6 +2063,11 @@ function run() {
         ? 'Controller paused. Step to advance actual execution.'
         : 'Program running on ' + state.board + '.',
       ...data.logs,
+      ...(isNativeCommunityProject()
+        ? (world3d?.model.community?.sim.signals.messages || []).map(
+            (reason) => 'Traffic interlock: ' + reason,
+          )
+        : []),
       ...(data.pendingLine ? [data.pendingLine] : []),
     ];
     renderEffects();
@@ -1979,6 +2079,9 @@ function run() {
     updateReadings();
   };
   inFlight = true;
+  // Only this run's interlock rejections are shown in the Serial log.
+  if (world3d?.model.community) world3d.model.community.sim.signals.messages = [];
+  refreshCommunityInputs();
   requestEnv = { ...state.env };
   worker.postMessage({
     type: 'start',
@@ -2001,6 +2104,7 @@ function run() {
   if (tab === 'dashboard') renderDashboard();
   toast('Your program is running. Try changing the conditions.');
 }
+// Callers refresh the community inputs first, so state.env holds this step's readings.
 function batchOptions(count = speed) {
   return {
     env: state.env,
@@ -2025,6 +2129,7 @@ function advanceWorld() {
       return { outputs: {}, logs: [], time: this.time };
     },
   };
+  refreshCommunityInputs();
   const result = simulateBatch(passive, batchOptions());
   state.env = withBoard(result.env);
   adoptSimulatedLab(result.lab);
@@ -2035,6 +2140,7 @@ function advanceWorld() {
 function tick() {
   if (!worker || !running || inFlight || labState().paused || speed === 0) return;
   inFlight = true;
+  refreshCommunityInputs();
   requestEnv = { ...state.env };
   worker.postMessage({ type: 'tick', ...batchOptions(), trace: true });
   watchdog = setTimeout(() => {
@@ -2249,8 +2355,7 @@ function renderEffects() {
   $('rainEffect').style.opacity = String(state.env.rain / 100);
   let html = '';
   for (const d of project().devices) {
-    const area =
-      areas.find((a) => a[0] === d.area) || areas.find((a) => a[0] === d.area) || areas[9];
+    const area = allAreas().find((a) => a[0] === d.area) || areas[9];
     let x = area[1],
       y = area[2],
       on = (outputs[d.pin] || 0) > 0;
@@ -2688,9 +2793,9 @@ function debugChallenge() {
 function selectMission(index) {
   stop(false);
   activeFault = null;
-  state.travelScreen = false;
-  $('travelScreen').hidden = true;
-  $('adventureScreen').hidden = false;
+  sensorOverrides = {};
+  // Opening the destination restores its 3D graphics and starts the player at home.
+  if (state.travelScreen) showLocation();
   free = false;
   // A quest chosen because the situation needs it keeps that situation (at sunset the path is
   // still dark); any other quest starts from fresh practice conditions.
@@ -3390,6 +3495,21 @@ function applyImport(plan) {
 }
 
 $('exportBtn').onclick = exportProject;
+function residentialResidents(engine = world3d) {
+  return residentialLots.map((b) => {
+    const actor = engine?.model.actors.find((a) => a.id === 'residence:' + b.type);
+    const area = nativeAreas().find((a) => a[3]?.communityType === b.type);
+    const p = toWorld({ x: area[1], y: area[2] });
+    return {
+      key: 'residence:' + b.type,
+      name: b.resident,
+      area: b.name,
+      section: 'Neighbourhood home',
+      x: actor?.x ?? p[0] + 1.7,
+      z: actor?.z ?? p[2] + 0.3,
+    };
+  });
+}
 function characterPositions(engine = world3d) {
   if (engine)
     return engine.model.actors
@@ -3406,6 +3526,7 @@ function characterPositions(engine = world3d) {
         };
       });
   return [
+    ...residentialResidents(null),
     ...residentsForSections(
       currentLocation(),
       Object.fromEntries(areas.map(([area, x, y]) => [area, [x, y]])),
@@ -3425,6 +3546,10 @@ function renderSectionResidents() {
     currentLocation(),
     Object.fromEntries(areas.map(([area, x, y]) => [area, [x, y]])),
   )
+    .concat(
+      residentialResidents(),
+      characterPositions().filter((c) => c.key.startsWith('worker:')),
+    )
     .map((c) => {
       const point = fromWorld(c.x, c.z);
       return (
@@ -3762,7 +3887,7 @@ function exitFault() {
   switchTab('code');
 }
 function setClockSpeed(value) {
-  speed = [0, 1, 4, 60, 360].includes(value) ? value : 1;
+  speed = [0, 1, 4, 12, 60, 360].includes(value) ? value : 1;
   labState().paused = speed === 0;
   labState().dailyCycle = speed >= 60;
   if (speed >= 60) {
@@ -3903,6 +4028,8 @@ function returnToGlobe() {
   save();
   stop(false);
   state.travelScreen = true;
+  world3d?.releaseGraphics();
+  travelController?.restoreGraphics();
   $('travelScreen').hidden = false;
   $('adventureScreen').hidden = true;
   keys.clear();
@@ -3911,11 +4038,14 @@ function returnToGlobe() {
 }
 function showLocation() {
   greetingTracker.reset();
+  travelController?.releaseGraphics();
+  world3d?.restoreGraphics();
   state.travelScreen = false;
   $('travelScreen').hidden = true;
   $('adventureScreen').hidden = false;
   const location = currentLocation();
   world3d?.setRegion(state.activeLocation);
+  setCommunityDensity();
   // The minimap matches mirrored homes.
   $('minimap')?.classList.toggle('mirrored', !!world3d?.model.mirrored);
   for (let i = 0; i < areas.length; i++) {
@@ -3961,6 +4091,7 @@ async function enterLocation(id, weather = null) {
   weatherLoading = false;
   free = false;
   activeFault = null;
+  sensorOverrides = {};
   state.activeLocation = id;
   const profile = locationProfile();
   state.mission = profile.mission || 0;
@@ -4089,13 +4220,22 @@ function projectWorldLabels(engine) {
     el.style.left = v.x + 'px';
     el.style.top = v.y + 'px';
     if (priority === undefined) el.style.visibility = v.visible ? 'visible' : 'hidden';
-    else labels.push({ el, x: v.x, y: v.y, visible: v.visible, priority });
+    else
+      labels.push({
+        el,
+        x: v.x,
+        y: v.y,
+        visible: v.visible,
+        priority,
+        movable: el.id === 'player' && !!engine.indoorArea,
+      });
   };
   for (const el of document.querySelectorAll('[data-area]')) {
-    const a = areas.find((a) => a[0] === el.dataset.area);
+    const a = allAreas().find((a) => a[0] === el.dataset.area);
     const p = toWorld({ x: a[1], y: a[2] });
     p[1] = 1.65 + (engine.model.floorHeight?.(p[0], p[2]) || 0);
-    place(el, p, 0);
+    if (engine.communityView && a[3]?.communityType) el.style.visibility = 'hidden';
+    else place(el, p, engine.communityView ? 2 : 0);
   }
   const targets = world3d?.deviceObjects || [];
   if ($('deviceWorldTargets').dataset.signature !== targets.map((r) => r.device.id).join(',')) {
@@ -4139,7 +4279,74 @@ function projectWorldLabels(engine) {
       actor.area ? 3 : 2,
     );
   }
-  declutterLabels(labels);
+  const communityTargets = $('communityWorldTargets');
+  communityTargets.hidden = !engine.communityView;
+  if (engine.communityView) {
+    const sim = engine.model.community.sim;
+    if (communityTargets.communitySimulation !== sim) {
+      communityTargets.communitySimulation = sim;
+      communityTargets.dataset.region = state.activeLocation;
+      communityTargets.innerHTML =
+        sim.map.buildings
+          .map(
+            (b) =>
+              `<button class="world-device-target community-building-target" data-community-building="${esc(b.type)}">${esc(b.name)}</button>`,
+          )
+          .join('') +
+        '<button class="world-device-target community-building-target" data-community-crossing>Request pedestrian crossing</button><span class="world-device-target" data-community-signal></span>';
+      communityTargets.querySelector('[data-community-crossing]').onclick = () => {
+        sim.signals.requested = true;
+      };
+      communityTargets.querySelectorAll('[data-community-building]').forEach((button) => {
+        button.onclick = () => {
+          const type = button.dataset.communityBuilding;
+          if (type === 'home') {
+            engine.returnToProperty();
+            enterArea('Living room');
+            return;
+          }
+          enterArea(communityAreaNames[type]);
+        };
+      });
+    }
+    const signal = communityTargets.querySelector('[data-community-signal]');
+    signal.textContent = `${sim.signals.phase} · ${Math.ceil(sim.signals.remaining)}s`;
+    place(signal, [engine.model.community.origin.x, 4, engine.model.community.origin.z], 6);
+    place(
+      communityTargets.querySelector('[data-community-crossing]'),
+      [engine.model.community.origin.x, 1, 8],
+      5,
+    );
+    communityTargets.querySelectorAll('[data-community-building]').forEach((button) => {
+      const b = sim.map.buildings.find((b) => b.type === button.dataset.communityBuilding);
+      place(button, [engine.model.community.origin.x + b.x, b.type === 'factory' ? 8 : 5, b.z], 2);
+    });
+  }
+  const { rect, blocked } = worldControlBoxes(engine);
+  declutterLabels(labels, {
+    bounds: rect ? { left: 4, top: 4, right: engine.width - 4, bottom: engine.height - 4 } : null,
+    blocked,
+  });
+}
+// Where the camera controls cover the 3D view. Measuring forces a page layout, so this runs only
+// when the view's size, the layout or the view mode changes, not on every frame.
+let controlBoxes = null;
+function worldControlBoxes(engine) {
+  const key = [engine.width, engine.height, state.layout, view].join();
+  if (controlBoxes?.key === key) return controlBoxes;
+  const rect = engine.canvas?.getBoundingClientRect?.();
+  const blocked = rect
+    ? ['.camera-bar', '.quest-locator', '.map-tools', '.map-location', '.minimap', '.dpad']
+        .map((selector) => $('world').querySelector(selector)?.getBoundingClientRect())
+        .filter((r) => r?.width && r?.height)
+        .map((r) => ({
+          left: r.left - rect.left,
+          right: r.right - rect.left,
+          top: r.top - rect.top,
+          bottom: r.bottom - rect.top,
+        }))
+    : [];
+  return (controlBoxes = { key, rect, blocked });
 }
 if (typeof $('worldCanvas')?.getContext === 'function') {
   try {
@@ -4153,13 +4360,16 @@ if (typeof $('worldCanvas')?.getContext === 'function') {
         appearance: state.appearance,
         reduced: state.reduced,
         speed,
-        areas,
+        areas: allAreas(),
+        running,
+        communityMission: isNativeCommunityProject(),
         locationId: state.activeLocation,
         visible: !state.travelScreen,
         upgrades: labState().upgrades,
         batteryWh: labState().resources.batteryWh,
         roofsVisible: state.roofsVisible,
         simClockMs: labState().elapsedMs,
+        weatherMode: state.weatherMode,
         skyMode: state.skyMode || 'live',
         skyDate: state.skyDate,
         skyStartHour: labState().startHour,
@@ -4170,7 +4380,9 @@ if (typeof $('worldCanvas')?.getContext === 'function') {
           : null,
       }),
       onFrame: projectWorldLabels,
+      onBuildingSelect: selectCommunityBuilding,
       onError: (message) => {
+        if (state.travelScreen && message.includes('connection was lost')) return;
         $('graphicsMessage').textContent = message;
         $('graphicsMessage').hidden = false;
       },
@@ -4178,7 +4390,10 @@ if (typeof $('worldCanvas')?.getContext === 'function') {
         $('graphicsMessage').hidden = true;
       },
     });
+    // Keep only the travel globe's WebGL context active on the destination screen.
+    if (state.travelScreen) world3d.releaseGraphics();
     $('world').classList.add('is-3d');
+    renderSectionResidents();
     state.player = world3d.findFree(state.player);
     setMapView();
     updatePlayer();
@@ -4226,3 +4441,44 @@ if (navigator.modelContext?.registerTool) {
     },
   });
 }
+
+// A click in the overview only visits the building while a free build, teacher quest or program
+// is under way; otherwise it starts that building's quest.
+function selectCommunityBuilding(type) {
+  enterArea(type === 'home' ? 'Living room' : communityAreaNames[type], {
+    keepProject: free || !!activeFault || running,
+  });
+}
+function openWorldCommunityProgramming() {
+  enterArea(world3d?.indoorArea || 'Factory floor');
+}
+$('exploreCommunity').onclick = () => {
+  if (!world3d) {
+    openWorldCommunityProgramming();
+    return;
+  }
+  changeView('world');
+  world3d.snapCamera();
+};
+$('communityProgram').onclick = openWorldCommunityProgramming;
+
+function setCommunityDensity() {
+  const settings = locationProfile().community || {};
+  $('trafficDensity').value = String(settings.trafficDensity ?? 12);
+  $('pedestrianDensity').value = String(settings.pedestrianDensity ?? 10);
+  if (world3d?.model.community) {
+    world3d.model.community.sim.density = Number($('trafficDensity').value);
+    world3d.model.community.sim.pedestrianDensity = Number($('pedestrianDensity').value);
+  }
+}
+for (const [id, key, field] of [
+  ['trafficDensity', 'trafficDensity', 'density'],
+  ['pedestrianDensity', 'pedestrianDensity', 'pedestrianDensity'],
+])
+  $(id).oninput = () => {
+    const value = Number($(id).value);
+    (locationProfile().community ||= {})[key] = value;
+    if (world3d?.model.community) world3d.model.community.sim[field] = value;
+    save();
+  };
+setCommunityDensity();

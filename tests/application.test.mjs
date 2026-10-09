@@ -1649,6 +1649,17 @@ test('a tab stops saving once another tab saves newer progress', () => {
   assert.equal(h.storage.get('iotquest-v1'), newer, "The other tab's progress is kept");
   assert.match(h.document.getElementById('saved').textContent, /another tab/);
 });
+test('saved test evidence keeps full copies only for the latest runs', () => {
+  const h = harness();
+  installAndWire(h, 0);
+  h.api.loadExample();
+  for (let i = 0; i < 8; i++) h.api.testSolution();
+  const tests = h.api.labState().evidence.filter((e) => e.type === 'test');
+  assert.equal(tests.length, 8);
+  assert.equal(tests.filter((e) => e.code).length, 5, 'Latest five keep code and wiring');
+  assert.ok(tests[0].results.every((r) => Object.keys(r).join() === 'name,pass'));
+  assert.equal(tests[0].passed, true);
+});
 test('a rejected import explains why and leaves the project untouched', async () => {
   const h = harness();
   installAndWire(h, 0);

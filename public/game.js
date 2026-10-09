@@ -77,7 +77,9 @@ const $ = (id) => document.getElementById(id);
 const STORAGE_KEY = 'iotquest-v1',
   TICK_MS = 200,
   ADVANCED_COMPONENT_XP = 150,
-  EVIDENCE_LIMIT = 50;
+  EVIDENCE_LIMIT = 50,
+  FULL_TEST_EVIDENCE = 5,
+  IMPORT_BACKUPS = 3;
 const areas = [
   ['Bedroom', 19, 17],
   ['Bathroom', 30, 15],
@@ -152,7 +154,18 @@ function locationProfile() {
   });
 }
 const currentCompletions = () => locationProfile().completed;
-const activeMissions = () => adaptMissions(missions, currentLocation(), state.difficulty);
+// Adapting all quests copies each one, and mission() runs many times every 200 ms tick, so the
+// list is kept until the destination or difficulty changes (quests are not modified once built).
+let adaptedFor = null,
+  adaptedMissions = null;
+const activeMissions = () => {
+  const key = state.activeLocation + '|' + state.difficulty;
+  if (adaptedFor !== key) {
+    adaptedMissions = adaptMissions(missions, currentLocation(), state.difficulty);
+    adaptedFor = key;
+  }
+  return adaptedMissions;
+};
 let activeFault = null,
   selectedDevice = null,
   lastInputs = {},
@@ -344,6 +357,13 @@ function recordEvidence(entry) {
   const tests = lab.evidence.filter((e) => e.type === 'test').slice(-EVIDENCE_LIMIT),
     other = lab.evidence.filter((e) => e.type !== 'test').slice(-EVIDENCE_LIMIT);
   lab.evidence = lab.evidence.filter((e) => tests.includes(e) || other.includes(e));
+  // Every saved test run held a full copy of the code, wiring and results (about 2 KB each), and
+  // all progress shares one browser store of about 5 MB. Older runs keep a short summary.
+  for (const e of tests.slice(0, -FULL_TEST_EVIDENCE)) {
+    delete e.code;
+    delete e.devices;
+    if (e.results) e.results = e.results.map(({ name, pass }) => ({ name, pass }));
+  }
 }
 function save() {
   clearTimeout(saveTimer);
@@ -364,6 +384,14 @@ function save() {
     $('saved').textContent = '✓ Progress saved locally';
   } catch {
     $('saved').textContent = 'Local saving unavailable';
+    // Usually the browser's storage is full (or blocked): say so once, clearly, so the student
+    // can download their progress before closing the page.
+    if (!save.warned) {
+      save.warned = true;
+      toast(
+        'Your progress could not be saved in this browser. Download your progress or project before closing this page.',
+      );
+    }
   }
 }
 function toast(text) {
@@ -671,7 +699,8 @@ function renderEnvironment() {
         sensorOverrides[el.dataset.env] = state.env[el.dataset.env];
       updateReadings();
       renderEffects();
-      save();
+      // A slider fires on every step it moves; save once it settles.
+      saveSoon();
     }),
   );
 }
@@ -3562,6 +3591,12 @@ function applyImport(plan) {
     existing = projects[key];
   if (existing && (existing.devices?.length || Object.keys(existing.code || {}).length))
     projects[key + '~backup-' + new Date().toISOString().slice(0, 19)] = existing;
+  // Keep the newest few backups of this quest (each is a whole project).
+  for (const old of Object.keys(projects)
+    .filter((k) => k.startsWith(key + '~backup-'))
+    .sort()
+    .slice(0, -IMPORT_BACKUPS))
+    delete projects[old];
   projects[key] = {
     devices: plan.devices,
     code: plan.code,

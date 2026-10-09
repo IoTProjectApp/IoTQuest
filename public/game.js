@@ -1727,19 +1727,36 @@ function changeBoard(board) {
     return;
   }
   stop(false);
+  const p = project(),
+    previous = state.board;
   state.board = board;
   const plannedDevices = defaults(
-    project().devices.map((d) => d.id),
+    p.devices.map((d) => d.id),
     board,
   );
-  project().devices = project().devices.map((d, i) => ({ ...d, pin: plannedDevices[i].pin }));
-  project().code = {};
-  // The editor is empty again, so the Guide starts from its first unfinished step.
+  p.devices = p.devices.map((d, i) => ({ ...d, pin: plannedDevices[i].pin }));
+  // Each controller keeps its own code (its pin numbers differ), so switching back restores it.
+  p.codeByBoard = { ...p.codeByBoard, [previous]: p.code };
+  const kept = p.codeByBoard[board];
+  delete p.codeByBoard[board];
+  // A challenge starts again from its own program (the unsafe one to repair), not a blank one.
+  const source = activeFault?.source || activeFault?.starter,
+    rebuilt = (lang) => source(lang, plannedDevices);
+  p.code = kept || (source ? { cpp: rebuilt('cpp'), python: rebuilt('python') } : {});
+  // The editor shows different code now, so the Guide starts from its first unfinished step.
   for (const key of Object.keys(coachStep))
     if (key.startsWith(state.activeLocation + ':' + activeKey() + ':')) delete coachStep[key];
   markEdited();
   renderBench();
-  toast('Controller changed. Pins were remapped and starter code reloaded for ' + board + '.');
+  toast(
+    kept
+      ? 'Controller changed. Pins were remapped and your ' + board + ' code is back.'
+      : 'Controller changed. Pins were remapped and starter code loaded for ' +
+          board +
+          '. Your ' +
+          previous +
+          ' code is kept: switch back to get it.',
+  );
 }
 function renderInventory() {
   let required = mission().ids,

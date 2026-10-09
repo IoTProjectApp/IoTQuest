@@ -604,6 +604,23 @@ test('Pico remaps signals and solution works after controller change', () => {
   h.api.testSolution();
   assert.equal(h.api.getPassed(), true);
 });
+test("changing controller keeps each board's code and challenges keep their program", () => {
+  const h = harness();
+  installAndWire(h, 0);
+  h.api.switchTab('code');
+  const mine = h.api.code() + '\n// my ESP32 work';
+  h.api.project().code.cpp = mine;
+  h.api.changeBoard('Raspberry Pi Pico');
+  assert.notEqual(h.api.code(), mine, 'Pico starts from its own starter');
+  h.api.changeBoard('ESP32');
+  assert.equal(h.api.code(), mine, 'ESP32 work comes back');
+  // A security repair keeps a program to repair on the new board.
+  const unsafe = securityCases[0];
+  h.api.startFault(unsafe.id);
+  h.api.changeBoard('Raspberry Pi Pico');
+  const devices = defaults(unsafe.ids, 'Raspberry Pi Pico');
+  assert.equal(h.api.code(), unsafe.source(h.api.state.language, devices));
+});
 test('movement changes technician coordinates and stays inside world bounds', () => {
   const h = harness();
   h.api.resumeLegacy();

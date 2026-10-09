@@ -262,3 +262,40 @@ test('resident chats are counted per quest and reach the report and the CSV', ()
   assert.equal(report.quests[1].chats, 0);
   assert.match(progressCSV([report]).split('\r\n')[0], /"Hints used","Resident chats"/);
 });
+
+test('teacher quests line up by quest, whatever order each student imported them in', () => {
+  const report = (student, quests) =>
+    parseProgressReport(
+      JSON.stringify({
+        ...buildProgressReport({ name: student, language: 'cpp' }, { student }),
+        quests: quests.map(([questId, title, status], index) => ({
+          location: 'teacher',
+          difficulty: 'original',
+          index,
+          questId,
+          title,
+          status,
+        })),
+      }),
+    );
+  const grid = classGrid(
+    [
+      report('Ann', [
+        ['fan', 'Fan when hot', 'started'],
+        ['lamp', 'Lamp at dusk', 'started'],
+      ]),
+      report('Ben', [['lamp', 'Lamp at dusk', 'passed']]),
+    ],
+    'teacher|original',
+  );
+  assert.deepEqual(
+    grid.quests.map((q) => [q.title, q.passed]),
+    [
+      ['Fan when hot', 0],
+      ['Lamp at dusk', 1],
+    ],
+  );
+  const ben = grid.rows.find((r) => r.student === 'Ben');
+  assert.equal(ben.cells[0], undefined, 'Ben has no Fan result');
+  assert.equal(ben.cells[1].status, 'passed');
+});

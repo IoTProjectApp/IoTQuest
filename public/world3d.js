@@ -162,6 +162,8 @@ const DEFAULT_SKY_SUN = [0, 1, 0];
 // Per instance: model matrix (16, with the size in three w components), colour (4), material (3).
 const INSTANCE_FLOATS = 23;
 const MIN_PIXEL_RADIUS = 1;
+// Most simulated seconds one frame advances the community; 360× at 60 fps is about 6 s.
+const MAX_SIM_STEP = 10;
 const roughnessFor = (surface) =>
   surface === SURFACE.water
     ? 0.12
@@ -739,12 +741,16 @@ export class World3D {
       this.model.cylinder(11.9, 1.08, -3.6, 0.75, 2, '#83acb7', { upgrade: true });
   }
   animate(state, t, dt) {
-    const simDelta =
+    // The community sim steps 20 times per simulated second, so a large jump (returning to a
+    // quest whose lab clock ran on for hours) is capped rather than replayed and freezing the page.
+    const simDelta = Math.min(
+      MAX_SIM_STEP,
       state.simClockMs !== undefined
         ? this.lastSimClockMs === undefined
           ? 0
           : Math.max(0, (state.simClockMs - this.lastSimClockMs) / 1000)
-        : dt * state.speed;
+        : dt * state.speed,
+    );
     this.lastSimClockMs = state.simClockMs;
     updateCommunityWorld(this.model, state, simDelta);
     if (state.paused) dt = 0;

@@ -824,6 +824,21 @@ test('community buildings and road users render in 3D on the world simulation cl
   );
   assert.ok(Math.abs(c.sim.time - 20) < 1e-6);
 });
+test('a lab clock that jumped hours ahead advances the community by a capped step, not the whole gap', () => {
+  const { world, state } = renderer();
+  state.simClockMs = 0;
+  world.render(0, 0.016);
+  const sim = world.model.community.sim,
+    before = sim.time;
+  state.simClockMs = 6 * 3600 * 1000;
+  const started = performance.now();
+  world.render(1, 0.016);
+  assert.ok(sim.time - before <= 10 + 1e-6, 'At most ten simulated seconds in one frame');
+  assert.ok(performance.now() - started < 2000);
+  state.simClockMs += 1000;
+  world.render(2, 0.016);
+  assert.ok(Math.abs(sim.time - before - 11) < 1e-6, 'Normal steps resume afterwards');
+});
 test('factory controller keeps driving 3D machinery', () => {
   const { world, state } = renderer();
   state.simClockMs = 0;

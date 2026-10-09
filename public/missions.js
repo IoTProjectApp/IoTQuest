@@ -4,7 +4,7 @@ import { weatherQuests } from './weather-quests.js';
 import { componentQuests } from './component-quests.js';
 import { logicQuests } from './logic-quests.js';
 import { guidedStarter } from './code-coach.js';
-import { ADC_SIGNALS } from './signals.js';
+import { ADC_SIGNALS, adcRead, isPico, picoWiring } from './signals.js';
 export { ADC_SIGNALS };
 export const components = [
   ...communityComponents,
@@ -469,9 +469,17 @@ export function validate(devices, board) {
             0, 2, 4, 5, 12, 13, 14, 15, 16, 17, 18, 19, 21, 22, 23, 25, 26, 27, 32, 33, 34, 35, 36,
             39,
           ]
-        : Array.from({ length: 29 }, (_, i) => i);
+        : // The Pico's header has GP0–GP22 and GP26–GP28. GP23–GP25 are used on the board
+          // itself (power supply control, USB sensing and the onboard LED).
+          [...Array.from({ length: 23 }, (_, i) => i), 26, 27, 28];
     if (!allowed.includes(d.pin))
-      errors.push('GPIO ' + d.pin + ' is unavailable on ' + board + '.');
+      errors.push(
+        'GPIO ' +
+          d.pin +
+          ' is unavailable on ' +
+          board +
+          (board === 'ESP32' ? '.' : ': use a header pin, GP0–GP22 or GP26–GP28.'),
+      );
     if (d.output && board === 'ESP32' && d.pin >= 34)
       errors.push('GPIO ' + d.pin + ' is input-only on ESP32.');
     if (d.analog && !(board === 'ESP32' ? [32, 33, 34, 35, 36, 39] : [26, 27, 28]).includes(d.pin))
@@ -481,11 +489,13 @@ export function validate(devices, board) {
   }
   return errors;
 }
-export function program(mission, language, devices, worked = false) {
+// `board` picks the Pico's read_u16() for analogue readings; without it, the wiring decides.
+export function program(mission, language, devices, worked = false, board) {
   // Students write the readings and decisions themselves, guided by the code coach.
   if (!worked) return guidedStarter(mission, language, devices);
   const inputs = devices.filter((d) => !d.output),
-    outputs = devices.filter((d) => d.output);
+    outputs = devices.filter((d) => d.output),
+    pico = board ? isPico(board) : picoWiring(devices);
   let conditions = mission.conditions.map((c) => (worked ? c : 'false'));
   if (language === 'cpp')
     return (
@@ -552,7 +562,12 @@ export function program(mission, language, devices, worked = false) {
     inputs
       .map(
         (d) =>
-          '    ' + d.signal + ' = ' + d.signal + '_sensor.' + (d.analog ? 'read()' : 'value()'),
+          '    ' +
+          d.signal +
+          ' = ' +
+          d.signal +
+          '_sensor.' +
+          (d.analog ? adcRead(pico, d.signal) : 'value()'),
       )
       .join('\n') +
     '\n\n' +

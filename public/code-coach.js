@@ -1,6 +1,6 @@
 import { Runtime } from './runtime.js';
 import { baseEnv, defaults } from './missions.js';
-import { ADC_SIGNALS as ADC, ADC_SCALE } from './signals.js';
+import { ADC_SIGNALS as ADC, ADC_SCALE, adcRead, isPico } from './signals.js';
 // The code coach. Students write the whole program themselves: the editor starts with only the
 // quest's title and goal as comments, and the guide walks through each part (imports, pin names,
 // setup, the loop, sensor readings and decisions), explaining what the code does and why. Each
@@ -357,10 +357,17 @@ function loopStep(language) {
   };
 }
 
-function readStep(d, language) {
+function readStep(d, language, board) {
   const py = python(language),
+    pico = isPico(board),
     calibrated = d.analog && !ADC.includes(d.signal),
-    fn = py ? (d.analog ? 'read()' : 'value()') : d.analog ? 'analogRead' : 'digitalRead',
+    fn = py
+      ? d.analog
+        ? adcRead(pico, d.signal)
+        : 'value()'
+      : d.analog
+        ? 'analogRead'
+        : 'digitalRead',
     line = (source = '____') =>
       py
         ? d.signal + ' = ' + source + '.' + fn
@@ -387,6 +394,14 @@ function readStep(d, language) {
             ? ' `float` keeps decimal readings, so your threshold comparisons stay accurate.'
             : ' `int` means it holds a whole number.') +
         ' Read it inside the loop, so it is measured again on every pass.',
+      ...(py && pico && d.analog
+        ? [
+            'The Pico’s MicroPython has no `read()`: `read_u16()` measures from 0 to 65535, and ' +
+              (calibrated
+                ? '`/ 16` turns that into this channel’s units.'
+                : '`>> 4` (shift right by 4 bits, the same as dividing by 16) gives 0–4095 like the other boards.'),
+          ]
+        : []),
     ],
     task: 'At the start of the loop' + (py ? ' (indented four spaces)' : '') + ', write:',
     pattern: line(),
@@ -400,7 +415,9 @@ function readStep(d, language) {
       if (!name) return waiting('First name the ' + lower(d) + ' pin (step “Name your pins”).');
       const read = py
           ? new RegExp(
-              '^\\s*(\\w+)\\s*=\\s*' + escapeRe(name) + '\\.(read|value)\\s*\\(\\s*\\)',
+              '^\\s*(\\w+)\\s*=\\s*' +
+                escapeRe(name) +
+                '\\.(read|read_u16|value)\\s*\\(\\s*\\)[ \\t]*((?:>>|\\/\\/?)[ \\t]*\\d+)?',
               'm',
             )
           : new RegExp(
@@ -412,8 +429,15 @@ function readStep(d, language) {
             ),
         m = code.match(read);
       if (!m) return waiting('Waiting for: ' + line(name).replace(/;$/, ''));
-      const used = py ? m[2] + '()' : m[2];
-      if (used !== fn)
+      // A Pico reading is read_u16() scaled down: `>> 4` or `/ 16` (or `// 16`) both count.
+      const used = py ? m[2] + '()' + (m[3] ? (m[3].includes('>') ? ' >> 4' : ' / 16') : '') : m[2];
+      if (py && pico && m[2] === 'read')
+        return waiting('The Pico has no ADC read(): use `' + fn + '`.');
+      if (py && m[2] === 'read_u16' && !/^(>>\s*4|\/\/?\s*16)$/.test(m[3] || ''))
+        return waiting(
+          'read_u16() gives 0–65535: write `' + fn + '` to get the same units as the thresholds.',
+        );
+      if (used !== fn && !(py && d.analog && used.startsWith('read_u16() ')))
         return waiting(
           'This sensor is ' + (d.analog ? 'analogue' : 'digital') + ', so use `' + fn + '`.',
         );
@@ -501,7 +525,7 @@ export function coachSteps(mission, language, installed, board = 'ESP32') {
   steps.push(pinsStep(devices, language));
   if (!py) steps.push(setupStep(devices));
   steps.push(loopStep(language));
-  for (const d of inputsOf(devices)) steps.push(readStep(d, language));
+  for (const d of inputsOf(devices)) steps.push(readStep(d, language, board));
   outputsOf(devices).forEach((d, i) =>
     steps.push(decideStep(mission, d, i, devices, language, board)),
   );

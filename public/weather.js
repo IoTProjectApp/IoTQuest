@@ -1,4 +1,5 @@
 import { clamp } from './world-math.js';
+import { outputLevel } from './signals.js';
 export const WEATHER_CACHE_MS = 15 * 60 * 1000;
 const fields =
   'temperature_2m,relative_humidity_2m,precipitation,weather_code,cloud_cover,wind_speed_10m,wind_direction_10m,is_day';
@@ -302,6 +303,8 @@ export function advanceEnvironment(
     location = null,
     tankCapacity = 100,
     collectionFactor = 1,
+    // Full scale of each output's last write (Runtime#outputScales), for PWM fan speeds.
+    scales = {},
   } = {},
 ) {
   dt = clamp(dt, 0, 2);
@@ -354,10 +357,7 @@ export function advanceEnvironment(
   const cooling = devices
     .filter((d) => ['fan', 'ac'].includes(d.id) && (outputs[d.pin] || 0) > 0)
     .reduce(
-      (sum, d) =>
-        sum +
-        (d.id === 'ac' ? 0.23 : 0.12) *
-          ((outputs[d.pin] || 0) === 1 ? 1 : clamp(outputs[d.pin] / 255, 0, 1)),
+      (sum, d) => sum + (d.id === 'ac' ? 0.23 : 0.12) * outputLevel(outputs[d.pin], scales[d.pin]),
       0,
     );
   // On the horse farm, misting sprinklers cool the paddock shelters.

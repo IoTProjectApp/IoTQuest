@@ -51,7 +51,7 @@ void main(){
   vec3 squared=size*size;
   squared=mix(squared,vec3(1.0),step(squared,vec3(0.0)));
   vWorld=world.xyz;vLocal=aPosition*size;vLocalNormal=aNormal;
-  vNormal=mat3(model)*(aNormal/squared);
+  vNormal=(model*vec4(aNormal/squared,0.0)).xyz;
   vColor=iColor;vMaterial=iMaterial;
   gl_Position=uViewProjection*world;
 }`;
@@ -198,7 +198,7 @@ export function frustumTest(m, pixelScale = 0) {
     const [x, y, z] = o.pos,
       [w, h, d] = o.size || [1, 1, 1],
       r = 0.6 * Math.hypot(w, h, d) + 0.25;
-    for (const p of planes) if (p[0] * x + p[1] * y + p[2] * z + p[3] < -r) return false;
+    for (const p of planes) if (p[0] * x + p[1] * y + p[2] * z + p[3] < -r) return 0;
     if (!pixelScale || o.sky || o.moonSurface || o.emission) return Infinity;
     const distance = m[3] * x + m[7] * y + m[11] * z + m[15];
     if (distance <= 0) return Infinity;
@@ -1199,10 +1199,13 @@ export class World3D {
     gl.uniform1f(this.uniforms.uCelestial, 0);
     gl.uniform3fv(this.uniforms.uSkySun, DEFAULT_SKY_SUN);
     this.drawState = {};
-    const instanced = this.instancing ? opaque.filter((m) => !m.sky && !m.moonSurface) : [];
+    // Sky objects keep their own celestial shading, so they are drawn one by one.
+    const instanced = [],
+      single = [];
+    for (const m of opaque)
+      (this.instancing && !m.sky && !m.moonSurface ? instanced : single).push(m);
     if (instanced.length) this.drawInstanced(instanced);
-    for (const m of instanced.length ? opaque.filter((m) => m.sky || m.moonSurface) : opaque)
-      this.draw(m);
+    for (const m of single) this.draw(m);
     transparent.sort(
       (a, b) =>
         Math.hypot(...b.pos.map((v, i) => v - eye[i])) -
@@ -1325,6 +1328,8 @@ export class World3D {
       this.gl.deleteBuffer(g.positions);
       this.gl.deleteBuffer(g.normals);
     }
+    this.gl.deleteBuffer(this.instanceBuffer);
+    this.instanceData = null;
     this.gl.deleteProgram(this.program);
   }
 }

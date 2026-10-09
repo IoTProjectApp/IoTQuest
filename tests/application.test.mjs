@@ -2,6 +2,7 @@ import { residentialLots } from '../public/community-residences.js';
 import { communityStations, COMMUNITY_ORIGIN } from '../public/community-world.js';
 import { boundaryScenarios } from '../public/quest-boundaries.js';
 import { World3D } from '../public/world3d.js';
+import { homeVariant } from '../public/home-variants.js';
 import { collides } from '../public/world-math.js';
 import {
   createConversation,
@@ -2377,6 +2378,20 @@ test('changing destinations from a factory removes old indoor movement bounds', 
   assert.ok(Math.abs(p[0]) < 20 && Math.abs(p[2]) < 20, 'New destination starts at its home');
 });
 
+test('the minimap is flipped only when the 3D home is drawn flipped', async () => {
+  const h = harness(),
+    world = attachRenderedWorld(h),
+    mirrored = locations.find((l) => homeVariant(l).mirror),
+    minimap = h.document.getElementById('minimap');
+  await h.api.enterLocation(mirrored.id);
+  assert.equal(world.model.mirrored, true);
+  h.api.changeView('world');
+  assert.equal(minimap.classList.contains('mirrored'), !world.communityView);
+  h.api.changeView('house');
+  assert.equal(minimap.classList.contains('mirrored'), true, 'The house view is flipped');
+  h.api.enterArea('Factory floor');
+  assert.equal(minimap.classList.contains('mirrored'), false, 'Buildings close up are not');
+});
 test('labels stay inside the viewport and move clear of camera controls', () => {
   const h = harness();
   const el = h.document.getElementById('player');

@@ -743,6 +743,12 @@ function setMapView() {
     ? 'none'
     : 'translate(' + tx + '%,' + ty + '%) scale(' + zoom + ')';
   world3d?.setView(view, a, zoom);
+  // The minimap matches the 3D view, which draws the community (and its buildings close up)
+  // unflipped even when the home is mirrored.
+  $('minimap')?.classList.toggle(
+    'mirrored',
+    !!world3d?.model.mirrored && !world3d.communityView && !world3d.indoorArea,
+  );
   if ($('followCamera')) $('followCamera').setAttribute?.('aria-pressed', 'false');
   $('location').innerHTML =
     '<span>⌖</span> ' +
@@ -4132,8 +4138,6 @@ function showLocation() {
   const location = currentLocation();
   world3d?.setRegion(state.activeLocation);
   setCommunityDensity();
-  // The minimap matches mirrored homes.
-  $('minimap')?.classList.toggle('mirrored', !!world3d?.model.mirrored);
   for (let i = 0; i < areas.length; i++) {
     const base = baseAreas[i],
       override = world3d?.model.areaOverrides?.[base[0]] || location?.areaOverrides?.[base[0]];

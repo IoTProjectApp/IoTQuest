@@ -10,7 +10,7 @@ import { updateLandscape } from './landscape.js';
 import { addDeviceDetails } from './device-objects.js';
 import { locationById } from './locations.js';
 import { skyTime, DEFAULT_OBSERVER } from './astronomy.js';
-import { geometry, roundedObject } from './world-geometry.js';
+import { geometry, roundedObject, LOW_DETAIL_SHAPES } from './world-geometry.js';
 import {
   multiply,
   perspective,
@@ -35,7 +35,26 @@ import { weatherEffects } from './weather.js';
 import { updateSky, lightningFlash } from './sky.js';
 import { updateAnimals } from './animals.js';
 import { updateFarm } from './farm-assets.js';
-const VERTEX = `attribute vec3 aPosition; attribute vec3 aNormal; uniform mat4 uModel; uniform mat4 uViewProjection; uniform mat3 uNormal; uniform vec3 uSize; varying vec3 vNormal; varying vec3 vWorld; varying vec3 vLocal; varying vec3 vLocalNormal; void main(){vec4 world=uModel*vec4(aPosition,1.0);vWorld=world.xyz;vLocal=aPosition*uSize;vLocalNormal=aNormal;vNormal=uNormal*aNormal;gl_Position=uViewProjection*world;}`;
+// Each object's transform, colour and material arrive as vertex attributes: per instance when
+// many objects of one shape are drawn in a single call, or as constant values for one object.
+// The model matrix columns carry the object's size in their w components (always 0 otherwise).
+const VERTEX = `attribute vec3 aPosition; attribute vec3 aNormal;
+attribute vec4 iModel0; attribute vec4 iModel1; attribute vec4 iModel2; attribute vec4 iModel3;
+attribute vec4 iColor; attribute vec3 iMaterial;
+uniform mat4 uViewProjection;
+varying vec3 vNormal; varying vec3 vWorld; varying vec3 vLocal; varying vec3 vLocalNormal;
+varying vec4 vColor; varying vec3 vMaterial;
+void main(){
+  vec3 size=vec3(iModel0.w,iModel1.w,iModel2.w);
+  mat4 model=mat4(vec4(iModel0.xyz,0.0),vec4(iModel1.xyz,0.0),vec4(iModel2.xyz,0.0),iModel3);
+  vec4 world=model*vec4(aPosition,1.0);
+  vec3 squared=size*size;
+  squared=mix(squared,vec3(1.0),step(squared,vec3(0.0)));
+  vWorld=world.xyz;vLocal=aPosition*size;vLocalNormal=aNormal;
+  vNormal=mat3(model)*(aNormal/squared);
+  vColor=iColor;vMaterial=iMaterial;
+  gl_Position=uViewProjection*world;
+}`;
 const FRAGMENT = `
 #ifdef GL_FRAGMENT_PRECISION_HIGH
 precision highp float;
@@ -46,18 +65,20 @@ varying vec3 vNormal;
 varying vec3 vWorld;
 varying vec3 vLocal;
 varying vec3 vLocalNormal;
+varying vec4 vColor;
+varying vec3 vMaterial;
+#define uColor vColor
+#define uSurface vMaterial.x
+#define uRoughness vMaterial.y
+#define uEmission vMaterial.z
 uniform vec3 uSun;
 uniform vec3 uSunColor;
 uniform float uSunStrength;
-uniform float uSurface;
 uniform float uTime;
 uniform vec4 uShadowBoxes[12];
 uniform vec4 uShadowInfo[12];
-uniform vec4 uColor;
 uniform float uDay;
-uniform float uEmission;
 uniform float uWet;
-uniform float uRoughness;
 uniform vec3 uEye;
 uniform vec3 uFog;
 uniform float uHaze;
@@ -138,14 +159,33 @@ function parseColor(hex) {
   ];
 }
 const DEFAULT_SKY_SUN = [0, 1, 0];
+// Per instance: model matrix (16, with the size in three w components), colour (4), material (3).
+const INSTANCE_FLOATS = 23;
 const MIN_PIXEL_RADIUS = 1;
-const geometryKey = (m) => (roundedObject(m) ? 'roundedBox' : m.shape);
+const roughnessFor = (surface) =>
+  surface === SURFACE.water
+    ? 0.12
+    : surface === SURFACE.glass
+      ? 0.16
+      : surface === SURFACE.steel
+        ? 0.3
+        : surface === SURFACE.grass
+          ? 0.96
+          : 0.76;
+// Objects smaller than this radius on screen use the simpler shapes; their curves are a few pixels.
+const LOW_DETAIL_PIXELS = 16;
+const geometryKey = (m, pixels = Infinity) => {
+  const low = pixels < LOW_DETAIL_PIXELS;
+  if (roundedObject(m)) return low ? 'box' : 'roundedBox';
+  return low && LOW_DETAIL_SHAPES.includes(m.shape) ? m.shape + ':low' : m.shape;
+};
 // Objects the student cannot see are skipped: the community districts double the scene, and on
 // software renderers (low-end Chromebooks) each draw costs about the same however small it is.
 // Each object is tested by a sphere around its unit geometry (centred, about ±0.5) against the six
 // clip planes of the view-projection matrix (which includes the mirror flip). With pixelScale
 // (pixels per unit at distance 1), objects under about a pixel across are skipped too, except
-// sky objects such as stars and anything that glows.
+// sky objects such as stars and anything that glows. Returns the object's radius on screen in
+// pixels (Infinity when not measured), or 0 when it is skipped.
 export function frustumTest(m, pixelScale = 0) {
   const planes = [0, 1, 2].flatMap((axis) =>
     [1, -1].map((sign) => {
@@ -159,9 +199,11 @@ export function frustumTest(m, pixelScale = 0) {
       [w, h, d] = o.size || [1, 1, 1],
       r = 0.6 * Math.hypot(w, h, d) + 0.25;
     for (const p of planes) if (p[0] * x + p[1] * y + p[2] * z + p[3] < -r) return false;
-    if (!pixelScale || o.sky || o.moonSurface || o.emission) return true;
+    if (!pixelScale || o.sky || o.moonSurface || o.emission) return Infinity;
     const distance = m[3] * x + m[7] * y + m[11] * z + m[15];
-    return distance <= 0 || ((r - 0.25) * pixelScale) / distance >= MIN_PIXEL_RADIUS;
+    if (distance <= 0) return Infinity;
+    const pixels = ((r - 0.25) * pixelScale) / distance;
+    return pixels >= MIN_PIXEL_RADIUS ? pixels : 0;
   };
 }
 export class World3D {
@@ -208,8 +250,6 @@ export class World3D {
     this.day = 1;
     this.contextLost = false;
     this.renderFailed = false;
-    this.normalScratch = new Float32Array(9);
-    this.colorScratch = new Float32Array(4);
     this.initGL();
     this.bindControls();
     this.frame = this.frame.bind(this);
@@ -229,15 +269,14 @@ export class World3D {
     this.program = gl.createProgram();
     gl.attachShader(this.program, compile(gl.VERTEX_SHADER, VERTEX));
     gl.attachShader(this.program, compile(gl.FRAGMENT_SHADER, FRAGMENT));
+    // Attribute 0 is always an array (some drivers require it); instance values may be constants.
+    gl.bindAttribLocation(this.program, 0, 'aPosition');
     gl.linkProgram(this.program);
     if (!gl.getProgramParameter(this.program, gl.LINK_STATUS))
       throw Error(gl.getProgramInfoLog(this.program));
     gl.useProgram(this.program);
     this.uniforms = {};
     for (const name of [
-      'uModel',
-      'uSize',
-      'uSurface',
       'uTime',
       'uSun',
       'uSunColor',
@@ -245,12 +284,8 @@ export class World3D {
       'uShadowBoxes[0]',
       'uShadowInfo[0]',
       'uViewProjection',
-      'uNormal',
-      'uColor',
       'uDay',
-      'uEmission',
       'uWet',
-      'uRoughness',
       'uEye',
       'uFog',
       'uHaze',
@@ -265,6 +300,20 @@ export class World3D {
     this.normal = gl.getAttribLocation(this.program, 'aNormal');
     gl.enableVertexAttribArray(this.position);
     gl.enableVertexAttribArray(this.normal);
+    this.instanceAttributes = [
+      ['iModel0', 4],
+      ['iModel1', 4],
+      ['iModel2', 4],
+      ['iModel3', 4],
+      ['iColor', 4],
+      ['iMaterial', 3],
+    ].map(([name, size]) => ({ location: gl.getAttribLocation(this.program, name), size }));
+    // Instanced drawing (WebGL 1 extension, supported almost everywhere) draws every opaque object
+    // of one shape in one call; without it each object is drawn on its own.
+    this.instancing = gl.getExtension?.('ANGLE_instanced_arrays') || null;
+    this.instanceBuffer = gl.createBuffer();
+    this.instanceData = new Float32Array(INSTANCE_FLOATS * 1024);
+    this.instancesEnabled = false;
     gl.enable(gl.DEPTH_TEST);
     gl.enable(gl.BLEND);
     gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
@@ -283,18 +332,20 @@ export class World3D {
       'foliage',
       'wool',
     ]) {
-      const g = geometry(shape),
-        buffer = (data) => {
-          const b = gl.createBuffer();
-          gl.bindBuffer(gl.ARRAY_BUFFER, b);
-          gl.bufferData(gl.ARRAY_BUFFER, data, gl.STATIC_DRAW);
-          return b;
-        };
-      this.geometries[shape] = {
-        positions: buffer(g.positions),
-        normals: buffer(g.normals),
-        count: g.count,
+      const buffer = (data) => {
+        const b = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, b);
+        gl.bufferData(gl.ARRAY_BUFFER, data, gl.STATIC_DRAW);
+        return b;
       };
+      for (const low of LOW_DETAIL_SHAPES.includes(shape) ? [false, true] : [false]) {
+        const g = geometry(shape, { low });
+        this.geometries[low ? shape + ':low' : shape] = {
+          positions: buffer(g.positions),
+          normals: buffer(g.normals),
+          count: g.count,
+        };
+      }
     }
   }
   bindControls() {
@@ -1134,17 +1185,24 @@ export class World3D {
     const opaque = [],
       transparent = [],
       visible = frustumTest(this.matrix, this.pixelScale);
+    this.drawKeys = new Map();
     for (const m of this.model.objects) {
       const c = color(m.color),
         alpha = (m.opacity ?? 1) * c[3];
-      if (alpha < 0.001 || !visible(m)) continue;
+      if (alpha < 0.001) continue;
+      const pixels = visible(m);
+      if (!pixels) continue;
+      this.drawKeys.set(m, geometryKey(m, pixels));
       (alpha < 0.99 ? transparent : opaque).push(m);
     }
     gl.depthMask(true);
-    // Opaque order does not matter: group by shape so each geometry's buffers bind once.
+    gl.uniform1f(this.uniforms.uCelestial, 0);
+    gl.uniform3fv(this.uniforms.uSkySun, DEFAULT_SKY_SUN);
     this.drawState = {};
-    opaque.sort((a, b) => (geometryKey(a) < geometryKey(b) ? -1 : 1));
-    for (const m of opaque) this.draw(m);
+    const instanced = this.instancing ? opaque.filter((m) => !m.sky && !m.moonSurface) : [];
+    if (instanced.length) this.drawInstanced(instanced);
+    for (const m of instanced.length ? opaque.filter((m) => m.sky || m.moonSurface) : opaque)
+      this.draw(m);
     transparent.sort(
       (a, b) =>
         Math.hypot(...b.pos.map((v, i) => v - eye[i])) -
@@ -1155,54 +1213,103 @@ export class World3D {
     gl.depthMask(true);
     this.onFrame?.(this, s);
   }
-  // Each WebGL call costs about the same as a small draw on software renderers, so values that
-  // match the previous object's are not sent again (drawState resets every frame).
+  // Writes one object's transform, colour and material in the instance layout.
+  writeInstance(m, out, offset) {
+    const mat = modelMatrix(m.pos, m.size, m.rotation),
+      c = color(m.color),
+      surface = surfaceForMesh(m);
+    out.set(mat, offset);
+    out[offset + 3] = m.size[0];
+    out[offset + 7] = m.size[1];
+    out[offset + 11] = m.size[2];
+    out[offset + 16] = c[0];
+    out[offset + 17] = c[1];
+    out[offset + 18] = c[2];
+    out[offset + 19] = c[3] * (m.opacity ?? 1);
+    out[offset + 20] = surface;
+    out[offset + 21] = m.roughness ?? roughnessFor(surface);
+    out[offset + 22] = m.emission || 0;
+  }
+  setInstancing(on) {
+    if (this.instancesEnabled === on) return;
+    this.instancesEnabled = on;
+    const gl = this.gl;
+    for (const a of this.instanceAttributes) {
+      if (on) gl.enableVertexAttribArray(a.location);
+      else gl.disableVertexAttribArray(a.location);
+      this.instancing?.vertexAttribDivisorANGLE(a.location, on ? 1 : 0);
+    }
+  }
+  bindGeometry(key) {
+    if (this.drawState.geometry === key) return this.geometries[key];
+    this.drawState.geometry = key;
+    const gl = this.gl,
+      g = this.geometries[key];
+    gl.bindBuffer(gl.ARRAY_BUFFER, g.positions);
+    gl.vertexAttribPointer(this.position, 3, gl.FLOAT, false, 0, 0);
+    gl.bindBuffer(gl.ARRAY_BUFFER, g.normals);
+    gl.vertexAttribPointer(this.normal, 3, gl.FLOAT, false, 0, 0);
+    return g;
+  }
+  // All opaque objects of one shape in one draw call: about a dozen calls instead of thousands,
+  // which is what software renderers (and low-end Chromebooks) are slowest at.
+  drawInstanced(objects) {
+    const gl = this.gl,
+      groups = new Map();
+    for (const m of objects) {
+      const key = this.drawKeys.get(m) ?? geometryKey(m);
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key).push(m);
+    }
+    if (this.instanceData.length < objects.length * INSTANCE_FLOATS)
+      this.instanceData = new Float32Array(objects.length * INSTANCE_FLOATS * 1.5);
+    const data = this.instanceData,
+      ranges = [];
+    let index = 0;
+    for (const [key, list] of groups) {
+      ranges.push([key, index, list.length]);
+      for (const m of list) this.writeInstance(m, data, index++ * INSTANCE_FLOATS);
+    }
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.instanceBuffer);
+    gl.bufferData(gl.ARRAY_BUFFER, data.subarray(0, index * INSTANCE_FLOATS), gl.STREAM_DRAW);
+    this.setInstancing(true);
+    const stride = INSTANCE_FLOATS * 4;
+    for (const [key, first, count] of ranges) {
+      gl.bindBuffer(gl.ARRAY_BUFFER, this.instanceBuffer);
+      let offset = first * stride;
+      for (const a of this.instanceAttributes) {
+        gl.vertexAttribPointer(a.location, a.size, gl.FLOAT, false, stride, offset);
+        offset += a.size * 4;
+      }
+      const g = this.bindGeometry(key);
+      this.instancing.drawArraysInstancedANGLE(gl.TRIANGLES, 0, g.count, count);
+    }
+    this.setInstancing(false);
+  }
+  // One object on its own (transparent objects, which must be drawn back to front, and the sky):
+  // its values are set as constant attributes.
   draw(m) {
     const gl = this.gl,
-      key = geometryKey(m),
-      g = this.geometries[key],
-      mat = modelMatrix(m.pos, m.size, m.rotation),
-      normal = this.normalScratch,
-      c = this.colorScratch,
-      last = (this.drawState ||= {}),
-      set = (name, value, send) => {
-        if (last[name] === value) return;
-        last[name] = value;
-        send();
-      };
-    for (let k = 0; k < 3; k++)
-      for (let r = 0; r < 3; r++) normal[k * 3 + r] = mat[k * 4 + r] / (m.size[k] * m.size[k] || 1);
-    c.set(color(m.color));
-    c[3] *= m.opacity ?? 1;
-    gl.uniformMatrix4fv(this.uniforms.uModel, false, mat);
-    gl.uniformMatrix3fv(this.uniforms.uNormal, false, normal);
-    set('color', c.join(), () => gl.uniform4fv(this.uniforms.uColor, c));
-    set('emission', m.emission || 0, () => gl.uniform1f(this.uniforms.uEmission, m.emission || 0));
-    const celestial = m.moonSurface ? 1 : m.sky ? 2 : 0;
-    set('celestial', celestial, () => gl.uniform1f(this.uniforms.uCelestial, celestial));
-    const skySun = m.skySun || DEFAULT_SKY_SUN;
-    set('skySun', skySun.join(), () => gl.uniform3fv(this.uniforms.uSkySun, skySun));
-    const surface = surfaceForMesh(m);
-    set('surface', surface, () => gl.uniform1f(this.uniforms.uSurface, surface));
-    set('size', m.size.join(), () => gl.uniform3fv(this.uniforms.uSize, m.size));
-    const roughness =
-      m.roughness ??
-      (surface === SURFACE.water
-        ? 0.12
-        : surface === SURFACE.glass
-          ? 0.16
-          : surface === SURFACE.steel
-            ? 0.3
-            : surface === SURFACE.grass
-              ? 0.96
-              : 0.76);
-    set('roughness', roughness, () => gl.uniform1f(this.uniforms.uRoughness, roughness));
-    set('geometry', key, () => {
-      gl.bindBuffer(gl.ARRAY_BUFFER, g.positions);
-      gl.vertexAttribPointer(this.position, 3, gl.FLOAT, false, 0, 0);
-      gl.bindBuffer(gl.ARRAY_BUFFER, g.normals);
-      gl.vertexAttribPointer(this.normal, 3, gl.FLOAT, false, 0, 0);
-    });
+      values = this.drawScratch || (this.drawScratch = new Float32Array(INSTANCE_FLOATS));
+    this.setInstancing(false);
+    this.writeInstance(m, values, 0);
+    let offset = 0;
+    for (const a of this.instanceAttributes) {
+      if (a.size === 4) gl.vertexAttrib4fv(a.location, values.subarray(offset, offset + 4));
+      else gl.vertexAttrib3fv(a.location, values.subarray(offset, offset + 3));
+      offset += a.size;
+    }
+    const celestial = m.moonSurface ? 1 : m.sky ? 2 : 0,
+      skySun = m.skySun || DEFAULT_SKY_SUN;
+    if (this.drawState.celestial !== celestial) {
+      this.drawState.celestial = celestial;
+      gl.uniform1f(this.uniforms.uCelestial, celestial);
+    }
+    if (this.drawState.skySun !== skySun) {
+      this.drawState.skySun = skySun;
+      gl.uniform3fv(this.uniforms.uSkySun, skySun);
+    }
+    const g = this.bindGeometry(this.drawKeys?.get(m) ?? geometryKey(m));
     gl.drawArrays(gl.TRIANGLES, 0, g.count);
   }
   dispose() {

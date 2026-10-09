@@ -1,4 +1,8 @@
-export function geometry(shape) {
+// Shapes with a simpler version for objects far from the camera (see LOW_DETAIL_SHAPES).
+export const LOW_DETAIL_SHAPES = ['sphere', 'foliage', 'wool', 'cylinder', 'cone', 'leaf'];
+// low: far fewer vertices for objects only a few pixels across. A rounded box far away is
+// drawn as a plain box instead (its bevel is under a pixel).
+export function geometry(shape, { low = false } = {}) {
   const p = [],
     n = [];
   const triangle = (a, b, c, normal = null) => {
@@ -14,8 +18,8 @@ export function geometry(shape) {
     }
   };
   if (shape === 'leaf') {
-    const along = 12,
-      around = 12;
+    const along = low ? 4 : 12,
+      around = low ? 6 : 12;
     const vertex = (i, j) => {
       const t = i / along,
         a = (j / around) * Math.PI * 2,
@@ -292,8 +296,8 @@ export function geometry(shape) {
       triangle(v[0], v[2], v[3], normal);
     }
   } else if (['sphere', 'foliage', 'wool'].includes(shape)) {
-    const lat = 16,
-      lon = 24,
+    const lat = low ? 6 : 16,
+      lon = low ? 10 : 24,
       point = (i, j) => {
         const a = (i / lat) * Math.PI,
           b = (j / lon) * Math.PI * 2;
@@ -319,7 +323,7 @@ export function geometry(shape) {
         if (i < lat - 1) triangle(point(i, j), point(i + 1, j + 1), point(i + 1, j));
       }
   } else {
-    const sides = 32;
+    const sides = low ? 10 : 32;
     for (let i = 0; i < sides; i++) {
       const a = (i / sides) * Math.PI * 2,
         b = ((i + 1) / sides) * Math.PI * 2,

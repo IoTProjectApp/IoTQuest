@@ -104,24 +104,27 @@ test('frustum culling skips objects outside the view, including the mirrored vie
   const straight = multiply(projection, view);
   for (const matrix of [straight, multiply(projection, multiply(view, MIRROR))]) {
     const visible = frustumTest(matrix);
-    assert.equal(visible({ pos: [0, 0, 0], size: [1, 1, 1] }), true, 'At the target');
-    assert.equal(visible({ pos: [100, 0, 0], size: [1, 1, 1] }), false, 'Far to the side');
-    assert.equal(visible({ pos: [0, 0, 40], size: [1, 1, 1] }), false, 'Behind the camera');
-    assert.equal(visible({ pos: [0, 0, -400], size: [1, 1, 1] }), false, 'Past the far plane');
-    assert.equal(visible({ pos: [30, 0, 0], size: [60, 1, 1] }), true, 'Large object reaching in');
-    assert.equal(visible({ pos: [0, 0, 0] }), true, 'Default size');
+    assert.ok(visible({ pos: [0, 0, 0], size: [1, 1, 1] }), 'At the target');
+    assert.ok(!visible({ pos: [100, 0, 0], size: [1, 1, 1] }), 'Far to the side');
+    assert.ok(!visible({ pos: [0, 0, 40], size: [1, 1, 1] }), 'Behind the camera');
+    assert.ok(!visible({ pos: [0, 0, -400], size: [1, 1, 1] }), 'Past the far plane');
+    assert.ok(visible({ pos: [30, 0, 0], size: [60, 1, 1] }), 'Large object reaching in');
+    assert.ok(visible({ pos: [0, 0, 0] }), 'Default size');
     const level = lookAt([0, 0, 10], [0, 0, 0]),
       sharp = frustumTest(
         multiply(projection, matrix === straight ? level : multiply(level, MIRROR)),
         900 / 2 / Math.tan(0.39),
       );
-    assert.equal(sharp({ pos: [0, 0, -100], size: [0.05, 0.05, 0.05] }), false, 'Sub-pixel');
-    assert.equal(sharp({ pos: [0, 0, -100], size: [2, 2, 2] }), true, 'Large at distance');
-    assert.equal(sharp({ pos: [0, 0, 0], size: [0.05, 0.05, 0.05] }), true, 'Small but near');
+    assert.equal(sharp({ pos: [0, 0, -100], size: [0.05, 0.05, 0.05] }), 0, 'Sub-pixel');
+    const far = sharp({ pos: [0, 0, -100], size: [1, 1, 1] }),
+      near = sharp({ pos: [0, 0, 0], size: [1, 1, 1] });
+    assert.ok(far > 0 && far < 16, 'Large at distance: drawn, with the simpler shape');
+    assert.ok(near > far, 'Nearer objects are larger on screen');
+    assert.ok(sharp({ pos: [0, 0, 0], size: [0.05, 0.05, 0.05] }), 'Small but near');
     for (const flag of ['sky', 'emission'])
       assert.equal(
         sharp({ pos: [0, 0, -100], size: [0.05, 0.05, 0.05], [flag]: 1 }),
-        true,
+        Infinity,
         flag + ' is always drawn',
       );
   }

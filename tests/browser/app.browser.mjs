@@ -1,7 +1,7 @@
 // Drives the real game in headless Chromium to catch what the DOM-free unit tests cannot:
 // overlapping labels, clipped dialogs, theme contrast and reduced motion.
 // Run with `npm run test:browser` (needs `npx playwright install chromium` once).
-import test, { before, after } from 'node:test';
+import test, { before, after, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn, execFileSync } from 'node:child_process';
 import { chromium } from 'playwright';
@@ -28,6 +28,12 @@ after(async () => {
   await browser?.close();
   server?.kill();
 });
+// A failed test never reaches its page.close(); a page left open keeps rendering the 3D world and
+// slows every later test, so close whatever openHome opened.
+const openPages = [];
+afterEach(async () => {
+  for (const page of openPages.splice(0)) await page.close().catch(() => {});
+});
 
 async function openHome({
   colorScheme = 'light',
@@ -39,6 +45,7 @@ async function openHome({
     colorScheme,
     reducedMotion,
   });
+  openPages.push(page);
   const errors = [];
   page.on('pageerror', (e) => errors.push(e.message));
   // Keep tests offline and deterministic: live weather and web fonts are not needed.
@@ -224,6 +231,7 @@ test('the built game installs for offline use and still opens with no network', 
 
 test('a teacher builds a quest, sees its tests, and downloads a file students can import', async () => {
   const page = await browser.newPage();
+  openPages.push(page);
   await page.goto(origin + '/teacher.html');
   await page.click('.t-create summary');
   await page.fill('#qTitle', 'Frost guard');

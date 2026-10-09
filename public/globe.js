@@ -290,20 +290,30 @@ export class TravelGlobe {
         this.onError?.('3D graphics unavailable. The accessible 2D atlas is ready.');
       }
     });
+    // Only the pointer that started a drag turns the globe; a second finger is ignored.
+    const other = (e) => this.drag && e.pointerId !== this.drag.id;
     on(c, 'pointerdown', (e) => {
+      if (this.drag) return;
       this.userInteracted = true;
-      this.drag = { x: e.clientX, y: e.clientY, startX: e.clientX, startY: e.clientY };
+      this.drag = {
+        x: e.clientX,
+        y: e.clientY,
+        startX: e.clientX,
+        startY: e.clientY,
+        id: e.pointerId,
+      };
       this.auto = false;
       c.setPointerCapture(e.pointerId);
     });
     on(c, 'pointermove', (e) => {
-      if (!this.drag) return;
+      if (!this.drag || other(e)) return;
       this.yaw -= (e.clientX - this.drag.x) * 0.007;
       this.pitch = clamp(this.pitch + (e.clientY - this.drag.y) * 0.005, -1.1, 1.1);
       this.drag.x = e.clientX;
       this.drag.y = e.clientY;
     });
     on(c, 'pointerup', (e) => {
+      if (other(e)) return;
       if (this.drag && Math.hypot(e.clientX - this.drag.startX, e.clientY - this.drag.startY) < 7) {
         const rect = c.getBoundingClientRect(),
           p = globePick(
@@ -322,7 +332,8 @@ export class TravelGlobe {
       }
       this.drag = null;
     });
-    on(c, 'pointercancel', () => (this.drag = null));
+    on(c, 'pointercancel', (e) => !other(e) && (this.drag = null));
+    on(c, 'lostpointercapture', (e) => !other(e) && (this.drag = null));
     on(
       c,
       'wheel',

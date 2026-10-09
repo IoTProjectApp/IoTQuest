@@ -636,6 +636,36 @@ test('a deliberately released globe context comes back as the globe without a fa
     frames.restore();
   }
 });
+test('the travel globe follows only the first finger of a two-finger touch', async () => {
+  const { TravelGlobe } = await import('../public/globe.js');
+  const frames = animationFrames(),
+    ctx2d = new Proxy({}, { get: () => () => {} }),
+    oldDocument = globalThis.document,
+    canvas = eventCanvas(fakeGL()),
+    map = eventCanvas(ctx2d);
+  canvas.setPointerCapture = () => {};
+  globalThis.document = { createElement: () => ({ getContext: () => ctx2d }) };
+  try {
+    const globe = new TravelGlobe(canvas, map, [], [{ id: 'a', latitude: 5, longitude: 5 }]);
+    canvas.fire('pointerdown', { pointerId: 1, clientX: 100, clientY: 100 });
+    canvas.fire('pointerdown', { pointerId: 2, clientX: 500, clientY: 400 });
+    const yaw = globe.yaw,
+      pitch = globe.pitch;
+    canvas.fire('pointermove', { pointerId: 2, clientX: 520, clientY: 420 });
+    assert.equal(globe.yaw, yaw);
+    assert.equal(globe.pitch, pitch);
+    canvas.fire('pointerup', { pointerId: 2, clientX: 520, clientY: 420 });
+    assert.equal(globe.drag.id, 1);
+    canvas.fire('pointermove', { pointerId: 1, clientX: 110, clientY: 100 });
+    assert.ok(Math.abs(globe.yaw - (yaw - 0.07)) < 1e-9);
+    canvas.fire('pointercancel', { pointerId: 1 });
+    assert.equal(globe.drag, null);
+    globe.dispose();
+  } finally {
+    globalThis.document = oldDocument;
+    frames.restore();
+  }
+});
 test('clouds appear with cloud cover, turn grey in storms and never cross the property', async () => {
   const { addClouds, updateClouds } = await import('../public/clouds.js');
   const { createWorldModel } = await import('../public/world-model.js');
@@ -946,6 +976,28 @@ test('clicking a rendered building selects it while orbit drags and cancellation
   canvas.listeners.get('pointerup')(e);
   assert.deepEqual(selected, ['factory']);
   assert.equal(world.pickCommunityBuilding(0, 0), null);
+});
+
+test('a second finger cannot take over a camera drag', () => {
+  const { world, canvas } = renderer();
+  canvas.setPointerCapture = () => {};
+  canvas.focus = () => {};
+  const fire = (type, e) => canvas.listeners.get(type)({ button: 0, ...e });
+  fire('pointerdown', { pointerId: 1, clientX: 100, clientY: 100 });
+  fire('pointerdown', { pointerId: 2, clientX: 600, clientY: 300 });
+  const yaw = world.yaw;
+  fire('pointermove', { pointerId: 2, clientX: 620, clientY: 300 });
+  assert.equal(world.yaw, yaw);
+  fire('pointerup', { pointerId: 2, clientX: 620, clientY: 300 });
+  assert.equal(world.drag.id, 1);
+  fire('pointermove', { pointerId: 1, clientX: 110, clientY: 100 });
+  assert.ok(Math.abs(world.yaw - (yaw - 0.07)) < 1e-9);
+  fire('pointerup', { pointerId: 1, clientX: 110, clientY: 100 });
+  assert.equal(world.drag, null);
+  // A pointer whose capture was lost cannot leave the camera stuck mid-drag.
+  fire('pointerdown', { pointerId: 3, clientX: 0, clientY: 0 });
+  fire('lostpointercapture', { pointerId: 3 });
+  assert.equal(world.drag, null);
 });
 
 test('edge-on projected building faces cannot select an unrelated point on their extended line', () => {

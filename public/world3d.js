@@ -356,15 +356,19 @@ export class World3D {
       c.addEventListener(type, handler, options);
       this.controlListeners.push([type, handler, options]);
     };
+    // Only the pointer that started a drag steers it; a second finger would otherwise take over
+    // the drag state and make the camera jump between the two touch points.
+    const other = (e) => this.drag && e.pointerId !== this.drag.id;
     on('pointerdown', (e) => {
       if (e.button !== 0 && e.button !== 2) return;
-      this.drag = { x: e.clientX, y: e.clientY, travel: 0, button: e.button };
+      if (this.drag) return;
+      this.drag = { x: e.clientX, y: e.clientY, travel: 0, button: e.button, id: e.pointerId };
       c.setPointerCapture(e.pointerId);
       c.style.cursor = 'grabbing';
       c.focus();
     });
     on('pointermove', (e) => {
-      if (!this.drag) return;
+      if (!this.drag || other(e)) return;
       const dx = e.clientX - this.drag.x,
         dy = e.clientY - this.drag.y;
       this.yaw -= dx * 0.007;
@@ -385,6 +389,7 @@ export class World3D {
       c.style.cursor = 'grab';
     };
     on('pointerup', (e) => {
+      if (other(e)) return;
       const click = this.drag?.button === 0 && this.drag.travel < 5;
       end();
       if (click && this.communityView && this.onBuildingSelect) {
@@ -393,7 +398,8 @@ export class World3D {
         if (type) this.onBuildingSelect(type);
       }
     });
-    on('pointercancel', end);
+    on('pointercancel', (e) => !other(e) && end());
+    on('lostpointercapture', (e) => this.drag && !other(e) && end());
     on('contextmenu', (e) => e.preventDefault());
     on(
       'wheel',

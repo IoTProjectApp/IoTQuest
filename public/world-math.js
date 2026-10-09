@@ -163,6 +163,9 @@ export const DEVICE_GAP = 1;
 const DEVICE_RADIUS = 0.3,
   ROOM_HALF = [4.58 / 2, 4.8 / 2],
   WALL_MARGIN = 0.25;
+// Half the floor size of a home room: the standard bay, or a regional layout's own [w, d] size
+// (rooms are [name, x, z, colour, size?]).
+export const roomHalf = (room) => (room[4] ? [room[4][0] / 2, room[4][1] / 2] : ROOM_HALF);
 // The floor a student can stand on at a community workstation (rooms are [name, x, z, ...]).
 export function communityRoomBounds(room) {
   return { minX: room[1] - 2.29, maxX: room[1] + 2.29, minZ: room[2] - 2.4, maxZ: room[2] + 2.4 };
@@ -182,14 +185,15 @@ export function deviceSpots(devices, areas, colliders = [], rooms = []) {
     const [cx, , cz] = toWorld(findFree({ x: a[1], y: a[2] }, colliders, roomBounds)),
       [lx, , lz] = toWorld(findFree({ x: a[1], y: a[2] + 5 }, colliders, roomBounds)),
       room = rooms.find(
-        ([, rx, rz]) => Math.abs(cx - rx) <= ROOM_HALF[0] && Math.abs(cz - rz) <= ROOM_HALF[1],
+        (r) => Math.abs(cx - r[1]) <= roomHalf(r)[0] && Math.abs(cz - r[2]) <= roomHalf(r)[1],
       ),
+      [hw, hd] = room ? roomHalf(room) : [0, 0],
       [x0, x1, z0, z1] = room
         ? [
-            room[1] - ROOM_HALF[0] + WALL_MARGIN,
-            room[1] + ROOM_HALF[0] - WALL_MARGIN,
-            room[2] - ROOM_HALF[1] + WALL_MARGIN,
-            room[2] + ROOM_HALF[1] - WALL_MARGIN,
+            room[1] - hw + WALL_MARGIN,
+            room[1] + hw - WALL_MARGIN,
+            room[2] - hd + WALL_MARGIN,
+            room[2] + hd - WALL_MARGIN,
           ]
         : [cx - 2.5, cx + 2.5, cz - 2.5, cz + 2.5],
       points = [];

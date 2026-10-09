@@ -3461,12 +3461,17 @@ const targetProfile = (plan) =>
   plan.locationId === 'legacy' ? state : state.locationProgress[plan.locationId];
 function applyImport(plan) {
   stop(false);
+  // Save the current place first: opening a destination saves the current quest into it, which
+  // would otherwise replace the imported project's quest when importing into the same place.
+  save();
   state.difficulty = plan.difficulty;
   $('difficultySelect').value = state.difficulty;
+  const here = state.activeLocation === plan.locationId;
   // Imported work opens its destination even if it is still locked for this player.
   if (plan.locationId === 'legacy') {
     state.legacyMission = plan.missionIndex ?? state.legacyMission;
     state.legacyBoard = plan.board;
+    if (here) [state.mission, state.board] = [state.legacyMission, plan.board];
     resumeLegacy();
   } else {
     const profile = (state.locationProgress[plan.locationId] ??= {
@@ -3478,6 +3483,7 @@ function applyImport(plan) {
     });
     if (plan.missionIndex !== null) profile.mission = plan.missionIndex;
     profile.board = plan.board;
+    if (here) [state.mission, state.board] = [profile.mission, plan.board];
     enterLocation(plan.locationId);
   }
   free = plan.slot === 'free';

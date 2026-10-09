@@ -1565,6 +1565,39 @@ test('importing an exported project restores it without granting rewards and bac
   assert.equal(reviewer.api.state.xp, 100);
   assert.equal(reviewer.api.state.completed[0].imported, true);
 });
+test('importing a project for another quest at the same place opens it in that quest', async () => {
+  const author = harness();
+  installAndWire(author, 1);
+  author.api.loadExample();
+  const manifest = author.api.exportManifest(),
+    bytes = zipFiles(
+      projectFiles({
+        name: 'Ari',
+        language: manifest.language,
+        board: manifest.board,
+        code: manifest.code[manifest.language],
+        devices: manifest.devices,
+        mission: author.api.mission(),
+        results: manifest.results,
+        lab: manifest.lab,
+        location: 'Original home',
+        manifest,
+      }),
+    );
+  const student = harness();
+  installAndWire(student, 0);
+  const mine = student.api.code() + '\n// my quest 1 work';
+  student.api.project().code.cpp = mine;
+  await student.api.previewImport(bytes, 'ari.zip');
+  student.document.getElementById('confirmImport').click();
+  assert.equal(student.api.state.mission, 1, 'Opens the imported quest');
+  assert.equal(student.api.code(), manifest.code.cpp);
+  assert.equal(student.api.state.projects[0].code.cpp, mine, 'Quest 1 work stays in its slot');
+  assert.ok(
+    !Object.keys(student.api.state.projects).some((k) => k.startsWith('0~backup-')),
+    'Nothing in quest 1 was replaced',
+  );
+});
 test('a rejected import explains why and leaves the project untouched', async () => {
   const h = harness();
   installAndWire(h, 0);

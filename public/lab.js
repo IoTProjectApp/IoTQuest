@@ -1,5 +1,5 @@
 import { clamp } from './world-math.js';
-import { ADC_SIGNALS, ADC_SCALE } from './signals.js';
+import { ADC_SIGNALS, ADC_SCALE, outputLevel } from './signals.js';
 import { advanceEnvironment } from './weather.js';
 export const RESOURCE_ASSUMPTIONS = {
   tankLitres: 100,
@@ -113,7 +113,17 @@ export function residentRoutine(elapsedMs, startHour = 8) {
     },
   };
 }
-export function updateResources(resources, devices, outputs, env, seconds, upgrades = []) {
+// `scales` is the full scale of each output's last write (Runtime#outputScales), so a PWM
+// level is the same fraction of full power whichever call wrote it.
+export function updateResources(
+  resources,
+  devices,
+  outputs,
+  env,
+  seconds,
+  upgrades = [],
+  scales = {},
+) {
   const a = RESOURCE_ASSUMPTIONS,
     next = {
       ...resources,
@@ -135,7 +145,7 @@ export function updateResources(resources, devices, outputs, env, seconds, upgra
   }
   for (const d of devices) {
     const value = Number(outputs[d.pin] || 0),
-      level = value === 1 ? 1 : clamp(value / (value > 255 ? 65535 : 255), 0, 1),
+      level = outputLevel(value, scales[d.pin]),
       power = (a.watts[d.id] || 0) * level;
     watts += power;
     const prior = next.byDevice[d.id] || { wh: 0, litres: 0 };
@@ -208,6 +218,7 @@ export function simulateBatch(
         t: result.time,
         inputs: { ...result.inputs },
         outputs: { ...result.outputs },
+        scales: { ...result.outputScales },
         lines: fresh > 0 ? result.logs.slice(-fresh) : [],
       });
     }
@@ -218,6 +229,7 @@ export function simulateBatch(
       current,
       dtMs / 1000,
       next.upgrades,
+      result.outputScales,
     );
     current = advanceEnvironment(current, devices, result.outputs, dtMs / 1000, {
       mode,
@@ -225,6 +237,7 @@ export function simulateBatch(
       location,
       tankCapacity: 100 * (next.upgrades.includes('rainTank') ? 2 : 1),
       collectionFactor: next.upgrades.includes('rainTank') ? 2 : 1,
+      scales: result.outputScales,
     });
     current.pond = clamp(
       (current.pond ?? 60) + ((current.rain || 0) * 0.001 * dtMs) / 1000 - (0.005 * dtMs) / 1000,

@@ -1,5 +1,6 @@
 import { esc } from './html.js';
 import { analyzeCode } from './code-analysis.js';
+import { outputLevel } from './signals.js';
 // Serial plotter: analogue inputs and printed values as lines on a shared simulated-time axis
 // (one lane and y-scale per measurement, never a dual axis), digital inputs and outputs as
 // on/off strips, and dashed threshold lines taken from comparisons in the student's code.
@@ -35,14 +36,9 @@ export function findThresholds(code, language, devices) {
   return [...found.values()];
 }
 
-const outputLevel = (device, v) =>
-  !v
-    ? 0
-    : ['servo', 'gate'].includes(device.id)
-      ? Math.min(1, v / 180)
-      : v > 1
-        ? Math.min(1, v / 255)
-        : 1;
+// A strip's 0–1 level. Samples carry each output's full scale (Runtime#outputScales).
+const stripLevel = (device, v, scale) =>
+  outputLevel(v, scale ?? (['servo', 'gate'].includes(device.id) ? 180 : undefined));
 
 // Turn samples into drawable lanes. Pure, so it is shared by the canvas, CSV and tests.
 export function buildLanes(samples, devices, thresholds = []) {
@@ -88,7 +84,7 @@ export function buildLanes(samples, devices, thresholds = []) {
       id: 'out-' + d.pin,
       label: d.name,
       kind: 'output',
-      points: samples.map((s) => [s.t, outputLevel(d, s.outputs?.[d.pin])]),
+      points: samples.map((s) => [s.t, stripLevel(d, s.outputs?.[d.pin], s.scales?.[d.pin])]),
     });
   return { lanes, strips };
 }

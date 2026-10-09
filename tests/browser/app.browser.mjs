@@ -491,13 +491,26 @@ for (const language of ['cpp', 'python'])
     await page.locator('#languageSelect').selectOption(language);
     await page.locator('#codeInput').fill(program(q, language, defaults(q.ids, 'ESP32'), true));
     await page.locator('#runBtn').click();
-    await page.waitForFunction(() =>
-      [...document.querySelectorAll('#liveReadings .live-reading')].some(
-        (row) =>
-          row.textContent.includes('Conveyor motor driver') &&
-          row.querySelector('.output-state')?.textContent === 'ON',
-      ),
-    );
+    // CI renders the 3D world in software on two cores alongside the program's worker, several
+    // times slower than a laptop, so this wait is generous; a failure shows what the page had.
+    await page
+      .waitForFunction(
+        () =>
+          [...document.querySelectorAll('#liveReadings .live-reading')].some(
+            (row) =>
+              row.textContent.includes('Conveyor motor driver') &&
+              row.querySelector('.output-state')?.textContent === 'ON',
+          ),
+        null,
+        { timeout: 90000 },
+      )
+      .catch(async (e) => {
+        const seen = await page.evaluate(() => ({
+          readings: document.getElementById('liveReadings')?.innerText,
+          serial: document.getElementById('serialText')?.innerText,
+        }));
+        throw Error(e.message + '\n' + JSON.stringify(seen, null, 2));
+      });
     await page.locator('#stopBtn').click();
     assert.deepEqual(errors, []);
     await page.close();

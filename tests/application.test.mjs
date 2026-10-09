@@ -1,3 +1,7 @@
+import { residentialLots } from '../public/community-residences.js';
+import { communityStations, COMMUNITY_ORIGIN } from '../public/community-world.js';
+import { World3D } from '../public/world3d.js';
+import { collides } from '../public/world-math.js';
 import {
   createConversation,
   selectedRequest,
@@ -135,7 +139,15 @@ class Element {
   get innerHTML() {
     return this._html || '';
   }
+  querySelectorAll(selector) {
+    return this.doc.querySelectorAll(selector).filter((node) => {
+      for (let owner = node.owner; owner; owner = owner.owner) if (owner === this) return true;
+      return false;
+    });
+  }
   querySelector(selector) {
+    const found = this.querySelectorAll(selector)[0];
+    if (found) return found;
     this.childMap ??= {};
     return (this.childMap[selector] ??= new Element(this.doc, {}, selector));
   }
@@ -315,6 +327,9 @@ function harness(
     localSkyDate,
     DEFAULT_OBSERVER,
     missions,
+    residentialLots,
+    communityStations,
+    COMMUNITY_ORIGIN,
     baseEnv,
     defaults,
     validate,
@@ -418,7 +433,7 @@ function harness(
   });
   vm.runInContext(
     source.replace(/^import [^;]*;\n/gm, '') +
-      '\nglobalThis.api={state,project,mission,selectMission,installDialog,switchTab,testSolution,run,stop,tick,changeBoard,move,code,loadExample,renderCode,renderMission,getOutputs:()=>outputs,getTests:()=>testResults,getPassed:()=>currentPassed,getRunning:()=>running,labState,startFault,exitFault,setClockSpeed,setDifficulty,pauseExecution,stepExecution,resumeExecution,enterLocation,resumeLegacy,returnToGlobe,applyLocalWeather,setWeatherMode,advanceWorld,refreshWeather,missionKey,getPlotSamples:()=>plotSamples,previewImport,exportManifest,startBugHunt,getActiveFault:()=>activeFault,setLayout,renderCoach,downloadProgress,labContext,exportProject,interact,enterArea,getConversation:()=>activeConversation,getTab:()=>tab,declutterLabels,startFault,importTeacherQuest,questList,boardLink};',
+      '\nglobalThis.api={attachWorld:w=>{world3d=w;renderSectionResidents()},allAreas,projectWorldLabels,changeView,state,project,mission,selectMission,installDialog,switchTab,testSolution,run,stop,tick,changeBoard,move,code,loadExample,renderCode,renderMission,getOutputs:()=>outputs,getTests:()=>testResults,getPassed:()=>currentPassed,getRunning:()=>running,labState,startFault,exitFault,setClockSpeed,setDifficulty,pauseExecution,stepExecution,resumeExecution,enterLocation,resumeLegacy,returnToGlobe,applyLocalWeather,setWeatherMode,advanceWorld,refreshWeather,missionKey,getPlotSamples:()=>plotSamples,previewImport,exportManifest,startBugHunt,getActiveFault:()=>activeFault,setLayout,renderCoach,downloadProgress,labContext,exportProject,interact,enterArea,getConversation:()=>activeConversation,getTab:()=>tab,declutterLabels,startFault,importTeacherQuest,questList,boardLink,selectCommunityBuilding};',
     ctx,
   );
   return {
@@ -2025,3 +2040,325 @@ test('bedroom resident starts its dedicated quest and installs components in the
   assert.equal(h.api.project().devices[0].area, 'Bedroom');
   assert.equal(h.api.state.xp, 0);
 });
+
+test('factory uses the normal component installation, wiring, editor, run and assessment workflow', () => {
+  const h = harness(),
+    index = missions.findIndex((m) => m.communityQuest && m.communityType === 'factory');
+  h.document.getElementById('communityProgram').click();
+  assert.equal(h.api.state.mission, index);
+  assert.equal(h.api.getTab(), 'inventory');
+  for (const id of missions[index].ids) {
+    h.api.installDialog(id);
+    assert.equal(h.document.getElementById('installArea').value, 'Factory floor');
+    h.document.getElementById('confirmInstall').click();
+  }
+  assert.ok(
+    h.api.project().devices.every((d) => d.area === 'Factory floor' && !d.power && !d.ground),
+  );
+  h.api.run();
+  assert.equal(h.api.getRunning(), false, 'Missing connections prevent running');
+  h.api.switchTab('wiring');
+  h.document.getElementById('connectAll').click();
+  h.api.switchTab('code');
+  h.api.project().code.cpp = program(missions[index], 'cpp', h.api.project().devices, true);
+  h.api.renderCode();
+  h.api.run();
+  h.flushWorker();
+  const conveyor = h.api.project().devices.find((d) => d.id === 'conveyor'),
+    warning = h.api.project().devices.find((d) => d.id === 'warningLight');
+  assert.equal(h.api.getOutputs()[conveyor.pin], 1);
+  assert.equal(h.api.getOutputs()[warning.pin], 0);
+  assert.ok(
+    h.api.labState().resources.wh > 0.002,
+    'Conveyor power contributes to the normal energy monitor',
+  );
+  h.api.state.env.vibration = 95;
+  h.api.tick();
+  h.flushWorker();
+  assert.equal(h.api.getOutputs()[conveyor.pin], 0);
+  assert.equal(h.api.getOutputs()[warning.pin], 1);
+  h.api.stop(false);
+  h.api.testSolution();
+  assert.equal(h.api.getPassed(), true);
+  assert.equal(h.api.state.xp, 180);
+  const factoryProject = h.api.project();
+  h.api.selectMission(0);
+  assert.notEqual(h.api.project(), factoryProject);
+  h.api.selectMission(index);
+  assert.equal(h.api.project(), factoryProject);
+  assert.equal(factoryProject.devices.length, 4);
+});
+
+// Run building selection against the actual renderer/model, including the WebGL branch
+// which the plain DOM harness cannot exercise on its own.
+function attachRenderedWorld(h) {
+  const noop = () => {},
+    gl = new Proxy(
+      {
+        getShaderParameter: () => true,
+        getProgramParameter: () => true,
+        getAttribLocation: () => 0,
+        getUniformLocation: () => 0,
+      },
+      { get: (o, key) => (key in o ? o[key] : noop) },
+    );
+  const canvas = {
+    clientWidth: 960,
+    clientHeight: 490,
+    style: {},
+    getContext: () => gl,
+    addEventListener: noop,
+    removeEventListener: noop,
+  };
+  const previous = globalThis.requestAnimationFrame;
+  globalThis.requestAnimationFrame = () => 1;
+  let world;
+  try {
+    world = new World3D(canvas, {
+      getState: () => ({
+        devices: h.api.project().devices,
+        outputs: h.api.getOutputs(),
+        env: h.api.state.env,
+        player: h.api.state.player,
+        areas: h.api.allAreas(),
+        color: '#547b5b',
+        appearance: '🧑‍🔧',
+        reduced: false,
+        speed: 1,
+        simClockMs: h.api.labState().elapsedMs,
+        paused: h.api.labState().paused,
+        running: h.api.getRunning(),
+        communityMission: !!h.api.mission().communityQuest,
+      }),
+    });
+  } finally {
+    globalThis.requestAnimationFrame = previous;
+  }
+  h.api.attachWorld(world);
+  return world;
+}
+test('paused 3D building and area clicks immediately place the technician and open every native project', () => {
+  const h = harness(),
+    world = attachRenderedWorld(h);
+  h.api.labState().paused = true;
+  for (const area of world.model.community.areas) {
+    h.document.getElementById('freeBtn').click();
+    h.api.setLayout('world');
+    h.api.changeView('world');
+    world.render(0, 0.016);
+    h.api.projectWorldLabels(world);
+    const button = h.document
+      .querySelectorAll('[data-community-building]')
+      .find((b) => b.dataset.communityBuilding === area[3].communityType);
+    assert.ok(button, area[0]);
+    button.click();
+    assert.equal(world.indoorArea, area[0]);
+    assert.equal(h.api.mission().area, area[0]);
+    assert.equal(h.api.state.layout, 'split');
+    assert.equal(h.api.getTab(), 'inventory');
+    const pos = toWorld(h.api.state.player),
+      bounds = world.nativeAreaBounds();
+    assert.ok(pos[0] >= bounds.minX && pos[0] <= bounds.maxX);
+    assert.ok(pos[2] >= bounds.minZ && pos[2] <= bounds.maxZ);
+    assert.equal(collides(pos[0], pos[2], world.model.colliders), false);
+    assert.deepEqual(world.currentTarget, world.target, 'Camera immediately focuses the area');
+    world.render(0, 0.016);
+    const head = world.model.actors
+      .find((a) => a.id === 'player')
+      .parts.find((p) => p.shape === 'sphere' && p.local[1] === 1.27);
+    assert.ok(Math.abs(head.pos[0] - pos[0]) < 0.001);
+    assert.ok(Math.abs(head.pos[2] - pos[2]) < 0.001);
+    assert.ok(world.project(head.pos).visible, 'Technician is visible at the selected workstation');
+    h.document
+      .querySelectorAll('[data-area]')
+      .find((b) => b.dataset.area === area[0])
+      .click();
+    assert.equal(h.api.getTab(), 'inventory');
+  }
+});
+test('3D factory selection installs real devices and saved student code drives its visible machinery', () => {
+  const h = harness(),
+    world = attachRenderedWorld(h);
+  h.document.getElementById('communityProgram').click();
+  const q = h.api.mission();
+  for (const id of q.ids) {
+    h.api.installDialog(id);
+    h.document.getElementById('confirmInstall').click();
+    assert.equal(h.api.project().devices.at(-1).area, q.area);
+  }
+  h.api.switchTab('wiring');
+  h.document.getElementById('connectAll').click();
+  h.api.switchTab('code');
+  const source = program(q, 'cpp', h.api.project().devices, true);
+  h.api.project().code.cpp = source;
+  h.api.renderCode();
+  h.api.run();
+  h.flushWorker();
+  world.render(0, 0.016);
+  assert.equal(world.deviceObjects.length, q.ids.length);
+  assert.equal(world.model.community.sim.outputs[7], 1, 'Student code enables conveyor');
+  h.api.stop(false);
+  const vibration = h.document
+    .querySelectorAll('[data-env]')
+    .find((el) => el.dataset.env === 'vibration');
+  vibration.value = '95';
+  vibration.dispatchEvent({ type: 'input' });
+  assert.equal(h.api.project().sensorOverrides, undefined, 'Slider values are not saved');
+  h.api.run();
+  h.flushWorker();
+  world.render(0.2, 0.016);
+  assert.equal(world.model.community.sim.outputs[7], 0);
+  assert.equal(world.model.community.warning.emission, 1);
+  h.api.enterArea('Shop floor');
+  assert.equal(h.api.project().devices.length, 0);
+  h.api.enterArea(q.area);
+  assert.equal(h.api.project().code.cpp, source);
+  assert.equal(h.api.project().devices.length, q.ids.length);
+});
+
+test('free build installation in a new area keeps the free project and prevents duplicate devices', () => {
+  const h = harness(),
+    world = attachRenderedWorld(h);
+  h.document.getElementById('freeBtn').click();
+  const freeProject = h.api.project();
+  freeProject.code.cpp = '// my free build';
+  h.api.installDialog('conveyor');
+  h.document.getElementById('installArea').value = 'Factory floor';
+  const confirm = h.document.getElementById('confirmInstall');
+  confirm.click();
+  confirm.click();
+  assert.equal(h.api.project(), freeProject);
+  assert.equal(world.indoorArea, 'Factory floor');
+  assert.equal(freeProject.code.cpp, '// my free build');
+  assert.equal(freeProject.devices.length, 1);
+  assert.equal(freeProject.devices[0].id, 'conveyor');
+  assert.equal(freeProject.devices[0].area, 'Factory floor');
+});
+
+test('clicking a building in the overview keeps a running program and a free build', () => {
+  const h = harness(),
+    world = attachRenderedWorld(h);
+  installAndWire(h, 0);
+  h.api.loadExample();
+  h.api.run();
+  const quest = h.api.mission();
+  h.api.selectCommunityBuilding('shop');
+  assert.equal(h.api.mission(), quest, 'Running quest is kept');
+  assert.equal(h.api.getRunning(), true, 'Program keeps running');
+  assert.equal(world.indoorArea, 'Shop floor');
+  h.api.stop(false);
+  h.document.getElementById('freeBtn').click();
+  const freeProject = h.api.project();
+  h.api.selectCommunityBuilding('factory');
+  assert.equal(h.api.project(), freeProject, 'Free build is kept');
+  assert.equal(world.indoorArea, 'Factory floor');
+});
+
+test('leaving a community workstation for the world view restores home movement', () => {
+  const h = harness(),
+    world = attachRenderedWorld(h);
+  h.api.enterArea('Shop floor');
+  assert.equal(world.indoorArea, 'Shop floor');
+  h.api.changeView('world');
+  assert.equal(world.indoorArea, null);
+  assert.equal(world.nativeAreaBounds(), null);
+  const p = toWorld(h.api.state.player);
+  assert.ok(Math.abs(p[0]) < 20 && Math.abs(p[2]) < 20, 'Player is back at the home');
+  h.api.move('up');
+  assert.ok(Math.abs(toWorld(h.api.state.player)[0] - p[0]) < 1, 'No jump on the first step');
+});
+
+test('changing destinations from a factory removes old indoor movement bounds', async () => {
+  const h = harness(),
+    world = attachRenderedWorld(h);
+  h.api.enterArea('Factory floor');
+  await h.api.enterLocation('kyoto');
+  assert.equal(world.indoorArea, null);
+  assert.equal(world.nativeAreaBounds(), null);
+  const p = toWorld(h.api.state.player);
+  assert.ok(Math.abs(p[0]) < 20 && Math.abs(p[2]) < 20, 'New destination starts at its home');
+});
+
+test('labels stay inside the viewport and move clear of camera controls', () => {
+  const h = harness();
+  const el = h.document.getElementById('player');
+  el.offsetWidth = 40;
+  el.offsetHeight = 20;
+  const controls = { left: 50, right: 150, top: 70, bottom: 95 };
+  h.api.declutterLabels([{ el, x: 100, y: 85, visible: true, priority: 1, movable: true }], {
+    bounds: { left: 0, right: 200, top: 0, bottom: 100 },
+    blocked: [controls],
+  });
+  assert.equal(el.style.visibility, 'visible');
+  assert.ok(Number.parseFloat(el.style.top) < 70);
+});
+
+test('edge labels can move diagonally to clear the camera toolbar without being clipped', () => {
+  const h = harness(),
+    el = h.document.getElementById('player');
+  el.offsetWidth = 100;
+  el.offsetHeight = 20;
+  h.api.declutterLabels([{ el, x: 295, y: 95, visible: true, priority: 5 }], {
+    bounds: { left: 0, right: 300, top: 0, bottom: 100 },
+    blocked: [{ left: 0, right: 300, top: 60, bottom: 100 }],
+  });
+  assert.equal(el.style.visibility, 'visible');
+  assert.ok(Number.parseFloat(el.style.left) <= 250);
+  assert.ok(Number.parseFloat(el.style.top) < 60);
+});
+
+for (const language of ['cpp', 'python'])
+  test(`new residences support resident conversations and normal installation/programming (${language})`, () => {
+    const h = harness(),
+      world = attachRenderedWorld(h);
+    for (const b of residentialLots) {
+      h.document
+        .querySelectorAll('[data-section-npc]')
+        .find((n) => n.dataset.sectionNpc === 'residence:' + b.type)
+        .click();
+      assert.equal(
+        h.document.getElementById('modalTitle').textContent,
+        'A chat with ' + b.resident,
+      );
+      assert.ok(
+        h.document
+          .querySelectorAll('[data-chat-request]')
+          .every((n) => missions[Number(n.dataset.chatRequest)].area === b.name),
+      );
+      h.document.getElementById('startChatQuest').click();
+      h.api.enterArea(b.name);
+      const q = h.api.mission();
+      h.api.state.language = language;
+      for (const id of q.ids) {
+        h.api.installDialog(id);
+        h.document.getElementById('confirmInstall').click();
+      }
+      h.api.switchTab('wiring');
+      h.document.getElementById('connectAll').click();
+      h.api.switchTab('code');
+      h.api.project().code[language] = program(q, language, h.api.project().devices, true);
+      h.api.renderCode();
+      h.api.state.env = { ...h.api.state.env, ...q.scenarios[0][1] };
+      h.api.run();
+      h.flushWorker();
+      world.render(0, 0.016);
+      const out = h.api.project().devices.find((d) => d.output);
+      assert.equal(h.api.getOutputs()[out.pin], 1);
+      const home = world.model.community.residences.find((h) => h.building.type === b.type);
+      if (b.type === 'residence1') assert.equal(home.lamp.emission, 1);
+      if (b.type === 'residence3') {
+        assert.ok(home.water.every((d) => d.opacity > 0));
+        const pump = world.deviceObjects.find((d) => d.device.id === 'pump');
+        assert.ok(
+          pump.parts.every((d) => d.pos[0] > 40),
+          'Water belongs to the new garden',
+        );
+      }
+      h.api.stop(false);
+      world.render(0.2, 0.016);
+      assert.equal(home.lamp.emission, 0);
+      assert.ok(home.water.every((d) => d.opacity === 0));
+      h.api.testSolution();
+      assert.equal(h.api.getPassed(), true, q.title);
+    }
+  });

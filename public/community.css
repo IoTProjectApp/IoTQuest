@@ -1,0 +1,121 @@
+.community-dialog {
+  width: min(1400px, 96vw);
+  max-width: 96vw;
+  max-height: 95vh;
+  padding: 20px;
+  background: var(--panel, #f5f7ef);
+  color: var(--text, #243836);
+  border: 1px solid #879e94;
+  border-radius: 16px;
+  overflow: auto;
+}
+.community-dialog::backdrop {
+  background: #142b36bb;
+}
+.community-dialog header {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: center;
+}
+.community-dialog small {
+  display: block;
+  margin-top: 6px;
+}
+.community-layout {
+  display: grid;
+  grid-template-columns: minmax(320px, 1.5fr) minmax(280px, 1fr);
+  gap: 24px;
+  margin-top: 18px;
+}
+.community-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.community-controls input {
+  width: 90px;
+}
+.community-dialog canvas {
+  width: 100%;
+  background: #98b985;
+  border-radius: 10px;
+  cursor: pointer;
+}
+.community-dialog textarea {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 260px;
+  margin: 12px 0;
+  padding: 12px;
+  font: 13px/1.6 monospace;
+  color: #e9f1ec;
+  background: #1c3036;
+  border-radius: 8px;
+}
+.community-dialog pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: 220px;
+  overflow: auto;
+  font-size: 12px;
+}
+.community-dialog p {
+  line-height: 1.5;
+}
+.community-dialog button {
+  margin: 4px 0;
+}
+@media (max-width: 760px) {
+  .community-layout {
+    grid-template-columns: 1fr;
+  }
+  .community-dialog {
+    padding: 12px;
+  }
+}
+
+.community-mission-panel {
+  border: 1px solid #879e94;
+  border-radius: 12px;
+  padding: 16px;
+}
+.community-install {
+  display: block;
+  width: 100%;
+  min-height: 48px;
+  font-weight: 700;
+}
+.community-install:focus-visible {
+  outline: 3px solid #128cff;
+  outline-offset: 3px;
+}
+.community-world-targets {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 5;
+}
+.community-building-target {
+  pointer-events: auto;
+  font-weight: 700;
+}
+.community-world-targets[hidden] {
+  display: none;
+}
+
+.world-density {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+}
+.world-density input {
+  width: 64px;
+  accent-color: var(--accent, #4a977c);
+}
+.world-status {
+  flex-wrap: wrap;
+}

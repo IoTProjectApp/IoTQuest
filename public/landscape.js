@@ -37,7 +37,7 @@ export function addLandscape(model, location = { id: 'legacy', climate: 'tempera
     mesh('sphere', [x, y, z], [w, h, d], c, extra);
   // Foundation stays below the property, street and paddock floors. All new
   // landscape features are outside those areas; scenery adds no colliders.
-  box(0, -0.65, 0, 180, 1, 170, colours.ground, { landscapeGround: true });
+  box(0, -0.61, 0, 640, 1, 480, colours.ground, { landscapeGround: true });
   for (let i = 0; i < 8; i++) {
     const x = -73 + i * 20 + rand() * 6,
       z = -57 - rand() * 9,
@@ -68,7 +68,10 @@ export function addLandscape(model, location = { id: 'legacy', climate: 'tempera
     for (let i = 0; i < 3; i++) {
       const x = side * (45 + rand() * 12),
         z = -34 + i * 27;
-      sphere(x, 0.3, z, 22 + rand() * 8, 4 + rand() * 5, 18 + rand() * 6, colours.hill, {
+      const width = 22 + rand() * 8,
+        height = (4 + rand() * 5) * 0.6,
+        depth = 18 + rand() * 6;
+      mesh('mountain', [x, height / 2 - 0.12, z], [width, height, depth], colours.hill, {
         terrainFeature: 'foothill',
       });
     }

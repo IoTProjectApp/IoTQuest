@@ -108,29 +108,48 @@ export function clearPath(a, b, colliders) {
       return false;
   return true;
 }
-export function resolveMove(player, dir, amount, yaw, colliders) {
+export function resolveMove(
+  player,
+  dir,
+  amount,
+  yaw,
+  colliders,
+  bounds = { minX: -13.44, maxX: 14.08, minZ: -10.4, maxZ: 12.1 },
+) {
   const [x, , z] = toWorld(player),
     f = (dir === 'up' ? -1 : dir === 'down' ? 1 : 0) * amount * 0.32,
     r = (dir === 'right' ? 1 : dir === 'left' ? -1 : 0) * amount * 0.32;
   const dx = Math.sin(yaw) * f + Math.cos(yaw) * r,
     dz = Math.cos(yaw) * f - Math.sin(yaw) * r;
-  let nx = clamp(x + dx, -13.44, 14.08),
-    nz = clamp(z + dz, -10.4, 12.1);
+  let nx = clamp(x + dx, bounds.minX, bounds.maxX),
+    nz = clamp(z + dz, bounds.minZ, bounds.maxZ);
   if (collides(nx, z, colliders)) nx = x;
   if (collides(nx, nz, colliders)) nz = z;
   return fromWorld(nx, nz);
 }
-export function findFree(player, colliders) {
+export function findFree(
+  player,
+  colliders,
+  bounds = { minX: -13.3, maxX: 14, minZ: -10.3, maxZ: 10.8 },
+) {
   const p = toWorld(player);
   if (!collides(p[0], p[2], colliders)) return player;
   for (let radius = 0.4; radius < 4; radius += 0.35)
     for (let a = 0; a < Math.PI * 2; a += Math.PI / 8) {
       let x = p[0] + Math.cos(a) * radius,
         z = p[2] + Math.sin(a) * radius;
-      if (x > -13.3 && x < 14 && z > -10.3 && z < 10.8 && !collides(x, z, colliders))
+      if (
+        x > bounds.minX &&
+        x < bounds.maxX &&
+        z > bounds.minZ &&
+        z < bounds.maxZ &&
+        !collides(x, z, colliders)
+      )
         return fromWorld(x, z);
     }
-  return { x: 48, y: 77 };
+  return bounds.minX > 14
+    ? fromWorld((bounds.minX + bounds.maxX) / 2, (bounds.minZ + bounds.maxZ) / 2)
+    : { x: 48, y: 77 };
 }
 // Each installed device gets its own spot in its room: clear of walls and furniture, inside the
 // room's floor (`rooms` are the model's [name, x, z] room centres; a straight line can slip through
@@ -142,6 +161,10 @@ export const DEVICE_GAP = 1;
 const DEVICE_RADIUS = 0.3,
   ROOM_HALF = [4.58 / 2, 4.8 / 2],
   WALL_MARGIN = 0.25;
+// The floor a student can stand on at a community workstation (rooms are [name, x, z, ...]).
+export function communityRoomBounds(room) {
+  return { minX: room[1] - 2.29, maxX: room[1] + 2.29, minZ: room[2] - 2.4, maxZ: room[2] + 2.4 };
+}
 export function deviceSpots(devices, areas, colliders = [], rooms = []) {
   const spots = new Map(),
     taken = [],
@@ -151,8 +174,11 @@ export function deviceSpots(devices, areas, colliders = [], rooms = []) {
     if (floors.has(a)) return floors.get(a);
     // Installation points often sit on furniture: search from the nearest free spot (where the
     // room's resident stands), and keep clear of the technician's landing spot too.
-    const [cx, , cz] = toWorld(findFree({ x: a[1], y: a[2] }, colliders)),
-      [lx, , lz] = toWorld(findFree({ x: a[1], y: a[2] + 5 }, colliders)),
+    const namedRoom = rooms.find((r) => r[0] === a[0]);
+    const native = namedRoom?.[3]?.community;
+    const roomBounds = native ? communityRoomBounds(namedRoom) : undefined;
+    const [cx, , cz] = toWorld(findFree({ x: a[1], y: a[2] }, colliders, roomBounds)),
+      [lx, , lz] = toWorld(findFree({ x: a[1], y: a[2] + 5 }, colliders, roomBounds)),
       room = rooms.find(
         ([, rx, rz]) => Math.abs(cx - rx) <= ROOM_HALF[0] && Math.abs(cz - rz) <= ROOM_HALF[1],
       ),
@@ -171,10 +197,7 @@ export function deviceSpots(devices, areas, colliders = [], rooms = []) {
         if (
           (room || distance <= 2.5) &&
           distance >= 0.8 &&
-          x > -13.3 &&
-          x < 14 &&
-          z > -10.3 &&
-          z < 10.8 &&
+          (native || (x > -13.3 && x < 14 && z > -10.3 && z < 10.8)) &&
           Math.hypot(x - lx, z - lz) >= 0.6 &&
           !collides(x, z, colliders, DEVICE_RADIUS) &&
           clearPath({ x: cx, z: cz }, { x, z }, colliders)

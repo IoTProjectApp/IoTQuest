@@ -162,6 +162,22 @@ test('mirrored homes draw flipped and keep movement matching the screen', async 
     unmirroredLeft = resolveMove(start, 'left', 3, 0, model.colliders);
   assert.ok(toWorld(left)[0] > toWorld(start)[0]);
   assert.ok(toWorld(unmirroredLeft)[0] < toWorld(start)[0]);
+  const indoor = {
+    model,
+    communityView: false,
+    yaw: 0,
+    nativeAreaBounds: () => ({ minX: -20, maxX: 20, minZ: -20, maxZ: 20 }),
+  };
+  const indoorLeft = World3D.prototype.move.call(indoor, start, 'left', 3),
+    indoorRight = World3D.prototype.move.call(indoor, start, 'right', 3);
+  assert.ok(
+    toWorld(indoorLeft)[0] > toWorld(start)[0],
+    'left stays left on screen in mirrored rooms',
+  );
+  assert.ok(
+    toWorld(indoorRight)[0] < toWorld(start)[0],
+    'right stays right on screen in mirrored rooms',
+  );
 });
 
 test('four Victorian farms with their own animals, buildings and farm quests', () => {

@@ -20,26 +20,45 @@ const overlaps = (a, b) =>
 // Where a crowded label may move, nearest first: up, then down, then out to either side.
 function* offsets(w, h) {
   yield [0, 0];
-  for (let k = 1; k <= 6; k++) {
+  for (let k = 1; k <= 12; k++) {
     yield [0, (-k * h) / 2];
     yield [0, (k * h) / 2];
   }
   for (let k = 1; k <= 2; k++)
-    for (const side of [-1, 1]) for (const dy of [0, -h, h]) yield [side * k * (w + 6), dy];
+    for (const side of [-1, 1]) {
+      const dx = side * k * (w + 6);
+      yield [dx, 0];
+      // At a screen edge, moving up alone still leaves a label clipped. Search
+      // diagonal positions too, so the parking label can clear the camera toolbar.
+      for (let row = 1; row <= 12; row++) {
+        yield [dx, (-row * h) / 2];
+        yield [dx, (row * h) / 2];
+      }
+    }
 }
 // Room markers and "You" are placed first and never move. Resident tags, then device labels, that
 // would cover a label already placed move to the nearest clear spot, or hide if there is none.
-export function declutterLabels(labels) {
-  const shown = [];
+export function declutterLabels(labels, { bounds, blocked = [] } = {}) {
+  const shown = [...blocked];
   for (const label of labels.sort((a, b) => a.priority - b.priority)) {
     let box = null,
       dx = 0,
       dy = 0;
     if (label.visible) {
       const { w, h } = labelBox(label);
-      for ([dx, dy] of label.priority > 1 ? offsets(w, h) : [[0, 0]]) {
+      for ([dx, dy] of label.priority > 1 || label.movable ? offsets(w, h) : [[0, 0]]) {
         const candidate = labelBox(label, dx, dy);
-        if (label.priority <= 1 || !shown.some((o) => overlaps(candidate, o))) {
+        const fits =
+          !bounds ||
+          (candidate.left >= bounds.left &&
+            candidate.right <= bounds.right &&
+            candidate.top >= bounds.top &&
+            candidate.bottom <= bounds.bottom);
+        if (
+          fits &&
+          !blocked.some((o) => overlaps(candidate, o)) &&
+          (label.priority <= 1 || !shown.some((o) => overlaps(candidate, o)))
+        ) {
           box = candidate;
           break;
         }

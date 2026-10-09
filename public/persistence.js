@@ -48,6 +48,7 @@ function sanitizeProfile(p) {
         ...project,
         devices: Array.isArray(project.devices) ? project.devices.filter(isRecord) : [],
         code: isRecord(project.code) ? project.code : {},
+        codeByBoard: isRecord(project.codeByBoard) ? project.codeByBoard : undefined,
         lab: isRecord(project.lab) ? sanitizeLab(project.lab) : undefined,
         hunt: sanitizeHunt(project.hunt),
       };

@@ -80,6 +80,18 @@ export function buildDestinationModel(id) {
     box(5.45, 0.82, -7.2, 0.14, 1.25, 7.5, l.wall);
     box(3.8, 0.65, -9.5, 1.1, 0.8, 1.2, '#dce1d5');
     box(3.8, 0.65, -4.8, 1.4, 0.8, 0.8, '#b5a282');
+    // The annex walls and fittings are solid, and its two halves are the bathroom and kitchen
+    // (their old bays are now the court), so devices installed there stay inside the annex.
+    m.colliders.push(
+      { x: 3.8, z: -10.9, w: 3.4, d: 0.14 },
+      { x: 5.45, z: -7.2, w: 0.14, d: 7.5 },
+      { x: 3.8, z: -9.5, w: 1.1, d: 1.2 },
+      { x: 3.8, z: -4.8, w: 1.4, d: 0.8 },
+    );
+    for (const room of m.rooms) {
+      if (room[0] === 'Bathroom') room.splice(1, 4, 3.8, -9.075, l.wall, [3.2, 3.75]);
+      if (room[0] === 'Kitchen') room.splice(1, 4, 3.8, -5.325, l.wall, [3.2, 3.75]);
+    }
     // Service annex roof, and roofs over the two room bays either side of the open court.
     flatRoof(l.accent, { x: 3.8, z: -7.2, w: 3.7, d: 7.8, y: 1.52 });
     if (['swahili', 'haveli', 'najdi'].includes(l.style))
@@ -251,6 +263,21 @@ export function buildDestinationModel(id) {
     if (l.style === 'round') {
       roundRoom(-6, -6, 5.2);
       shutter(-6, -6, 5.2);
+      m.colliders.push({ x: -6.9, z: -6.5, w: 1.45, d: 1.6 }, { x: -5.2, z: -5.6, w: 0.7, d: 0.7 });
+      // One round room shared by six areas: each area is a zone around its point, kept inside the
+      // wall, so devices for one area do not land among another's. Zones are [x0, x1, z0, z1]
+      // relative to the centre.
+      for (const [name, x0, x1, z0, z1] of [
+        ['Bedroom', -3.6, -1.0, -3.0, 0.0],
+        ['Bathroom', -0.9, 1.3, -4.4, -1.4],
+        ['Kitchen', 1.4, 3.9, -2.4, 0.2],
+        ['Utility room', 1.4, 4.3, 0.3, 1.8],
+        ['Living room', -3.6, -0.9, 0.1, 3.0],
+        ['Garage', -0.8, 3.0, 1.9, 3.6],
+      ]) {
+        const room = m.rooms.find((r) => r[0] === name);
+        room.splice(1, 4, -6 + (x0 + x1) / 2, -6 + (z0 + z1) / 2, l.wall, [x1 - x0, z1 - z0]);
+      }
       m.areaOverrides = {
         Bedroom: [25, 20],
         Bathroom: [32, 17],

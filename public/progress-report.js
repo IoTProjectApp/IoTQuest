@@ -82,6 +82,8 @@ function questRecord(profile, location, index, difficulty, state, custom = null)
         : location.city + ' · ' + location.country,
     difficulty: legacy ? 'original' : difficulty,
     index,
+    // Teacher quests sit at different positions in each student's list; their id matches them.
+    ...(custom && { questId: String(m.id) }),
     title: m.title,
     status,
     attempts,
@@ -186,6 +188,7 @@ export function parseProgressReport(source) {
       ? q.difficulty
       : 'original',
     index: Math.min(count(q.index), 99),
+    ...(text(q.questId) && { questId: text(q.questId) }),
     title: text(q.title) || 'Quest ' + (Math.min(count(q.index), 99) + 1),
     status: ['passed', 'started', 'not-started'].includes(q.status) ? q.status : 'not-started',
     attempts: count(q.attempts),
@@ -258,13 +261,23 @@ export const needsReview = (q) =>
 
 // The class grid for one destination and level: quest columns and one row per student.
 export function classGrid(reports, viewId) {
+  // Built-in quests keep their quest number as the column; teacher quests (which each student
+  // may have imported in a different order) get one column per quest id.
   const columns = [],
+    teacherColumns = new Map(),
+    column = (q) => {
+      if (q.location !== 'teacher') return q.index;
+      const id = q.questId || q.title;
+      if (!teacherColumns.has(id)) teacherColumns.set(id, teacherColumns.size);
+      return teacherColumns.get(id);
+    },
     rows = latestReports(reports).map((r) => {
       const cells = [];
       for (const q of r.quests)
         if (q.location + '|' + q.difficulty === viewId) {
-          cells[q.index] = q;
-          columns[q.index] ??= q.title;
+          const at = column(q);
+          cells[at] = q;
+          columns[at] ??= q.title;
         }
       return { student: r.student, classCode: r.classCode, createdAt: r.createdAt, cells };
     });

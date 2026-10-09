@@ -1,6 +1,8 @@
 import { residentialLots } from '../public/community-residences.js';
 import { communityStations, COMMUNITY_ORIGIN } from '../public/community-world.js';
+import { boundaryScenarios } from '../public/quest-boundaries.js';
 import { World3D } from '../public/world3d.js';
+import { homeVariant } from '../public/home-variants.js';
 import { collides } from '../public/world-math.js';
 import {
   createConversation,
@@ -12,7 +14,7 @@ import {
 } from '../public/conversations.js';
 import { residentsForSections, createGreetingTracker } from '../public/section-residents.js';
 import { toWorld, fromWorld } from '../public/world-math.js';
-import { ADC_SIGNALS, ADC_SCALE } from '../public/signals.js';
+import { ADC_SIGNALS, ADC_SCALE, outputLevel } from '../public/signals.js';
 import { checkPredictions } from '../public/weather-quests.js';
 import { neededNow, situationReason } from '../public/situation.js';
 import { conversationHTML } from '../public/conversation-view.js';
@@ -306,10 +308,11 @@ function harness(
       matches: darkPreference,
       addEventListener: (type, listener) => themeListeners.push(listener),
     };
+  const windowListeners = {};
   const ctx = vm.createContext({
     document,
     fetch: weatherFetch,
-    window: { addEventListener() {} },
+    window: { addEventListener: (type, fn) => (windowListeners[type] = fn) },
     navigator: {},
     matchMedia: (query) => (query.includes('color-scheme') ? themeMedia : { matches: wideScreen }),
     localStorage: { getItem: (k) => storage.get(k), setItem: (k, v) => storage.set(k, v) },
@@ -328,6 +331,7 @@ function harness(
     DEFAULT_OBSERVER,
     missions,
     residentialLots,
+    boundaryScenarios,
     communityStations,
     COMMUNITY_ORIGIN,
     baseEnv,
@@ -387,6 +391,7 @@ function harness(
     understandingScore,
     ADC_SIGNALS,
     ADC_SCALE,
+    outputLevel,
     missionBudget,
     checkPredictions,
     neededNow,
@@ -440,6 +445,7 @@ function harness(
     api: ctx.api,
     document,
     storage,
+    windowEvent: (type, event) => windowListeners[type]?.(event),
     flushWorker: () => pending.shift()?.(),
     advanceTimer: () => intervals.find((i) => i.ms === 200).fn(),
     changeSystemTheme: (dark) => {
@@ -601,6 +607,39 @@ test('Pico remaps signals and solution works after controller change', () => {
   h.api.loadExample();
   h.api.testSolution();
   assert.equal(h.api.getPassed(), true);
+});
+test("changing controller keeps each board's code and challenges keep their program", () => {
+  const h = harness();
+  installAndWire(h, 0);
+  h.api.switchTab('code');
+  const mine = h.api.code() + '\n// my ESP32 work';
+  h.api.project().code.cpp = mine;
+  h.api.changeBoard('Raspberry Pi Pico');
+  assert.notEqual(h.api.code(), mine, 'Pico starts from its own starter');
+  h.api.changeBoard('ESP32');
+  assert.equal(h.api.code(), mine, 'ESP32 work comes back');
+  // A security repair keeps a program to repair on the new board.
+  const unsafe = securityCases[0];
+  h.api.startFault(unsafe.id);
+  h.api.changeBoard('Raspberry Pi Pico');
+  const devices = defaults(unsafe.ids, 'Raspberry Pi Pico');
+  assert.equal(h.api.code(), unsafe.source(h.api.state.language, devices));
+});
+test('pausing one quest does not leave another quest or a reload frozen', () => {
+  const h = harness();
+  installAndWire(h, 0);
+  h.api.setClockSpeed(0);
+  assert.equal(h.api.labState().paused, true);
+  h.api.setClockSpeed(1);
+  h.api.selectMission(1);
+  h.api.labState().paused = true; // saved by an older version
+  h.api.selectMission(0);
+  h.api.selectMission(1);
+  assert.equal(h.api.labState().paused, false, 'The clock runs at 1×');
+  const reloaded = harness(JSON.parse(h.storage.get('iotquest-v1')));
+  reloaded.api.state.travelScreen = false;
+  reloaded.api.renderMission();
+  assert.equal(reloaded.api.labState().paused, false);
 });
 test('movement changes technician coordinates and stays inside world bounds', () => {
   const h = harness();
@@ -1563,6 +1602,65 @@ test('importing an exported project restores it without granting rewards and bac
   assert.equal(reviewer.api.state.xp, 100);
   assert.equal(reviewer.api.state.completed[0].imported, true);
 });
+test('importing a project for another quest at the same place opens it in that quest', async () => {
+  const author = harness();
+  installAndWire(author, 1);
+  author.api.loadExample();
+  const manifest = author.api.exportManifest(),
+    bytes = zipFiles(
+      projectFiles({
+        name: 'Ari',
+        language: manifest.language,
+        board: manifest.board,
+        code: manifest.code[manifest.language],
+        devices: manifest.devices,
+        mission: author.api.mission(),
+        results: manifest.results,
+        lab: manifest.lab,
+        location: 'Original home',
+        manifest,
+      }),
+    );
+  const student = harness();
+  installAndWire(student, 0);
+  const mine = student.api.code() + '\n// my quest 1 work';
+  student.api.project().code.cpp = mine;
+  await student.api.previewImport(bytes, 'ari.zip');
+  student.document.getElementById('confirmImport').click();
+  assert.equal(student.api.state.mission, 1, 'Opens the imported quest');
+  assert.equal(student.api.code(), manifest.code.cpp);
+  assert.equal(student.api.state.projects[0].code.cpp, mine, 'Quest 1 work stays in its slot');
+  assert.ok(
+    !Object.keys(student.api.state.projects).some((k) => k.startsWith('0~backup-')),
+    'Nothing in quest 1 was replaced',
+  );
+});
+test('a tab stops saving once another tab saves newer progress', () => {
+  const h = harness();
+  installAndWire(h, 0);
+  h.api.state.xp = 50;
+  h.document.getElementById('connectAll').click();
+  const newer = JSON.stringify({ ...JSON.parse(h.storage.get('iotquest-v1')), xp: 900 });
+  h.storage.set('iotquest-v1', newer);
+  h.windowEvent('storage', { key: 'iotquest-v1', newValue: newer });
+  h.api.state.xp = 60;
+  h.api.switchTab('code');
+  h.document.getElementById('connectAll')?.click();
+  h.api.selectMission(1);
+  assert.equal(h.storage.get('iotquest-v1'), newer, "The other tab's progress is kept");
+  assert.match(h.document.getElementById('saved').textContent, /another tab/);
+});
+test('saved test evidence keeps full copies only for the latest runs', () => {
+  const h = harness();
+  installAndWire(h, 0);
+  h.api.loadExample();
+  for (let i = 0; i < 8; i++) h.api.testSolution();
+  const tests = h.api.labState().evidence.filter((e) => e.type === 'test');
+  assert.equal(tests.length, 8);
+  assert.equal(tests.filter((e) => e.code).length, 5, 'Latest five keep code and wiring');
+  assert.ok(tests[0].results.every((r) => Object.keys(r).join() === 'name,pass'));
+  assert.equal(tests[0].passed, true);
+});
 test('a rejected import explains why and leaves the project untouched', async () => {
   const h = harness();
   installAndWire(h, 0);
@@ -1670,6 +1768,19 @@ test('bug hunts cannot be short-circuited and follow the board, roles and free b
   h.api.changeBoard('Raspberry Pi Pico');
   h.api.startBugHunt();
   assert.deepEqual(validate(h.api.project().devices, 'Raspberry Pi Pico'), []);
+});
+test('code being checked in Spot the bugs cannot be edited', () => {
+  const h = harness();
+  installAndWire(h, 0);
+  h.api.startBugHunt();
+  h.api.switchTab('code');
+  const before = h.api.code(),
+    input = h.document.getElementById('codeInput');
+  assert.equal(input.readOnly, true);
+  input.value = '\n' + before;
+  input.dispatchEvent({ type: 'input' });
+  assert.equal(h.api.code(), before, 'Line numbers of the flagged bugs stay put');
+  assert.equal(input.value, before);
 });
 test('bug hunt XP is awarded once per mission across languages', () => {
   const h = harness();
@@ -2279,6 +2390,20 @@ test('changing destinations from a factory removes old indoor movement bounds', 
   assert.ok(Math.abs(p[0]) < 20 && Math.abs(p[2]) < 20, 'New destination starts at its home');
 });
 
+test('the minimap is flipped only when the 3D home is drawn flipped', async () => {
+  const h = harness(),
+    world = attachRenderedWorld(h),
+    mirrored = locations.find((l) => homeVariant(l).mirror),
+    minimap = h.document.getElementById('minimap');
+  await h.api.enterLocation(mirrored.id);
+  assert.equal(world.model.mirrored, true);
+  h.api.changeView('world');
+  assert.equal(minimap.classList.contains('mirrored'), !world.communityView);
+  h.api.changeView('house');
+  assert.equal(minimap.classList.contains('mirrored'), true, 'The house view is flipped');
+  h.api.enterArea('Factory floor');
+  assert.equal(minimap.classList.contains('mirrored'), false, 'Buildings close up are not');
+});
 test('labels stay inside the viewport and move clear of camera controls', () => {
   const h = harness();
   const el = h.document.getElementById('player');

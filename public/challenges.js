@@ -1,6 +1,6 @@
 import { Runtime } from './runtime.js';
 import { baseEnv } from './missions.js';
-import { ADC_SCALE } from './signals.js';
+import { ADC_SCALE, adcRead, picoWiring } from './signals.js';
 // Connected challenges that run over the simulated MQTT broker:
 // - security repairs: a working-but-unsafe program to fix (Fault finding tab);
 // - dashboard quests: the student writes a program a phone-style dashboard talks to (Dashboard tab).
@@ -161,7 +161,7 @@ export const securityCases = [
             'Publishes the temperature for the dashboard.',
           ]) +
             pyImports(['mqttConnect', 'mqttPublish'], true) +
-            `\ntemp_sensor = ADC(Pin(${pin}))\ndoor_code = ${DOOR_CODE}\nmqttConnect("thermometer")\n\nwhile True:\n    temp = temp_sensor.read()\n    mqttPublish("home/temperature", temp)\n` +
+            `\ntemp_sensor = ADC(Pin(${pin}))\ndoor_code = ${DOOR_CODE}\nmqttConnect("thermometer")\n\nwhile True:\n    temp = temp_sensor.${adcRead(picoWiring(devices), 'temp')}\n    mqttPublish("home/temperature", temp)\n` +
             (fixed ? '' : '    mqttPublish("home/debug", door_code)\n') +
             '    time.sleep(1)\n'
         : header(language, [
@@ -285,7 +285,7 @@ export const securityCases = [
             'Publishes the soil reading for the dashboard.',
           ]) +
             'from machine import Pin, ADC\nfrom iotquest import mqttConnect, mqttPublish\nfrom time import sleep_ms, ticks_ms\n' +
-            `\nsoil_sensor = ADC(Pin(${pin}))\nmqttConnect("soil")\nlast = 0\n\nwhile True:\n    soil = soil_sensor.read()\n` +
+            `\nsoil_sensor = ADC(Pin(${pin}))\nmqttConnect("soil")\nlast = 0\n\nwhile True:\n    soil = soil_sensor.${adcRead(picoWiring(devices), 'soil')}\n` +
             (fixed
               ? '    if ticks_ms() - last >= 1000:\n        last = ticks_ms()\n        mqttPublish("garden/soil", soil)\n'
               : '    mqttPublish("garden/soil", soil)\n') +
@@ -376,7 +376,7 @@ export const dashboardQuests = [
       const pin = pinOf(devices, 'temp');
       return py(language)
         ? pyImports(['mqttConnect', 'mqttPublish'], true) +
-            `\ntemp_sensor = ADC(Pin(${pin}))\nmqttConnect("house")\n\nwhile True:\n    mqttPublish("home/temperature", temp_sensor.read())\n    time.sleep(1)\n`
+            `\ntemp_sensor = ADC(Pin(${pin}))\nmqttConnect("house")\n\nwhile True:\n    mqttPublish("home/temperature", temp_sensor.${adcRead(picoWiring(devices), 'temp')})\n    time.sleep(1)\n`
         : `const int tempPin = ${pin};\n\nvoid setup() {\n  mqttConnect("house");\n}\n\nvoid loop() {\n  float temp = analogRead(tempPin);\n  mqttPublish("home/temperature", temp);\n  delay(1000);\n}\n`;
     },
     tests: guarded((runtime) => {
@@ -500,7 +500,7 @@ export const dashboardQuests = [
       const pin = pinOf(devices, 'soil');
       return py(language)
         ? pyImports(['mqttConnect', 'mqttPublish'], true) +
-            `\nsoil_sensor = ADC(Pin(${pin}))\nmqttConnect("garden")\nwas_dry = 0\n\nwhile True:\n    dry = 0\n    if soil_sensor.read() < 1500:\n        dry = 1\n    if dry != was_dry:\n        mqttPublish("garden/alert", dry)\n        was_dry = dry\n    time.sleep_ms(200)\n`
+            `\nsoil_sensor = ADC(Pin(${pin}))\nmqttConnect("garden")\nwas_dry = 0\n\nwhile True:\n    dry = 0\n    if soil_sensor.${adcRead(picoWiring(devices), 'soil')} < 1500:\n        dry = 1\n    if dry != was_dry:\n        mqttPublish("garden/alert", dry)\n        was_dry = dry\n    time.sleep_ms(200)\n`
         : `const int soilPin = ${pin};\nint wasDry = 0;\n\nvoid setup() {\n  mqttConnect("garden");\n}\n\nvoid loop() {\n  int dry = 0;\n  if (analogRead(soilPin) < 1500) {\n    dry = 1;\n  }\n  if (dry != wasDry) {\n    mqttPublish("garden/alert", dry);\n    wasDry = dry;\n  }\n  delay(200);\n}\n`;
     },
     tests: guarded((runtime) => {

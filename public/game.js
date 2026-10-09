@@ -20,7 +20,7 @@ import { localSkyDate, DEFAULT_OBSERVER } from './astronomy.js';
 import { Runtime } from './runtime.js';
 import { World3D } from './world3d.js';
 import { toWorld, fromWorld } from './world-math.js';
-import { ADC_SIGNALS, ADC_SCALE } from './signals.js';
+import { ADC_SIGNALS, ADC_SCALE, outputLevel } from './signals.js';
 import { locations, locationById, adaptMissions, progressForLocation } from './locations.js';
 import { WeatherService, advanceEnvironment } from './weather.js';
 import { advancedMenu } from './advanced-tools.js';
@@ -53,6 +53,7 @@ import { formatCode as formatSource, FormatError, INDENT } from './code-format.j
 import { coachSteps, readingText } from './code-coach.js';
 import { checkPredictions } from './weather-quests.js';
 import { neededNow, situationReason } from './situation.js';
+import { boundaryScenarios } from './quest-boundaries.js';
 import { conversationHTML } from './conversation-view.js';
 import { predictionHTML } from './prediction-view.js';
 import { declutterLabels } from './world-labels.js';
@@ -76,7 +77,9 @@ const $ = (id) => document.getElementById(id);
 const STORAGE_KEY = 'iotquest-v1',
   TICK_MS = 200,
   ADVANCED_COMPONENT_XP = 150,
-  EVIDENCE_LIMIT = 50;
+  EVIDENCE_LIMIT = 50,
+  FULL_TEST_EVIDENCE = 5,
+  IMPORT_BACKUPS = 3;
 const areas = [
   ['Bedroom', 19, 17],
   ['Bathroom', 30, 15],
@@ -151,11 +154,24 @@ function locationProfile() {
   });
 }
 const currentCompletions = () => locationProfile().completed;
-const activeMissions = () => adaptMissions(missions, currentLocation(), state.difficulty);
+// Adapting all quests copies each one, and mission() runs many times every 200 ms tick, so the
+// list is kept until the destination or difficulty changes (quests are not modified once built).
+let adaptedFor = null,
+  adaptedMissions = null;
+const activeMissions = () => {
+  const key = state.activeLocation + '|' + state.difficulty;
+  if (adaptedFor !== key) {
+    adaptedMissions = adaptMissions(missions, currentLocation(), state.difficulty);
+    adaptedFor = key;
+  }
+  return adaptedMissions;
+};
 let activeFault = null,
   selectedDevice = null,
   lastInputs = {},
   outputKinds = {},
+  // The full scale of each output's last write (1 digital, 255 analogWrite, 1023 duty, ...).
+  outputScales = {},
   inFlight = false,
   requestEnv = null,
   inspectionVariables = {};
@@ -286,7 +302,9 @@ const project = () => {
   return projects[key];
 };
 const planned = () => defaults(mission().ids.length ? mission().ids : ['ldr', 'led'], state.board);
-const code = () => project().code[state.language] ?? program(mission(), state.language, planned());
+const code = () =>
+  project().code[state.language] ??
+  program(mission(), state.language, planned(), false, state.board);
 let saveTimer = null;
 // Coalesce saves during rapid input such as typing; flushed when the page is hidden.
 function saveSoon() {
@@ -294,6 +312,27 @@ function saveSoon() {
   saveTimer = setTimeout(save, 600);
 }
 window.addEventListener('pagehide', () => saveTimer && save());
+// All progress is one saved copy. When another tab (or the installed app) saves, this tab's copy
+// is out of date: saving it would write older progress back over the newer one (a forgotten tab
+// saves live weather every minute). So this tab stops saving and offers a reload instead.
+let staleTab = false;
+window.addEventListener('storage', (e) => {
+  if (e.key !== STORAGE_KEY || staleTab) return;
+  staleTab = true;
+  clearTimeout(saveTimer);
+  saveTimer = null;
+  stop(false);
+  $('saved').textContent = 'Not saved: progress changed in another tab';
+  document.getElementById('updateBar')?.remove();
+  const bar = document.createElement('div');
+  bar.id = 'updateBar';
+  bar.className = 'update-bar';
+  bar.setAttribute('role', 'status');
+  bar.innerHTML =
+    '<span>Your progress changed in another tab.</span><button type="button">Reload</button>';
+  bar.querySelector('button').onclick = () => location.reload();
+  document.body.append(bar);
+});
 // Adopt simulation-owned fields from a worker/batch result without replacing the lab object,
 // so panels holding a reference keep writing to the saved state.
 function adoptSimulatedLab(next) {
@@ -322,10 +361,18 @@ function recordEvidence(entry) {
   const tests = lab.evidence.filter((e) => e.type === 'test').slice(-EVIDENCE_LIMIT),
     other = lab.evidence.filter((e) => e.type !== 'test').slice(-EVIDENCE_LIMIT);
   lab.evidence = lab.evidence.filter((e) => tests.includes(e) || other.includes(e));
+  // Every saved test run held a full copy of the code, wiring and results (about 2 KB each), and
+  // all progress shares one browser store of about 5 MB. Older runs keep a short summary.
+  for (const e of tests.slice(0, -FULL_TEST_EVIDENCE)) {
+    delete e.code;
+    delete e.devices;
+    if (e.results) e.results = e.results.map(({ name, pass }) => ({ name, pass }));
+  }
 }
 function save() {
   clearTimeout(saveTimer);
   saveTimer = null;
+  if (staleTab) return;
   if (state.activeLocation !== 'legacy') {
     const p = locationProfile();
     p.mission = state.mission;
@@ -341,6 +388,14 @@ function save() {
     $('saved').textContent = '✓ Progress saved locally';
   } catch {
     $('saved').textContent = 'Local saving unavailable';
+    // Usually the browser's storage is full (or blocked): say so once, clearly, so the student
+    // can download their progress before closing the page.
+    if (!save.warned) {
+      save.warned = true;
+      toast(
+        'Your progress could not be saved in this browser. Download your progress or project before closing this page.',
+      );
+    }
   }
 }
 function toast(text) {
@@ -382,7 +437,29 @@ function markEdited({ typing = false } = {}) {
   if (typing) saveSoon();
   else save();
 }
+// Badge icons repeat in order once every icon has been used (there are more quests than icons).
+const BADGE_ICONS = [
+  '☾',
+  '⌂',
+  '♧',
+  '❄',
+  '◈',
+  '≋',
+  '☀',
+  '✧',
+  '⚑',
+  '✦',
+  '♨',
+  '☂',
+  '⚙',
+  '✪',
+  '❖',
+  '☘',
+];
 function renderMission() {
+  // Pausing belongs to the clock the student sees (speed 0, or a program held in the debugger),
+  // not to each quest's saved lab: otherwise a quest paused earlier stays frozen at 1×.
+  labState().paused = speed === 0 || (!!state.debugPaused && running);
   syncSkyControls();
   let m = mission();
   $('missionTitle').textContent = m.title;
@@ -626,7 +703,8 @@ function renderEnvironment() {
         sensorOverrides[el.dataset.env] = state.env[el.dataset.env];
       updateReadings();
       renderEffects();
-      save();
+      // A slider fires on every step it moves; save once it settles.
+      saveSoon();
     }),
   );
 }
@@ -698,6 +776,12 @@ function setMapView() {
     ? 'none'
     : 'translate(' + tx + '%,' + ty + '%) scale(' + zoom + ')';
   world3d?.setView(view, a, zoom);
+  // The minimap matches the 3D view, which draws the community (and its buildings close up)
+  // unflipped even when the home is mirrored.
+  $('minimap')?.classList.toggle(
+    'mirrored',
+    !!world3d?.model.mirrored && !world3d.communityView && !world3d.indoorArea,
+  );
   if ($('followCamera')) $('followCamera').setAttribute?.('aria-pressed', 'false');
   $('location').innerHTML =
     '<span>⌖</span> ' +
@@ -1365,7 +1449,7 @@ function renderCode() {
   updateHighlight();
   updateReadings();
   $('codeInput').addEventListener('input', () => {
-    if (!canEdit('Programmer')) {
+    if (!canEdit('Programmer') || huntPhase() === 'spot') {
       $('codeInput').value = code();
       return;
     }
@@ -1394,7 +1478,9 @@ function renderCode() {
     }
     if (e.key === 'Tab' && (tabReleased || e.ctrlKey || e.metaKey || e.altKey)) return;
     if (e.key !== 'Tab' && e.key !== 'Shift') tabReleased = false;
-    if (e.isComposing) return;
+    // Read-only code (Spot the bugs, another role's turn) must not change: browsers let
+    // setRangeText edit a read-only field, so the editing keys below are skipped.
+    if (e.isComposing || (e.target.readOnly && e.key !== 'F8')) return;
     const el = e.target,
       unit = INDENT[state.language] || '    ',
       start = el.selectionStart,
@@ -1482,7 +1568,13 @@ function renderCode() {
   $('resetCode').onclick = () => {
     if (!canEdit('Programmer') || blockedByHunt('Reset')) return;
     stop(false);
-    project().code[state.language] = program(mission(), state.language, planned());
+    project().code[state.language] = program(
+      mission(),
+      state.language,
+      planned(),
+      false,
+      state.board,
+    );
     // Start the Guide again from the first unfinished step.
     delete coachStep[state.activeLocation + ':' + activeKey() + ':' + state.language];
     markEdited();
@@ -1527,6 +1619,7 @@ function recordPlot(data) {
         t: data.time,
         inputs: data.inputs || {},
         outputs: data.outputs || {},
+        scales: data.outputScales || {},
         lines: fresh > 0 ? data.logs.slice(-fresh) : [],
       },
     ];
@@ -1689,7 +1782,7 @@ function loadExample() {
     ? activeFault.solution(state.language, ds)
     : activeFault?.source
       ? activeFault.source(state.language, ds, true)
-      : program(mission(), state.language, ds, true);
+      : program(mission(), state.language, ds, true, state.board);
   stop(false);
   markEdited();
   renderCode();
@@ -1726,19 +1819,36 @@ function changeBoard(board) {
     return;
   }
   stop(false);
+  const p = project(),
+    previous = state.board;
   state.board = board;
   const plannedDevices = defaults(
-    project().devices.map((d) => d.id),
+    p.devices.map((d) => d.id),
     board,
   );
-  project().devices = project().devices.map((d, i) => ({ ...d, pin: plannedDevices[i].pin }));
-  project().code = {};
-  // The editor is empty again, so the Guide starts from its first unfinished step.
+  p.devices = p.devices.map((d, i) => ({ ...d, pin: plannedDevices[i].pin }));
+  // Each controller keeps its own code (its pin numbers differ), so switching back restores it.
+  p.codeByBoard = { ...p.codeByBoard, [previous]: p.code };
+  const kept = p.codeByBoard[board];
+  delete p.codeByBoard[board];
+  // A challenge starts again from its own program (the unsafe one to repair), not a blank one.
+  const source = activeFault?.source || activeFault?.starter,
+    rebuilt = (lang) => source(lang, plannedDevices);
+  p.code = kept || (source ? { cpp: rebuilt('cpp'), python: rebuilt('python') } : {});
+  // The editor shows different code now, so the Guide starts from its first unfinished step.
   for (const key of Object.keys(coachStep))
     if (key.startsWith(state.activeLocation + ':' + activeKey() + ':')) delete coachStep[key];
   markEdited();
   renderBench();
-  toast('Controller changed. Pins were remapped and starter code reloaded for ' + board + '.');
+  toast(
+    kept
+      ? 'Controller changed. Pins were remapped and your ' + board + ' code is back.'
+      : 'Controller changed. Pins were remapped and starter code loaded for ' +
+          board +
+          '. Your ' +
+          previous +
+          ' code is kept: switch back to get it.',
+  );
 }
 function renderInventory() {
   let required = mission().ids,
@@ -2025,6 +2135,7 @@ function run() {
     simTime = data.time;
     lastInputs = data.inputs || {};
     outputKinds = data.outputKinds || {};
+    outputScales = data.outputScales || {};
     inspectionVariables = data.variables || {};
     if (data.env) {
       const changes = requestEnv
@@ -2047,9 +2158,11 @@ function run() {
         state.env,
         0.2,
         lab.upgrades,
+        outputScales,
       );
       state.env = withBoard(
         advanceEnvironment(state.env, project().devices, outputs, 0.2, {
+          scales: outputScales,
           mode: state.weatherMode,
           weather: state.weatherByLocation[state.activeLocation],
           location: currentLocation(),
@@ -2166,6 +2279,7 @@ function stop(notify = false) {
   outputs = {};
   lastInputs = {};
   outputKinds = {};
+  outputScales = {};
   sendBoardOutputs({});
   renderEffects();
   renderSteps();
@@ -2376,14 +2490,14 @@ function renderEffects() {
           ? 'background:radial-gradient(circle,' + esc(state.color) + 'bb,transparent 68%);'
           : '') +
         'opacity:' +
-        (outputs[d.pin] === 1 ? 1 : Math.min(1, outputs[d.pin] / 255)) +
+        outputLevel(outputs[d.pin], outputScales[d.pin]) +
         '"></div>';
     if (d.id === 'fan')
       effect =
         '<span class="fan-rotor ' +
         (on ? 'spinning' : '') +
         '" style="animation-duration:' +
-        Math.max(0.15, 1 / Math.max(1, outputs[d.pin] / 50)) +
+        Math.max(0.15, 1 / Math.max(1, 5.1 * outputLevel(outputs[d.pin], outputScales[d.pin]))) +
         's">✣</span>';
     if (['pump', 'valve'].includes(d.id) && on && state.env.tank > 0)
       effect = '<div class="water-flow"></div>';
@@ -2487,12 +2601,25 @@ function testSolution() {
   else {
     let assessment = createLabState().resources;
     try {
-      const runtime = new Runtime(code(), state.language, ds, state.board);
-      for (const [name, env, expected] of m.scenarios) {
+      const runtime = new Runtime(code(), state.language, ds, state.board),
+        // Limit checks test every threshold from both sides; they are not part of the
+        // energy and water budget, which is measured over the quest's own scenarios.
+        limitChecks = boundaryScenarios(m, baseEnv);
+      for (const [name, env, expected] of [...m.scenarios, ...limitChecks]) {
         let result;
+        const budgeted = !limitChecks.some((c) => c[0] === name);
         for (let i = 0; i < 25; i++) {
           result = runtime.step({ ...baseEnv, ...env });
-          assessment = updateResources(assessment, ds, result.outputs, { ...baseEnv, ...env }, 0.2);
+          if (budgeted)
+            assessment = updateResources(
+              assessment,
+              ds,
+              result.outputs,
+              { ...baseEnv, ...env },
+              0.2,
+              undefined,
+              result.outputScales,
+            );
         }
         let actual = m.ids
           .map((id) => ds.find((d) => d.id === id))
@@ -2519,7 +2646,15 @@ function testSolution() {
         const pump = ds.find((d) => d.id === 'pump');
         for (let i = 0; i < 220; i++) {
           let r = dynamic.step(env);
-          assessment = updateResources(assessment, ds, r.outputs, env, 0.2);
+          assessment = updateResources(
+            assessment,
+            ds,
+            r.outputs,
+            env,
+            0.2,
+            undefined,
+            r.outputScales,
+          );
           let on = (r.outputs[pump.pin] || 0) > 0;
           if (i === 0) first = on;
           if (on && env.tank > 0) {
@@ -2787,6 +2922,7 @@ function debugChallenge() {
     state.language,
     project().devices.length ? project().devices : planned(),
     true,
+    state.board,
   ).replace(
     state.language === 'cpp' ? 'HIGH' : 'value(1)',
     state.language === 'cpp' ? 'LOW' : 'value(0)',
@@ -2941,7 +3077,7 @@ function progress() {
             '<div class="badge ' +
             (currentCompletions()[missionKey(i)] ? '' : 'locked') +
             '"><span class="badge-icon">' +
-            ['☾', '⌂', '♧', '❄', '◈', '≋', '☀', '✧'][i] +
+            BADGE_ICONS[i % BADGE_ICONS.length] +
             '</span><strong>' +
             esc(m.badge) +
             '</strong><small>' +
@@ -3064,7 +3200,7 @@ $('characterBtn').onclick = () => {
 function languageGuide() {
   modal(
     'Your programming field guide',
-    '<div class="guide"><h3>Two languages. One connected world.</h3><p>Arduino runs <code>setup()</code> once and <code>loop()</code> every simulation tick. MicroPython creates its pin objects once, then runs a <code>while True:</code> loop. Switch languages to load its starter without losing devices or wires.</p><h3>Supported language subset</h3><p>Numbers, booleans, strings, variables, arithmetic (+ − * / %), comparisons, logical operators, assignments, if/else (and Python elif), while loops, functions with parameters and return values. Use <code>delay(ms)</code> or <code>time.sleep_ms(ms)</code> to pause until the next tick. Integer C variables drop decimals, so <code>7 / 2</code> is 3; Python has <code>//</code> and <code>global</code>. Blocks use braces in Arduino and exactly four spaces per level in Python.</p><p>Arduino: <code>pinMode</code>, <code>digitalRead</code>, <code>digitalWrite</code>, <code>analogRead</code>, <code>analogWrite</code>, <code>servoWrite</code>, <code>millis</code>, <code>delay</code>, <code>Serial.begin/print/println</code> (<code>print</code> continues a line; <code>println</code> ends it). Print <code>label:value</code> pairs, e.g. <code>Serial.print("light:"); Serial.println(light);</code>, to graph them in the Serial plotter.</p><p>MicroPython: <code>Pin</code>, <code>ADC</code>, <code>PWM</code>; <code>value</code>, <code>on/off</code>, <code>read</code>, <code>read_u16</code>, <code>duty/duty_u16</code>, <code>freq</code>; <code>time.ticks_ms</code>, <code>time.sleep/sleep_ms</code>, <code>print</code>. Helpers: <code>abs/min/max/int</code>.</p><h3>Virtual device readings</h3><p>Light, moisture, rain, tank and potentiometer: 0–4095, or 0–65520 with <code>read_u16()</code>. Temperature is a calibrated Celsius channel; distance is centimetres. These virtual channels replace physical sensor libraries for beginner exercises. <code>digitalWrite</code> values are 0/1. PWM uses 0–255 or 0–65535; <code>servoWrite</code> uses 0–180 degrees.</p><h3>Timing & sandbox limits</h3><p>One tick is 200 ms at 1× speed. A delay suspends the program until the next tick and resumes on the following line; its argument does not schedule a real sleep. Use <code>millis()</code> or <code>time.ticks_ms()</code> for accurate simulated timing. Every tick has a 20,000-operation budget and runs in an isolated worker. Infinite loops produce a useful error.</p><h3>Unsupported features</h3><p>This is a teaching interpreter, not a complete compiler. Arrays, lists, dictionaries, classes, pointers, for loops, comprehensions, external libraries, #include, hardware interrupts, network access, dynamic code, and file access are unsupported. Unsupported syntax stops the program with an error. Motors and pumps use virtual driver modules.</p></div>',
+    '<div class="guide"><h3>Two languages. One connected world.</h3><p>Arduino runs <code>setup()</code> once and <code>loop()</code> every simulation tick. MicroPython creates its pin objects once, then runs a <code>while True:</code> loop. Switch languages to load its starter without losing devices or wires.</p><h3>Supported language subset</h3><p>Numbers (including hex such as <code>0xFF</code> and <code>1000UL</code>), booleans, strings, variables, arithmetic (+ − * / %), bit operators (&amp; | ^ ~ &lt;&lt; &gt;&gt;), comparisons, logical operators, assignments including <code>+=</code>, <code>-=</code>, <code>*=</code>, <code>/=</code> and <code>%=</code>, if/else (and Python elif), while loops, functions with parameters and return values. Use <code>delay(ms)</code> or <code>time.sleep_ms(ms)</code> to pause until the next tick. Integer C variables drop decimals, so <code>7 / 2</code> is 3, and whole numbers wrap at 32 bits like on the board; Python has <code>//</code> and <code>global</code>. Blocks use braces in Arduino and exactly four spaces per level in Python.</p><p>Arduino: <code>pinMode</code>, <code>digitalRead</code>, <code>digitalWrite</code>, <code>analogRead</code>, <code>analogWrite</code>, <code>servoWrite</code>, <code>millis</code>, <code>delay</code>, <code>map</code>, <code>constrain</code>, <code>abs/min/max</code>, <code>Serial.begin/print/println</code> (<code>print</code> continues a line; <code>println</code> ends it; decimals print with 2 places, or <code>println(x, 3)</code> for 3). Print <code>label:value</code> pairs, e.g. <code>Serial.print("light:"); Serial.println(light);</code>, to graph them in the Serial plotter.</p><p>MicroPython: <code>Pin</code>, <code>ADC</code>, <code>PWM</code>; <code>value</code>, <code>on/off</code>, <code>read</code>, <code>read_u16</code>, <code>duty/duty_u16</code>, <code>freq</code>; <code>time.ticks_ms</code>, <code>time.ticks_diff</code>, <code>time.sleep/sleep_ms</code>, <code>print</code>. Helpers: <code>abs/min/max/int/float/round/str</code>. On the Raspberry Pi Pico, analogue pins only have <code>read_u16()</code> (use <code>read_u16() &gt;&gt; 4</code> for 0–4095) and PWM only <code>duty_u16()</code>; <code>read()</code> and <code>duty()</code> are ESP32 only.</p><h3>Virtual device readings</h3><p>Light, moisture, rain, tank and potentiometer: 0–4095, or 0–65520 with <code>read_u16()</code>. Temperature is a calibrated Celsius channel; distance is centimetres. These virtual channels replace physical sensor libraries for beginner exercises. <code>digitalWrite</code> values are 0/1. PWM uses 0–255 (<code>analogWrite</code>), 0–1023 (<code>duty</code>) or 0–65535 (<code>duty_u16</code>); <code>servoWrite</code> uses 0–180 degrees.</p><h3>Timing & sandbox limits</h3><p>One tick is 200 ms at 1× speed. A delay suspends the program until the next tick and resumes on the following line; its argument does not schedule a real sleep. Use <code>millis()</code> or <code>time.ticks_ms()</code> for accurate simulated timing. Every tick has a 20,000-operation budget and runs in an isolated worker. Infinite loops produce a useful error.</p><h3>Unsupported features</h3><p>This is a teaching interpreter, not a complete compiler. Arrays, lists, dictionaries, classes, pointers, for loops, comprehensions, external libraries, #include, hardware interrupts, network access, dynamic code, and file access are unsupported. Unsupported syntax stops the program with an error. Motors and pumps use virtual driver modules.</p></div>',
   );
 }
 function help() {
@@ -3449,12 +3585,17 @@ const targetProfile = (plan) =>
   plan.locationId === 'legacy' ? state : state.locationProgress[plan.locationId];
 function applyImport(plan) {
   stop(false);
+  // Save the current place first: opening a destination saves the current quest into it, which
+  // would otherwise replace the imported project's quest when importing into the same place.
+  save();
   state.difficulty = plan.difficulty;
   $('difficultySelect').value = state.difficulty;
+  const here = state.activeLocation === plan.locationId;
   // Imported work opens its destination even if it is still locked for this player.
   if (plan.locationId === 'legacy') {
     state.legacyMission = plan.missionIndex ?? state.legacyMission;
     state.legacyBoard = plan.board;
+    if (here) [state.mission, state.board] = [state.legacyMission, plan.board];
     resumeLegacy();
   } else {
     const profile = (state.locationProgress[plan.locationId] ??= {
@@ -3466,6 +3607,7 @@ function applyImport(plan) {
     });
     if (plan.missionIndex !== null) profile.mission = plan.missionIndex;
     profile.board = plan.board;
+    if (here) [state.mission, state.board] = [profile.mission, plan.board];
     enterLocation(plan.locationId);
   }
   free = plan.slot === 'free';
@@ -3475,6 +3617,12 @@ function applyImport(plan) {
     existing = projects[key];
   if (existing && (existing.devices?.length || Object.keys(existing.code || {}).length))
     projects[key + '~backup-' + new Date().toISOString().slice(0, 19)] = existing;
+  // Keep the newest few backups of this quest (each is a whole project).
+  for (const old of Object.keys(projects)
+    .filter((k) => k.startsWith(key + '~backup-'))
+    .sort()
+    .slice(0, -IMPORT_BACKUPS))
+    delete projects[old];
   projects[key] = {
     devices: plan.devices,
     code: plan.code,
@@ -4051,8 +4199,6 @@ function showLocation() {
   const location = currentLocation();
   world3d?.setRegion(state.activeLocation);
   setCommunityDensity();
-  // The minimap matches mirrored homes.
-  $('minimap')?.classList.toggle('mirrored', !!world3d?.model.mirrored);
   for (let i = 0; i < areas.length; i++) {
     const base = baseAreas[i],
       override = world3d?.model.areaOverrides?.[base[0]] || location?.areaOverrides?.[base[0]];

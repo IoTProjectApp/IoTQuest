@@ -1,9 +1,13 @@
 // Keeps 3D world labels readable: room buttons stay clickable and name tags do not pile up.
-// Label sizes only change when the markup is re-rendered, so measure each element once.
+// Label sizes only change with their text, so each element is measured once per text. A label
+// measured while hidden (0×0, e.g. the game started in the Code layout) is measured again.
 const labelSizes = new WeakMap();
 function labelBox({ el, x, y }, dx = 0, dy = 0) {
-  if (!labelSizes.has(el)) labelSizes.set(el, [el.offsetWidth, el.offsetHeight]);
-  const [w, h] = labelSizes.get(el),
+  let size = labelSizes.get(el);
+  const text = el.textContent;
+  if (!size || !size[0] || !size[1] || size[2] !== text)
+    labelSizes.set(el, (size = [el.offsetWidth, el.offsetHeight, text]));
+  const [w, h] = size,
     // Matches the CSS anchors: area markers translate(-50%, -50%), device labels (-50%, -100%),
     // characters (-50%, -70%).
     anchor = el.classList.contains('area-marker')

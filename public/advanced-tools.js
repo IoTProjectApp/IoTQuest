@@ -3,6 +3,7 @@ import { SimulatedBroker } from './mqtt.js';
 import { Runtime } from './runtime.js';
 import { defaults, baseEnv } from './missions.js';
 import { scenarioOptions } from './lab-panels.js';
+import { adcRead, isPico } from './signals.js';
 const $ = (id) => document.getElementById(id);
 export function advancedMenu(ctx) {
   ctx.modal(
@@ -40,7 +41,7 @@ function networkPanel(ctx) {
     b,
     ticks = 0;
   const sourceA = python
-    ? `from machine import Pin, ADC\nfrom iotquest import mqttConnect, mqttPublish, mqttConnected, mqttReconnect\nimport time\nsensor = ADC(Pin(${input[0].pin}))\nmqttConnect("A")\nwhile True:\n    if not mqttConnected():\n        mqttReconnect()\n    if sensor.read() > 27:\n        mqttPublish("house/B/fan", 1)\n    else:\n        mqttPublish("house/B/fan", 0)\n    time.sleep_ms(200)\n`
+    ? `from machine import Pin, ADC\nfrom iotquest import mqttConnect, mqttPublish, mqttConnected, mqttReconnect\nimport time\nsensor = ADC(Pin(${input[0].pin}))\nmqttConnect("A")\nwhile True:\n    if not mqttConnected():\n        mqttReconnect()\n    if sensor.${adcRead(isPico(board), 'temp')} > 27:\n        mqttPublish("house/B/fan", 1)\n    else:\n        mqttPublish("house/B/fan", 0)\n    time.sleep_ms(200)\n`
     : `void setup() { mqttConnect("A"); }\nvoid loop() {\n  if (!mqttConnected()) { mqttReconnect(); }\n  if (analogRead(${input[0].pin}) > 27) {\n    mqttPublish("house/B/fan", 1);\n  } else { mqttPublish("house/B/fan", 0); }\n  delay(200);\n}\n`;
   const sourceB = python
     ? `from machine import Pin\nfrom iotquest import mqttConnect, mqttSubscribe, mqttRead, mqttConnected, mqttReconnect\nimport time\nfan = Pin(${output[0].pin}, Pin.OUT)\nmqttConnect("B")\nmqttSubscribe("house/B/fan")\nwhile True:\n    if not mqttConnected():\n        mqttReconnect()\n        mqttSubscribe("house/B/fan")\n    if mqttConnected():\n        fan.value(mqttRead("house/B/fan"))\n    else:\n        fan.value(0)\n    time.sleep_ms(200)\n`

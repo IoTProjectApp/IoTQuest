@@ -80,7 +80,7 @@ for (const language of ['cpp', 'python']) {
     const source =
       language === 'cpp'
         ? 'void setup() {} void loop() { while (true) {} }'
-        : 'from machine import Pin\nwhile True:\n    x = 1';
+        : 'from machine import Pin\nwhile True:\n    while True:\n        x = 1';
     assert.throws(() => new Runtime(source, language, []).step(baseEnv), /Execution limit/);
   });
   test(`${language}: undefined pins stop execution`, () => {

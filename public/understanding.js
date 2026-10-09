@@ -5,7 +5,7 @@ import {
   suggestedName,
   questDevices,
 } from './code-coach.js';
-import { ADC_SIGNALS as ADC } from './signals.js';
+import { ADC_SIGNALS as ADC, adcRead, picoWiring } from './signals.js';
 // "Check your understanding": three questions shown after a quest is passed, built from the
 // quest's own rule, sensors and scenarios, so every quest has them. Every answer, right or
 // wrong, comes with an explanation.
@@ -90,7 +90,9 @@ function reading(mission, devices, language) {
   const d = devices.find((x) => !x.output),
     py = language === 'python',
     call = py
-      ? suggestedName(d, language) + (d.analog ? '.read()' : '.value()')
+      ? suggestedName(d, language) +
+        '.' +
+        (d.analog ? adcRead(picoWiring(devices), d.signal) : 'value()')
       : (d.analog ? 'analogRead(' : 'digitalRead(') + suggestedName(d, language) + ')',
     range = ADC.includes(d.signal)
       ? 'A number from 0 to 4095: the higher the voltage from the sensor, the bigger the number'

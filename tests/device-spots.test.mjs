@@ -11,6 +11,7 @@ import {
   collides,
   clearPath,
   findFree,
+  roomHalf,
   DEVICE_GAP,
 } from '../public/world-math.js';
 
@@ -54,14 +55,10 @@ function check(home, devices, minGap) {
     );
     assert.ok(clearPath({ x: cx, z: cz }, p, home.model.colliders), where + ': behind a wall');
     // Indoors the device stays on its own room's floor, never through a doorway into the next.
-    const room = home.model.rooms.find(
-      ([, x, z]) => Math.abs(cx - x) <= 2.29 && Math.abs(cz - z) <= 2.4,
-    );
-    if (room)
-      assert.ok(
-        Math.abs(p.x - room[1]) <= 2.29 && Math.abs(p.z - room[2]) <= 2.4,
-        where + ': left its room',
-      );
+    const inside = (r, x, z) =>
+        Math.abs(x - r[1]) <= roomHalf(r)[0] && Math.abs(z - r[2]) <= roomHalf(r)[1],
+      room = home.model.rooms.find((r) => inside(r, cx, cz));
+    if (room) assert.ok(inside(room, p.x, p.z), where + ': left its room');
     else assert.ok(Math.hypot(p.x - cx, p.z - cz) <= 2.5, where + ': too far from its point');
     assert.ok(Math.hypot(p.x - cx, p.z - cz) >= 0.8 - 1e-9, where + ': where the resident stands');
     devices.forEach((other, j) => {
@@ -120,5 +117,33 @@ test('the bedroom devices stay in the bedroom, not through the doorway in the ba
   for (const d of devices) {
     const p = spots.get(d);
     assert.ok(Math.abs(p.x - bx) <= 2.29 && Math.abs(p.z - bz) <= 2.4, d.id);
+  }
+});
+
+test('regional layouts give each room its own floor: the court annex and the round house zones', () => {
+  const annex = homes.find((h) => h.id === 'lamu'),
+    round = homes.find((h) => h.id === 'hawassa'),
+    roomOf = (home, name) => home.model.rooms.find((r) => r[0] === name),
+    inside = (r, p) =>
+      Math.abs(p.x - r[1]) <= roomHalf(r)[0] && Math.abs(p.z - r[2]) <= roomHalf(r)[1];
+  // Lamu's bathroom and kitchen moved to the side annex; their old bays are the open court.
+  for (const name of ['Bathroom', 'Kitchen']) {
+    const devices = ['ldr', 'led', 'temp', 'fan', 'soil'].map((id) => ({ id, area: name })),
+      spots = deviceSpots(devices, annex.areas, annex.model.colliders, annex.model.rooms);
+    for (const d of devices) {
+      const p = spots.get(d);
+      assert.ok(inside(roomOf(annex, name), p), name + ' ' + d.id);
+      assert.ok(p.x > 2.2 && p.x < 5.4 && p.z > -10.9 && p.z < -3.45, name + ' in the annex');
+    }
+  }
+  // Hawassa's round house: each area's devices stay in its own zone, inside the round wall.
+  for (const name of ['Bedroom', 'Bathroom', 'Kitchen', 'Utility room', 'Living room', 'Garage']) {
+    const devices = ['ldr', 'led', 'temp'].map((id) => ({ id, area: name })),
+      spots = deviceSpots(devices, round.areas, round.model.colliders, round.model.rooms);
+    for (const d of devices) {
+      const p = spots.get(d);
+      assert.ok(inside(roomOf(round, name), p), name + ' ' + d.id);
+      assert.ok(Math.hypot(p.x + 6, p.z + 6) < 4.8, name + ' inside the wall');
+    }
   }
 });

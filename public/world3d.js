@@ -162,6 +162,8 @@ const DEFAULT_SKY_SUN = [0, 1, 0];
 // Per instance: model matrix (16, with the size in three w components), colour (4), material (3).
 const INSTANCE_FLOATS = 23;
 const MIN_PIXEL_RADIUS = 1;
+// Most simulated seconds one frame advances the community; 360× at 60 fps is about 6 s.
+const MAX_SIM_STEP = 10;
 const roughnessFor = (surface) =>
   surface === SURFACE.water
     ? 0.12
@@ -354,15 +356,19 @@ export class World3D {
       c.addEventListener(type, handler, options);
       this.controlListeners.push([type, handler, options]);
     };
+    // Only the pointer that started a drag steers it; a second finger would otherwise take over
+    // the drag state and make the camera jump between the two touch points.
+    const other = (e) => this.drag && e.pointerId !== this.drag.id;
     on('pointerdown', (e) => {
       if (e.button !== 0 && e.button !== 2) return;
-      this.drag = { x: e.clientX, y: e.clientY, travel: 0, button: e.button };
+      if (this.drag) return;
+      this.drag = { x: e.clientX, y: e.clientY, travel: 0, button: e.button, id: e.pointerId };
       c.setPointerCapture(e.pointerId);
       c.style.cursor = 'grabbing';
       c.focus();
     });
     on('pointermove', (e) => {
-      if (!this.drag) return;
+      if (!this.drag || other(e)) return;
       const dx = e.clientX - this.drag.x,
         dy = e.clientY - this.drag.y;
       this.yaw -= dx * 0.007;
@@ -383,6 +389,7 @@ export class World3D {
       c.style.cursor = 'grab';
     };
     on('pointerup', (e) => {
+      if (other(e)) return;
       const click = this.drag?.button === 0 && this.drag.travel < 5;
       end();
       if (click && this.communityView && this.onBuildingSelect) {
@@ -391,7 +398,8 @@ export class World3D {
         if (type) this.onBuildingSelect(type);
       }
     });
-    on('pointercancel', end);
+    on('pointercancel', (e) => !other(e) && end());
+    on('lostpointercapture', (e) => this.drag && !other(e) && end());
     on('contextmenu', (e) => e.preventDefault());
     on(
       'wheel',
@@ -631,7 +639,13 @@ export class World3D {
   }
   frame(time) {
     if (this.disposed || this.contextLost) return;
-    if (this.getState()?.visible === false) {
+    // Hidden (another screen, or the Code layout leaves the canvas 0×0): skip drawing and label
+    // projection, but keep the loop so the view resumes as soon as it is shown again.
+    if (
+      this.getState()?.visible === false ||
+      !this.canvas.clientWidth ||
+      !this.canvas.clientHeight
+    ) {
       this.lastTime = time;
       this.frameId = requestAnimationFrame(this.frame);
       return;
@@ -657,7 +671,11 @@ export class World3D {
     this.frameId = requestAnimationFrame(this.frame);
   }
   syncDevices(state) {
-    const signature = JSON.stringify(state.devices.map((d) => [d.id, d.area, d.pin]));
+    // Upgrades add colliders, so devices find their spots again when the upgrades change.
+    const signature = JSON.stringify([
+      this.upgradeSignature,
+      state.devices.map((d) => [d.id, d.area, d.pin]),
+    ]);
     if (signature === this.deviceSignature) return;
     this.deviceSignature = signature;
     const kept = this.model.objects.filter((o) => !o.device);
@@ -721,7 +739,12 @@ export class World3D {
     this.upgradeSignature = signature;
     const kept = this.model.objects.filter((o) => !o.upgrade);
     this.model.objects.splice(0, this.model.objects.length, ...kept);
+    // Installed upgrades are solid; their colliders go with them when they are removed.
+    const colliders = this.model.colliders.filter((c) => !c.upgrade);
+    this.model.colliders.splice(0, this.model.colliders.length, ...colliders);
+    const solid = (x, z, w, d) => this.model.colliders.push({ x, z, w, d, upgrade: true });
     if (ids.includes('solar')) {
+      solid(-4, 8.5, 2.2, 1.2);
       this.model.box(-4, 0.4, 8.5, 0.12, 0.8, 0.12, '#7e8c81', { upgrade: true });
       this.model.box(-4, 0.88, 8.5, 2.2, 0.12, 1.25, '#497c9a', {
         rotation: [-0.3, 0, 0],
@@ -733,18 +756,26 @@ export class World3D {
           upgrade: true,
         });
     }
-    if (ids.includes('battery'))
+    if (ids.includes('battery')) {
       this.model.box(-2.4, 0.35, 8.5, 0.6, 0.65, 0.45, '#94a989', { upgrade: true });
-    if (ids.includes('rainTank'))
+      solid(-2.4, 8.5, 0.6, 0.45);
+    }
+    if (ids.includes('rainTank')) {
       this.model.cylinder(11.9, 1.08, -3.6, 0.75, 2, '#83acb7', { upgrade: true });
+      solid(11.9, -3.6, 1.5, 1.5);
+    }
   }
   animate(state, t, dt) {
-    const simDelta =
+    // The community sim steps 20 times per simulated second, so a large jump (returning to a
+    // quest whose lab clock ran on for hours) is capped rather than replayed and freezing the page.
+    const simDelta = Math.min(
+      MAX_SIM_STEP,
       state.simClockMs !== undefined
         ? this.lastSimClockMs === undefined
           ? 0
           : Math.max(0, (state.simClockMs - this.lastSimClockMs) / 1000)
-        : dt * state.speed;
+        : dt * state.speed,
+    );
     this.lastSimClockMs = state.simClockMs;
     updateCommunityWorld(this.model, state, simDelta);
     if (state.paused) dt = 0;
@@ -754,8 +785,8 @@ export class World3D {
       state.simClockMs !== undefined
         ? state.simClockMs / 1000
         : this.visualClock * (state.speed || 1);
-    this.syncDevices(state);
     this.syncUpgrades(state);
+    this.syncDevices(state);
     const { env, outputs, player, reduced, color: toolColor, appearance } = state;
     const p = toWorld(player),
       moved = this.lastPlayer
@@ -922,7 +953,9 @@ export class World3D {
       appliance.emission = env.appliance ? 0.6 : 0;
       appliance.color = env.appliance ? '#d49e68' : '#4d6056';
     }
-    for (const roof of this.model.roofs || []) roof.opacity = state.roofsVisible ? 1 : 0.17;
+    // The sky view's eye-level camera sits under the roof, so it always looks through the cutaway.
+    const roofsShown = state.roofsVisible && !this.skyView;
+    for (const roof of this.model.roofs || []) roof.opacity = roofsShown ? 1 : 0.17;
     if (this.model.pondWater) this.model.pondWater.pos[1] = 0.17 + ((env.pond ?? 60) / 100) * 0.2;
     for (const item of this.model.windObjects || []) {
       item.mesh.pos[0] =

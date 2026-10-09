@@ -940,7 +940,9 @@ export class World3D {
       appliance.emission = env.appliance ? 0.6 : 0;
       appliance.color = env.appliance ? '#d49e68' : '#4d6056';
     }
-    for (const roof of this.model.roofs || []) roof.opacity = state.roofsVisible ? 1 : 0.17;
+    // The sky view's eye-level camera sits under the roof, so it always looks through the cutaway.
+    const roofsShown = state.roofsVisible && !this.skyView;
+    for (const roof of this.model.roofs || []) roof.opacity = roofsShown ? 1 : 0.17;
     if (this.model.pondWater) this.model.pondWater.pos[1] = 0.17 + ((env.pond ?? 60) / 100) * 0.2;
     for (const item of this.model.windObjects || []) {
       item.mesh.pos[0] =

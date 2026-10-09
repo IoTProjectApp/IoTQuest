@@ -233,6 +233,19 @@ test('Sky view uses an eye-height camera and can centre the actual moon in mirro
   assert.equal(world.skyView, false);
   assert.ok(world.pitch > 0);
 });
+test('Sky view looks through a visible roof instead of at its underside', () => {
+  const { world, state } = renderer();
+  state.roofsVisible = true;
+  world.render(1, 0.016);
+  assert.ok(world.model.roofs.length > 0);
+  assert.ok(world.model.roofs.every((r) => r.opacity === 1));
+  world.setView('sky');
+  world.render(2, 0.016);
+  assert.ok(world.model.roofs.every((r) => r.opacity < 0.2));
+  world.setView('world');
+  world.render(3, 0.016);
+  assert.ok(world.model.roofs.every((r) => r.opacity === 1));
+});
 test('Landscape view widens the camera and scenery holds still when the game is paused', () => {
   const { world, state } = renderer();
   world.setView('landscape');

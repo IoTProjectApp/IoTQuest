@@ -1,3 +1,4 @@
+import { communityComponents, communityQuests } from './community-quests.js';
 import { sectionQuests } from './section-quests.js';
 import { weatherQuests } from './weather-quests.js';
 import { componentQuests } from './component-quests.js';
@@ -6,6 +7,7 @@ import { guidedStarter } from './code-coach.js';
 import { ADC_SIGNALS } from './signals.js';
 export { ADC_SIGNALS };
 export const components = [
+  ...communityComponents,
   {
     id: 'wind',
     name: 'Wind speed station',
@@ -407,11 +409,16 @@ export const missions = [
   ...sectionQuests,
   ...componentQuests,
   ...logicQuests,
+  ...communityQuests,
 ];
 // Energy and water allowed across a quest's tests; a quest can set its own (the AC draws 800 W).
 export const missionBudget = (m) =>
   m.budget || { wh: m.ids.includes('pump') ? 0.35 : 0.15, litres: 45 };
 export const baseEnv = {
+  vibration: 5,
+  bay: 0,
+  pedRequest: 0,
+  spaces: 1,
   light: 70,
   motion: 0,
   soil: 32,

@@ -5,6 +5,7 @@ import test, { before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn, execFileSync } from 'node:child_process';
 import { chromium } from 'playwright';
+import { missions, defaults, program } from '../../public/missions.js';
 
 let server, browser, origin;
 before(async () => {
@@ -435,4 +436,74 @@ test('pages on the earlier offline code move to a new deploy on their next visit
     await context.close();
     server.close();
   }
+});
+
+test('every new building label opens its project and the technician remains visible', async () => {
+  const { page, errors } = await openHome();
+  for (const [type, area] of Object.entries({
+    shop: 'Shop floor',
+    office: 'Business office',
+    warehouse: 'Loading bay',
+    factory: 'Factory floor',
+    roads: 'Community roads',
+    parking: 'Parking area',
+    residence1: 'Willow house',
+    residence2: 'Courtyard house',
+    residence3: 'Garden cottage',
+  })) {
+    await page.locator('#exploreCommunity').click();
+    await settle(page);
+    await page.locator(`[data-community-building="${type}"]`).click({ timeout: 10000 });
+    assert.match(await page.textContent('#location'), new RegExp(area));
+    assert.equal(await page.getAttribute('[data-tab].selected', 'data-tab'), 'inventory');
+    assert.equal(await page.getAttribute('#adventureScreen', 'data-layout'), 'split');
+    await page.waitForFunction(
+      () => getComputedStyle(document.querySelector('#player')).visibility === 'visible',
+      null,
+      { timeout: 5000 },
+    );
+  }
+  assert.deepEqual(errors, []);
+  await page.close();
+});
+for (const language of ['cpp', 'python'])
+  test(`new factory accepts installation, wiring and ${language} in the actual browser`, async () => {
+    const { page, errors } = await openHome();
+    await page.locator('#communityProgram').click();
+    const q = missions.find((m) => m.communityType === 'factory');
+    for (const id of q.ids) {
+      await page.locator(`[data-install="${id}"]`).click();
+      assert.equal(await page.inputValue('#installArea'), 'Factory floor');
+      await page.locator('#confirmInstall').click();
+      assert.equal(await page.locator(`[data-install="${id}"]`).isDisabled(), true);
+    }
+    await page.locator('[data-tab="wiring"]').click();
+    await page.locator('#connectAll').click();
+    await page.locator('#goCode').click();
+    await page.locator('#languageSelect').selectOption(language);
+    await page.locator('#codeInput').fill(program(q, language, defaults(q.ids, 'ESP32'), true));
+    await page.locator('#runBtn').click();
+    await page.waitForFunction(() =>
+      [...document.querySelectorAll('#liveReadings .live-reading')].some(
+        (row) =>
+          row.textContent.includes('Conveyor motor driver') &&
+          row.querySelector('.output-state')?.textContent === 'ON',
+      ),
+    );
+    await page.locator('#stopBtn').click();
+    assert.deepEqual(errors, []);
+    await page.close();
+  });
+
+test('new residential resident opens its own automation request from inside the home', async () => {
+  const { page, errors } = await openHome();
+  await page.locator('[data-community-building="residence1"]').click({ timeout: 10000 });
+  await page.waitForTimeout(1000);
+  await page.keyboard.press('t');
+  assert.equal(await modalOpen(page), true);
+  assert.equal(await page.textContent('#modalTitle'), 'A chat with Avery');
+  assert.match(await page.textContent('#modalBody'), /Neighbourhood Porch Lighting/);
+  assert.deepEqual(errors, []);
+  await page.locator('#closeModal').click();
+  await page.close();
 });

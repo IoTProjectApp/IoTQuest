@@ -114,6 +114,7 @@ export class TravelGlobe {
     this.drag = null;
     this.last = 0;
     this.gl = canvas.getContext('webgl', { alpha: true, antialias: true });
+    this.contextRecovery = this.gl?.getExtension('WEBGL_lose_context');
     this.drawMap();
     this.bind();
     if (!this.gl) {
@@ -270,6 +271,7 @@ export class TravelGlobe {
       e.preventDefault();
       if (this.contextLost) return;
       this.contextLost = true;
+      if (this.graphicsSuspended) return;
       this.onError?.(
         '3D globe graphics were interrupted. The 2D atlas is ready; the globe returns when graphics recover.',
       );
@@ -346,6 +348,21 @@ export class TravelGlobe {
         if (e.key === '-') this.zoom(1);
       }
     });
+  }
+  releaseGraphics() {
+    if (!this.gl || this.contextLost || typeof this.contextRecovery?.loseContext !== 'function')
+      return false;
+    this.graphicsSuspended = true;
+    this.contextLost = true;
+    this.contextRecovery.loseContext();
+    return true;
+  }
+  restoreGraphics() {
+    if (!this.graphicsSuspended || typeof this.contextRecovery?.restoreContext !== 'function')
+      return false;
+    this.graphicsSuspended = false;
+    this.contextRecovery.restoreContext();
+    return true;
   }
   rotate(x, y = 0) {
     this.userInteracted = true;

@@ -14,6 +14,7 @@
     <link rel="apple-touch-icon" href="./icons/icon-192.png" />
     <meta name="theme-color" content="#5260df" />
     <script type="module" src="./offline.js"></script>
+    <link rel="stylesheet" href="community.css" />
   </head>
   <body>
     <header>
@@ -257,9 +258,29 @@
                       <option value="0">Paused</option>
                       <option value="1">1× normal</option>
                       <option value="4">4× faster</option>
+                      <option value="12">12× community</option>
                       <option value="60">60× day study</option>
                       <option value="360">360× · day in ~4 min</option></select
-                    ><span id="simClock" class="sim-clock">08:00 simulated</span>
+                    ><span id="simClock" class="sim-clock">08:00 simulated</span
+                    ><label class="world-density"
+                      >Traffic
+                      <input
+                        id="trafficDensity"
+                        type="range"
+                        min="0"
+                        max="30"
+                        value="12"
+                        aria-label="Traffic density" /></label
+                    ><label class="world-density"
+                      >People
+                      <input
+                        id="pedestrianDensity"
+                        type="range"
+                        min="0"
+                        max="30"
+                        value="10"
+                        aria-label="Pedestrian density"
+                    /></label>
                   </div>
                 </div>
                 <div
@@ -320,12 +341,15 @@
                   </div>
                   <div class="camera-bar">
                     <span class="three-d-badge">3D WORLD</span
+                    ><button id="exploreCommunity">World overview</button
+                    ><button id="communityProgram">Install &amp; program buildings</button
                     ><button id="roofToggle">Roof: cutaway</button
                     ><button id="followCamera" aria-pressed="false">Follow technician</button
                     ><button id="resetCamera" title="Restore the camera for this view">
                       Reset view</button
                     ><button id="expandWorld" aria-label="Expand 3D world">⛶</button>
                   </div>
+                  <div id="communityWorldTargets" class="community-world-targets" hidden></div>
                   <div class="map-tools">
                     <button id="rotateLeft" aria-label="Rotate camera left">↶</button
                     ><button id="rotateRight" aria-label="Rotate camera right">↷</button

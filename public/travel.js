@@ -779,6 +779,8 @@ export async function setupTravel({
     service,
     refresh: renderDetail,
     refreshWeather: fetchSelectedWeather,
+    releaseGraphics: () => globe?.releaseGraphics(),
+    restoreGraphics: () => globe?.restoreGraphics(),
     selectLocation,
     selectCountry,
     features,

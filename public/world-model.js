@@ -244,7 +244,7 @@ export function createWorldModel(variant = {}) {
   }
   for (const x of [6.0, 9.25, 12.5]) {
     solid(x, 0.22, 4.6, 2.35, 0.35, 5.5, VARIANT_COLOURS.beds[variant.beds] || '#b39166');
-    box(x, 0.43, 4.6, 2.08, 0.08, 5.22, '#746a47');
+    box(x, 0.43, 4.6, 2.08, 0.08, 5.22, '#746a47', { surface: 'soil' });
     for (let i = 0; i < 4; i++) plant(x + (i % 2 ? -0.4 : 0.35), 2.5 + i * 1.37, 0.8 + i * 0.07);
     for (const z of [1.9, 7.3])
       box(x, 0.5, z, 2.45, 0.2, 0.15, VARIANT_COLOURS.beds[variant.beds] ? '#8f8a7e' : '#c3a073');
@@ -471,6 +471,13 @@ export function createWorldModel(variant = {}) {
     add('box', [0, 0.8, 0], [0.43, 0.5, 0.28], color);
     add('sphere', [0, 1.27, 0], [0.38, 0.43, 0.36], skin);
     add('sphere', [0, 1.47, 0], [0.41, 0.15, 0.38], hat ? '#bda27a' : '#6f6555');
+    for (const side of [-1, 1]) {
+      add('sphere', [side * 0.067, 1.31, 0.166], [0.037, 0.04, 0.025], '#eae6da');
+      add('sphere', [side * 0.067, 1.31, 0.181], [0.016, 0.024, 0.013], '#35413d');
+      add('box', [side * 0.067, 1.355, 0.172], [0.044, 0.01, 0.015], '#69584a');
+    }
+    add('sphere', [0, 1.265, 0.181], [0.048, 0.055, 0.045], skin);
+    add('box', [0, 1.205, 0.174], [0.056, 0.012, 0.014], '#9c7962');
     if (hat) add('cylinder', [0, 1.44, 0], [0.65, 0.05, 0.55], '#bda27a');
     for (const sign of [-1, 1]) {
       add('box', [sign * 0.14, 0.38, 0], [0.15, 0.48, 0.17], '#566766', {

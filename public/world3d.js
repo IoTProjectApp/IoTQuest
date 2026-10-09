@@ -1,3 +1,11 @@
+import {
+  SURFACE,
+  MATERIAL_GLSL,
+  surfaceForMesh,
+  prepareWorldMaterials,
+  worldSunlight,
+} from './world-materials.js';
+import { addCommunityWorld, updateCommunityWorld } from './community-world.js';
 import { updateLandscape } from './landscape.js';
 import { addDeviceDetails } from './device-objects.js';
 import { locationById } from './locations.js';
@@ -16,6 +24,7 @@ import {
   findFree,
   deviceState,
   deviceSpots,
+  communityRoomBounds,
 } from './world-math.js';
 import { createWorldModel } from './world-model.js';
 import { createRegionalModel } from './regions.js';
@@ -26,11 +35,24 @@ import { weatherEffects } from './weather.js';
 import { updateSky, lightningFlash } from './sky.js';
 import { updateAnimals } from './animals.js';
 import { updateFarm } from './farm-assets.js';
-const VERTEX = `attribute vec3 aPosition; attribute vec3 aNormal; uniform mat4 uModel; uniform mat4 uViewProjection; uniform mat3 uNormal; varying vec3 vNormal; varying vec3 vWorld; void main(){vec4 world=uModel*vec4(aPosition,1.0);vWorld=world.xyz;vNormal=uNormal*aNormal;gl_Position=uViewProjection*world;}`;
+const VERTEX = `attribute vec3 aPosition; attribute vec3 aNormal; uniform mat4 uModel; uniform mat4 uViewProjection; uniform mat3 uNormal; uniform vec3 uSize; varying vec3 vNormal; varying vec3 vWorld; varying vec3 vLocal; varying vec3 vLocalNormal; void main(){vec4 world=uModel*vec4(aPosition,1.0);vWorld=world.xyz;vLocal=aPosition*uSize;vLocalNormal=aNormal;vNormal=uNormal*aNormal;gl_Position=uViewProjection*world;}`;
 const FRAGMENT = `
+#ifdef GL_FRAGMENT_PRECISION_HIGH
+precision highp float;
+#else
 precision mediump float;
+#endif
 varying vec3 vNormal;
 varying vec3 vWorld;
+varying vec3 vLocal;
+varying vec3 vLocalNormal;
+uniform vec3 uSun;
+uniform vec3 uSunColor;
+uniform float uSunStrength;
+uniform float uSurface;
+uniform float uTime;
+uniform vec4 uShadowBoxes[12];
+uniform vec4 uShadowInfo[12];
 uniform vec4 uColor;
 uniform float uDay;
 uniform float uEmission;
@@ -39,10 +61,12 @@ uniform float uRoughness;
 uniform vec3 uEye;
 uniform vec3 uFog;
 uniform float uHaze;
+uniform float uFogOffset;
 uniform vec3 uLights[8];
 uniform vec3 uLightColor[8];
 uniform float uCelestial;
 uniform vec3 uSkySun;
+${MATERIAL_GLSL}
 void main() {
   vec3 n = normalize(vNormal);
   if (uCelestial > 0.5) {
@@ -51,30 +75,42 @@ void main() {
     gl_FragColor = vec4(surface, uColor.a);
     return;
   }
-  vec3 lightDir = normalize(vec3(-0.5, 1.0, 0.65));
+  vec3 lightDir = normalize(uSun);
   vec3 viewDir = normalize(uEye - vWorld);
-  float sun = max(0.0, dot(n, lightDir));
-  // Cool skylight and a warm key light reveal curved surfaces without hard bands.
-  float hemisphere = n.y * 0.5 + 0.5;
-  vec3 fill = mix(vec3(0.56, 0.53, 0.49), vec3(0.76, 0.82, 0.89), hemisphere);
-  vec3 ambient = mix(vec3(0.14, 0.17, 0.23), fill, uDay);
-  vec3 lit = uColor.rgb * (ambient + vec3(1.0, 0.94, 0.84) * sun * mix(0.08, 0.3, uDay));
-  float wet = uWet * max(0.0, n.y);
-  float roughness = clamp(uRoughness - wet * 0.22, 0.18, 1.0);
-  vec3 halfDir = normalize(lightDir + viewDir);
-  float specular = pow(max(0.0, dot(n, halfDir)), mix(72.0, 10.0, roughness));
-  lit += vec3(1.0, 0.96, 0.88) * specular * sun * uDay * (1.0 - roughness) * 0.28;
-  float rim = pow(1.0 - max(0.0, dot(n, viewDir)), 3.0);
-  lit += uColor.rgb * vec3(0.74, 0.85, 1.0) * rim * hemisphere * uDay * 0.045;
-  for (int i = 0; i < 8; i++) {
-    float d = distance(vWorld, uLights[i]);
-    float fall = max(0.0, 1.0 - d / 4.0);
-    lit += uColor.rgb * uLightColor[i] * fall * fall * 1.7;
+  float water = uSurface>6.5 && uSurface<7.5 ? 1.0 : 0.0;
+  float glass = uSurface>7.5 && uSurface<8.5 ? 1.0 : 0.0;
+  if(water>0.5 && n.y>0.6) {
+    n=normalize(n+vec3(sin(vWorld.x*2.3+vWorld.z*1.2+uTime*0.65)*0.085,0.0,
+      cos(vWorld.z*2.6-vWorld.x*0.7-uTime*0.5)*0.085));
   }
-  lit = mix(lit, lit * 0.83 + vec3(0.03, 0.07, 0.09), wet * 0.3);
-  lit = mix(lit, uColor.rgb * 1.15, clamp(uEmission, 0.0, 1.0));
-  float fog = smoothstep(mix(38.0, 12.0, uHaze), mix(90.0, 52.0, uHaze), distance(vWorld, uEye));
-  gl_FragColor = vec4(mix(lit, uFog, fog * mix(0.48, 0.88, uHaze)), uColor.a);
+  vec3 base=pow(max(materialColor(uColor.rgb,n),vec3(0.0)),vec3(2.2));
+  float sun = max(0.0, dot(n, lightDir))*uSunStrength;
+  float shade = groundShadow(n);
+  float hemisphere = n.y * 0.5 + 0.5;
+  vec3 fill = mix(vec3(0.22,0.20,0.18),vec3(0.42,0.48,0.56),hemisphere);
+  vec3 ambient=mix(vec3(0.025,0.035,0.06),fill,uDay);
+  vec3 lit=base*(ambient*(1.0-shade*0.35)+uSunColor*sun*uDay*(1.0-shade)*0.8);
+  float wet = uWet * max(0.0,n.y);
+  float roughness=clamp(uRoughness-wet*0.3,0.08,1.0);
+  vec3 halfDir=normalize(lightDir+viewDir);
+  float specular=pow(max(0.0,dot(n,halfDir)),mix(128.0,12.0,roughness));
+  lit+=uSunColor*specular*sun*uDay*(1.0-roughness)*0.45;
+  float fresnel=pow(1.0-max(0.0,dot(n,viewDir)),4.0);
+  vec3 reflection=pow(uFog,vec3(2.2));
+  lit=mix(lit,reflection,clamp((water*0.35+glass*0.35+wet*0.16+(1.0-roughness)*0.06)*fresnel,0.0,0.55));
+  if(uSurface>12.5 && uSurface<13.5) lit+=base*uSunColor*max(0.0,dot(-n,lightDir))*sun*uDay*0.16;
+  for (int i=0;i<8;i++) {
+    float d=distance(vWorld,uLights[i]);
+    float fall=max(0.0,1.0-d/5.5);
+    lit+=base*uLightColor[i]*fall*fall*2.3;
+    vec3 h=normalize(normalize(uLights[i]-vWorld)+viewDir);
+    lit+=uLightColor[i]*pow(max(0.0,dot(n,h)),48.0)*fall*fall*(wet+water*0.5+glass*0.4)*0.28;
+  }
+  lit=mix(lit,lit*0.8+vec3(0.01,0.018,0.024),wet*0.28);
+  lit=mix(lit,pow(uColor.rgb,vec3(2.2))*1.45,clamp(uEmission,0.0,1.0));
+  lit=pow(filmic(lit),vec3(1.0/2.2));
+  float fog = smoothstep(mix(38.0, 12.0, uHaze), mix(90.0, 52.0, uHaze), max(0.0, distance(vWorld, uEye) - uFogOffset));
+  gl_FragColor = vec4(mix(lit, uFog, fog * mix(0.18, 0.88, uHaze)), uColor.a);
 }`;
 // Parsed colours are cached (read-only) because objects are recoloured every frame.
 const colorCache = new Map();
@@ -101,11 +137,39 @@ function parseColor(hex) {
     h.length === 8 ? parseInt(h.slice(6, 8), 16) / 255 : 1,
   ];
 }
+const DEFAULT_SKY_SUN = [0, 1, 0];
+const MIN_PIXEL_RADIUS = 1;
+const geometryKey = (m) => (roundedObject(m) ? 'roundedBox' : m.shape);
+// Objects the student cannot see are skipped: the community districts double the scene, and on
+// software renderers (low-end Chromebooks) each draw costs about the same however small it is.
+// Each object is tested by a sphere around its unit geometry (centred, about ±0.5) against the six
+// clip planes of the view-projection matrix (which includes the mirror flip). With pixelScale
+// (pixels per unit at distance 1), objects under about a pixel across are skipped too, except
+// sky objects such as stars and anything that glows.
+export function frustumTest(m, pixelScale = 0) {
+  const planes = [0, 1, 2].flatMap((axis) =>
+    [1, -1].map((sign) => {
+      const p = [0, 1, 2, 3].map((col) => m[col * 4 + 3] + sign * m[col * 4 + axis]),
+        length = Math.hypot(p[0], p[1], p[2]) || 1;
+      return p.map((v) => v / length);
+    }),
+  );
+  return (o) => {
+    const [x, y, z] = o.pos,
+      [w, h, d] = o.size || [1, 1, 1],
+      r = 0.6 * Math.hypot(w, h, d) + 0.25;
+    for (const p of planes) if (p[0] * x + p[1] * y + p[2] * z + p[3] < -r) return false;
+    if (!pixelScale || o.sky || o.moonSurface || o.emission) return true;
+    const distance = m[3] * x + m[7] * y + m[11] * z + m[15];
+    return distance <= 0 || ((r - 0.25) * pixelScale) / distance >= MIN_PIXEL_RADIUS;
+  };
+}
 export class World3D {
-  constructor(canvas, { getState, onFrame, onError, onRecover } = {}) {
+  constructor(canvas, { getState, onFrame, onError, onRecover, onBuildingSelect } = {}) {
     this.canvas = canvas;
     this.getState = getState;
     this.onFrame = onFrame;
+    this.onBuildingSelect = onBuildingSelect;
     this.onError = onError;
     this.onRecover = onRecover;
     this.gl = canvas.getContext('webgl', {
@@ -115,13 +179,17 @@ export class World3D {
     });
     if (!this.gl)
       throw Error('WebGL is unavailable. Enable hardware acceleration to explore the 3D world.');
+    this.contextRecovery = this.gl.getExtension('WEBGL_lose_context');
     this.model = createRegionalModel(getState?.().locationId || 'legacy');
+    addCommunityWorld(this.model, locationById(getState?.().locationId));
+    prepareWorldMaterials(this.model);
     this.yaw = 0.32;
-    this.pitch = 0.73;
-    this.distance = 35;
-    this.target = [0, 0, 0];
-    this.currentTarget = [0, 0, 0];
-    this.currentDistance = 35;
+    this.pitch = 0.85;
+    this.distance = 130;
+    this.target = [(this.model.community.origin.x + 44) / 2, 0.5, 0];
+    this.currentTarget = [...this.target];
+    this.currentDistance = 130;
+    this.communityView = true;
     this.follow = false;
     this.overview = true;
     this.geometries = {};
@@ -168,6 +236,14 @@ export class World3D {
     this.uniforms = {};
     for (const name of [
       'uModel',
+      'uSize',
+      'uSurface',
+      'uTime',
+      'uSun',
+      'uSunColor',
+      'uSunStrength',
+      'uShadowBoxes[0]',
+      'uShadowInfo[0]',
       'uViewProjection',
       'uNormal',
       'uColor',
@@ -178,6 +254,7 @@ export class World3D {
       'uEye',
       'uFog',
       'uHaze',
+      'uFogOffset',
       'uLights[0]',
       'uLightColor[0]',
       'uCelestial',
@@ -228,7 +305,7 @@ export class World3D {
     };
     on('pointerdown', (e) => {
       if (e.button !== 0 && e.button !== 2) return;
-      this.drag = { x: e.clientX, y: e.clientY };
+      this.drag = { x: e.clientX, y: e.clientY, travel: 0, button: e.button };
       c.setPointerCapture(e.pointerId);
       c.style.cursor = 'grabbing';
       c.focus();
@@ -243,13 +320,26 @@ export class World3D {
         this.skyView ? -1.55 : 0.25,
         this.skyView ? 0.15 : 1.2,
       );
-      this.drag = { x: e.clientX, y: e.clientY };
+      this.drag = {
+        ...this.drag,
+        x: e.clientX,
+        y: e.clientY,
+        travel: this.drag.travel + Math.hypot(dx, dy),
+      };
     });
     const end = () => {
       this.drag = null;
       c.style.cursor = 'grab';
     };
-    on('pointerup', end);
+    on('pointerup', (e) => {
+      const click = this.drag?.button === 0 && this.drag.travel < 5;
+      end();
+      if (click && this.communityView && this.onBuildingSelect) {
+        const rect = c.getBoundingClientRect();
+        const type = this.pickCommunityBuilding(e.clientX - rect.left, e.clientY - rect.top);
+        if (type) this.onBuildingSelect(type);
+      }
+    });
     on('pointercancel', end);
     on('contextmenu', (e) => e.preventDefault());
     on(
@@ -258,7 +348,11 @@ export class World3D {
         e.preventDefault();
         if (this.skyView) this.skyZoom = clamp((this.skyZoom || 1) - e.deltaY * 0.001, 1, 3);
         else
-          this.distance = clamp(this.distance + e.deltaY * 0.018, 5, this.landscapeView ? 90 : 55);
+          this.distance = clamp(
+            this.distance + e.deltaY * 0.018,
+            5,
+            this.communityView ? 220 : this.landscapeView ? 90 : 55,
+          );
       },
       { passive: false },
     );
@@ -267,6 +361,7 @@ export class World3D {
       e.preventDefault();
       this.contextLost = true;
       cancelAnimationFrame(this.frameId);
+      if (this.graphicsSuspended) return;
       this.onError?.(
         '3D graphics connection was lost. Waiting for it to recover; reload the page if the view does not return.',
       );
@@ -287,11 +382,39 @@ export class World3D {
       this.frameId = requestAnimationFrame(this.frame);
     });
   }
+  releaseGraphics() {
+    if (!this.gl || this.contextLost || typeof this.contextRecovery?.loseContext !== 'function')
+      return false;
+    this.graphicsSuspended = true;
+    this.contextLost = true;
+    cancelAnimationFrame(this.frameId);
+    this.contextRecovery.loseContext();
+    return true;
+  }
+  restoreGraphics() {
+    if (!this.graphicsSuspended || typeof this.contextRecovery?.restoreContext !== 'function')
+      return false;
+    this.graphicsSuspended = false;
+    this.contextRecovery.restoreContext();
+    return true;
+  }
   setView(view, focus, zoom = 1) {
+    if (view === 'world' || view === 'community') {
+      this.communityView = true;
+      this.skyView = false;
+      this.landscapeView = false;
+      this.follow = false;
+      this.overview = true;
+      this.target = [(this.model.community.origin.x + 44) / 2, 0.5, 0];
+      this.distance = 130 / Math.max(0.7, zoom);
+      this.pitch = 0.85;
+      return;
+    }
     if (view === 'sky' && !this.skyView) this.pitch = -0.35;
     else if (view === 'landscape' && !this.landscapeView) this.pitch = 0.58;
     else if (view !== 'sky' && view !== 'landscape' && (this.skyView || this.landscapeView))
       this.pitch = 0.73;
+    this.communityView = view === 'community';
     this.landscapeView = view === 'landscape';
     this.skyView = view === 'sky';
     this.skyZoom = zoom;
@@ -300,7 +423,23 @@ export class World3D {
     this.target = focus ? toWorld({ x: focus[1], y: focus[2] }) : [0, 0, 0];
     this.target[1] = view === 'detail' ? 0.75 : 0.35;
     this.distance = clamp(
-      (view === 'landscape' ? 68 : view === 'world' ? 35 : view === 'detail' ? 11 : 25) /
+      (view === 'landscape'
+        ? 68
+        : view === 'world'
+          ? 35
+          : view === 'detail'
+            ? {
+                factory: 28,
+                warehouse: 25,
+                shop: 23,
+                office: 24,
+                roads: 14,
+                parking: 22,
+                residence1: 18,
+                residence2: 18,
+                residence3: 18,
+              }[focus?.[3]?.communityType] || 11
+            : 25) /
         (view === 'landscape'
           ? Math.max(0.6, zoom)
           : Math.max(
@@ -311,7 +450,16 @@ export class World3D {
       view === 'landscape' ? 90 : 55,
     );
   }
+  snapCamera() {
+    this.currentTarget = [...this.target];
+    this.currentDistance = this.distance;
+  }
   resetCamera(view = 'world', focus = null, zoom = 1) {
+    if (view === 'community') {
+      this.yaw = 0.32;
+      this.showCommunity();
+      return;
+    }
     this.yaw = 0.32;
     this.pitch =
       view === 'sky' ? -0.35 : view === 'landscape' ? 0.58 : view === 'detail' ? 0.62 : 0.73;
@@ -335,25 +483,95 @@ export class World3D {
     return true;
   }
   setRegion(id) {
+    this.indoorArea = null;
+    this.drag = null;
     this.matrix = null;
     this.skyLocation = null;
     this.upgradeSignature = null;
     this.lastSimClockMs = undefined;
+    this.surfaceTime = 0;
     this.model = createRegionalModel(id);
+    addCommunityWorld(this.model, locationById(id));
+    prepareWorldMaterials(this.model);
+    this.communityView = false;
     this.streetLights = null;
     this.deviceSignature = '';
     this.deviceObjects = [];
     this.lastPlayer = null;
   }
+  showCommunity() {
+    this.setView('world', null);
+  }
+  returnToProperty() {
+    this.indoorArea = null;
+  }
+  focusCommunityArea(name) {
+    this.indoorArea = name;
+  }
+  nativeAreaBounds() {
+    const room = this.model.rooms.find((r) => r[0] === this.indoorArea && r[3]?.community);
+    return room ? communityRoomBounds(room) : null;
+  }
   move(player, dir, amount) {
-    if (!this.model.mirrored)
-      return resolveMove(player, dir, amount, this.yaw, this.model.colliders);
-    // Screen left/right are swapped on a mirrored home, and the camera angle is mirrored.
-    const swapped = dir === 'left' ? 'right' : dir === 'right' ? 'left' : dir;
-    return resolveMove(player, swapped, amount, -this.yaw, this.model.colliders);
+    const roomBounds = this.nativeAreaBounds?.(),
+      // Community buildings are drawn unflipped, both in the overview and close up.
+      mirrored = !!this.model.mirrored && !this.communityView && !this.indoorArea,
+      screenDir = mirrored ? (dir === 'left' ? 'right' : dir === 'right' ? 'left' : dir) : dir,
+      screenYaw = mirrored ? -this.yaw : this.yaw;
+    if (roomBounds)
+      return resolveMove(player, screenDir, amount, screenYaw, this.model.colliders, roomBounds);
+    if (!mirrored) return resolveMove(player, dir, amount, this.yaw, this.model.colliders);
+    return resolveMove(player, screenDir, amount, screenYaw, this.model.colliders);
   }
   findFree(player) {
-    return findFree(player, this.model.colliders);
+    return findFree(player, this.model.colliders, this.nativeAreaBounds() || undefined);
+  }
+  pickCommunityBuilding(x, y) {
+    if (!this.communityView || !this.matrix) return null;
+    const cross = (a, b, p) => (b.x - a.x) * (p.y - a.y) - (b.y - a.y) * (p.x - a.x);
+    const inside = (a, b, c) => {
+      if (Math.abs(cross(a, b, c)) < 1e-6) return false;
+      const p = { x, y },
+        signs = [cross(a, b, p), cross(b, c, p), cross(c, a, p)];
+      return signs.every((s) => s >= 0) || signs.every((s) => s <= 0);
+    };
+    const eye = [
+      this.currentTarget[0] + Math.sin(this.yaw) * Math.cos(this.pitch) * this.currentDistance,
+      this.currentTarget[2] + Math.cos(this.yaw) * Math.cos(this.pitch) * this.currentDistance,
+    ];
+    const { origin, sim } = this.model.community;
+    // Project each solid building face, so clicking the roof or walls selects the building
+    // without making nearby road/footpath space clickable. Prefer the nearer overlapping solid.
+    const faces = [
+      [0, 1, 3, 2],
+      [4, 6, 7, 5],
+      [0, 4, 5, 1],
+      [2, 3, 7, 6],
+      [0, 2, 6, 4],
+      [1, 5, 7, 3],
+    ];
+    const hits = sim.map.buildings.filter((b) => {
+      const points = [];
+      const height =
+        b.height ||
+        (b.type === 'parking' ? 0.18 : b.type === 'office' ? 6 : b.type === 'factory' ? 5 : 4);
+      for (const dy of [0, height])
+        for (const dz of [-b.d / 2, b.d / 2])
+          for (const dx of [-b.w / 2, b.w / 2])
+            points.push(this.project([origin.x + b.x + dx, dy, b.z + dz]));
+      return faces.some(
+        (f) =>
+          f.every((i) => points[i].visible) &&
+          (inside(points[f[0]], points[f[1]], points[f[2]]) ||
+            inside(points[f[0]], points[f[2]], points[f[3]])),
+      );
+    });
+    hits.sort(
+      (a, b) =>
+        Math.hypot(origin.x + a.x - eye[0], a.z - eye[1]) -
+        Math.hypot(origin.x + b.x - eye[0], b.z - eye[1]),
+    );
+    return hits[0]?.type || null;
   }
   project(p) {
     return this.matrix
@@ -412,7 +630,7 @@ export class World3D {
       const face = this.model.box(x, 0.64 + h, z, 0.26, 0.05, 0.22, '#e3c67d', extra);
       this.deviceObjects.push({ device: d, x, z, holder, face, parts: [] });
       const record = this.deviceObjects.at(-1);
-      if (['led', 'porch', 'rgb'].includes(d.id)) {
+      if (['led', 'porch', 'rgb', 'streetLight', 'warningLight'].includes(d.id)) {
         record.light = this.model.sphere(x, 1 + h, z, 0.19, '#e8cf89', { ...extra, emission: 0 });
         record.pool = this.model.mesh('sphere', [x, 0.04 + h, z], [3, 0.025, 3], '#ecc768', {
           ...extra,
@@ -421,12 +639,16 @@ export class World3D {
       }
       addDeviceDetails(this.model, record, h);
       if (['pump', 'valve'].includes(d.id)) {
+        const home = this.model.community.residences.find((h) => h.building.name === d.area);
+        const native = this.model.rooms.some((r) => r[0] === d.area && r[3]?.community);
+        const sprayX = home ? this.model.community.origin.x + home.building.x - 3.8 : x;
+        const sprayZ = home ? home.building.z + home.building.d / 2 + 1.3 : z;
         for (let i = 0; i < 18; i++)
           record.parts.push(
             this.model.sphere(
-              6 + (i % 3) * 3.25,
+              native ? sprayX + (i % 3) * 0.55 : 6 + (i % 3) * 3.25,
               0.85,
-              2.2 + Math.floor(i / 3) * 0.8,
+              native ? sprayZ + Math.floor(i / 3) * 0.12 : 2.2 + Math.floor(i / 3) * 0.8,
               0.07,
               '#8ed2dd',
               { ...extra, droplet: i, opacity: 0, emission: 0.15 },
@@ -473,6 +695,7 @@ export class World3D {
           : Math.max(0, (state.simClockMs - this.lastSimClockMs) / 1000)
         : dt * state.speed;
     this.lastSimClockMs = state.simClockMs;
+    updateCommunityWorld(this.model, state, simDelta);
     if (state.paused) dt = 0;
     const realDt = Math.min(0.1, Math.max(0, dt || 0));
     if (!state.paused && !state.reduced) this.visualClock += realDt;
@@ -618,6 +841,11 @@ export class World3D {
       if (d.id === 'gate') gate = s.angle;
       if (d.id === 'servo') blinds = s.angle;
     }
+    const passage = this.model.community.sim.people.some(
+      (person) =>
+        Math.abs(person.x + this.model.community.origin.x) < 2 && person.z > 7.5 && person.z < 16,
+    );
+    if (passage) gate = Math.max(gate, Math.PI / 2); // Walking residents can open the existing entrance gate.
     const target = state.devices.some((d) => d.id === 'led' && (outputs[d.pin] || 0) > 0);
     for (const lamp of this.model.lamps) {
       lamp.color = target ? '#ffe4a0' : '#c9bf9c';
@@ -786,14 +1014,14 @@ export class World3D {
     const ease = (from, to) => (Math.abs(to - from) < 1e-3 ? to : from + (to - from) * smooth);
     for (let i = 0; i < 3; i++) this.currentTarget[i] = ease(this.currentTarget[i], this.target[i]);
     const fittedDistance = Math.min(
-      this.landscapeView ? 180 : 95,
+      this.communityView ? 380 : this.landscapeView ? 180 : 95,
       this.distance * (this.overview ? Math.max(1, 1.6 / (width / height)) : 1),
     );
     this.currentDistance = ease(this.currentDistance, fittedDistance);
     // Mirrored homes are drawn through a left-right flip after the view transform: the camera
     // orbits the flipped scene as usual while the model, animations and game logic stay as built.
     const r = this.currentDistance,
-      mirrored = !!this.model.mirrored,
+      mirrored = !!this.model.mirrored && !this.communityView && !this.indoorArea,
       flip = (p) => (mirrored ? [-p[0], p[1], p[2]] : p),
       ground = toWorld(s.player),
       target = this.skyView
@@ -819,12 +1047,14 @@ export class World3D {
       mirrored,
     });
     const view = lookAt(viewEye, target);
+    const fov = this.skyView ? 0.78 / (this.skyZoom || 1) : 0.78;
+    this.pixelScale = height / 2 / Math.tan(fov / 2);
     this.matrix = multiply(
       perspective(
-        this.skyView ? 0.78 / (this.skyZoom || 1) : 0.78,
+        fov,
         width / height,
         0.1,
-        this.landscapeView || this.currentDistance > 95 ? 320 : 160,
+        this.communityView ? 650 : this.landscapeView || this.currentDistance > 95 ? 320 : 160,
       ),
       mirrored ? multiply(view, MIRROR) : view,
     );
@@ -846,22 +1076,55 @@ export class World3D {
     gl.useProgram(this.program);
     gl.uniformMatrix4fv(this.uniforms.uViewProjection, false, this.matrix);
     gl.uniform1f(this.uniforms.uDay, day);
+    const sunlight = worldSunlight(s, this.model.sky?.ephemeris);
+    if (mirrored) sunlight.direction[0] *= -1;
+    gl.uniform3fv(this.uniforms.uSun, sunlight.direction);
+    gl.uniform3fv(this.uniforms.uSunColor, sunlight.color);
+    gl.uniform1f(this.uniforms.uSunStrength, sunlight.strength);
+    if (!s.paused && !s.reduced)
+      this.surfaceTime = s.simClockMs !== undefined ? s.simClockMs / 1000 : this.visualClock;
+    gl.uniform1f(this.uniforms.uTime, this.surfaceTime || 0);
+    const boxes = [],
+      info = [];
+    for (const caster of this.model.visualShadows.slice(0, 12)) {
+      boxes.push(caster.x, caster.z, caster.w / 2, caster.d / 2);
+      info.push(caster.h, caster.opacity, 0, 0);
+    }
+    while (boxes.length < 48) {
+      boxes.push(0, 0, 0, 0);
+      info.push(0, 0, 0, 0);
+    }
+    gl.uniform4fv(this.uniforms['uShadowBoxes[0]'], boxes);
+    gl.uniform4fv(this.uniforms['uShadowInfo[0]'], info);
     gl.uniform1f(this.uniforms.uWet, s.env.wetness || 0);
     gl.uniform3fv(this.uniforms.uEye, eye);
     gl.uniform3fv(this.uniforms.uFog, fog);
     gl.uniform1f(this.uniforms.uHaze, this.haze || 0);
+    // The observer camera sits high above the community; haze should describe the
+    // district's visibility rather than wash out everything because of that height.
+    gl.uniform1f(
+      this.uniforms.uFogOffset,
+      this.communityView ? Math.max(0, this.currentDistance - 35) : 0,
+    );
     const lights = [],
-      lightColors = [];
-    if (this.model.lamps.some((l) => l.emission))
-      for (const lamp of this.model.lamps) {
-        lights.push(lamp.pos);
-        lightColors.push([1, 0.73, 0.32]);
-      }
+      lightColors = [],
+      candidates = [];
+    for (const lamp of [...this.model.lamps, ...this.model.community.lights])
+      if (lamp.emission) candidates.push({ pos: lamp.pos, color: [1, 0.79, 0.47] });
+    for (const home of this.model.community.residences)
+      if (home.lamp.emission) candidates.push({ pos: home.lamp.pos, color: [1, 0.77, 0.43] });
     for (const d of this.deviceObjects)
-      if (d.light?.emission && lights.length < 8) {
-        lights.push(d.light.pos);
-        lightColors.push(color(d.light.color).slice(0, 3));
-      }
+      if (d.light?.emission)
+        candidates.push({ pos: d.light.pos, color: color(d.light.color).slice(0, 3) });
+    candidates.sort(
+      (a, b) =>
+        Math.hypot(a.pos[0] - this.target[0], a.pos[2] - this.target[2]) -
+        Math.hypot(b.pos[0] - this.target[0], b.pos[2] - this.target[2]),
+    );
+    for (const lamp of candidates.slice(0, 8)) {
+      lights.push(lamp.pos);
+      lightColors.push(lamp.color);
+    }
     while (lights.length < 8) {
       lights.push([0, -1000, 0]);
       lightColors.push([0, 0, 0]);
@@ -869,14 +1132,18 @@ export class World3D {
     gl.uniform3fv(this.uniforms['uLights[0]'], lights.flat());
     gl.uniform3fv(this.uniforms['uLightColor[0]'], lightColors.flat());
     const opaque = [],
-      transparent = [];
+      transparent = [],
+      visible = frustumTest(this.matrix, this.pixelScale);
     for (const m of this.model.objects) {
       const c = color(m.color),
         alpha = (m.opacity ?? 1) * c[3];
-      if (alpha < 0.001) continue;
+      if (alpha < 0.001 || !visible(m)) continue;
       (alpha < 0.99 ? transparent : opaque).push(m);
     }
     gl.depthMask(true);
+    // Opaque order does not matter: group by shape so each geometry's buffers bind once.
+    this.drawState = {};
+    opaque.sort((a, b) => (geometryKey(a) < geometryKey(b) ? -1 : 1));
     for (const m of opaque) this.draw(m);
     transparent.sort(
       (a, b) =>
@@ -888,27 +1155,54 @@ export class World3D {
     gl.depthMask(true);
     this.onFrame?.(this, s);
   }
+  // Each WebGL call costs about the same as a small draw on software renderers, so values that
+  // match the previous object's are not sent again (drawState resets every frame).
   draw(m) {
     const gl = this.gl,
-      g = this.geometries[roundedObject(m) ? 'roundedBox' : m.shape],
+      key = geometryKey(m),
+      g = this.geometries[key],
       mat = modelMatrix(m.pos, m.size, m.rotation),
       normal = this.normalScratch,
-      c = this.colorScratch;
+      c = this.colorScratch,
+      last = (this.drawState ||= {}),
+      set = (name, value, send) => {
+        if (last[name] === value) return;
+        last[name] = value;
+        send();
+      };
     for (let k = 0; k < 3; k++)
       for (let r = 0; r < 3; r++) normal[k * 3 + r] = mat[k * 4 + r] / (m.size[k] * m.size[k] || 1);
     c.set(color(m.color));
     c[3] *= m.opacity ?? 1;
     gl.uniformMatrix4fv(this.uniforms.uModel, false, mat);
     gl.uniformMatrix3fv(this.uniforms.uNormal, false, normal);
-    gl.uniform4fv(this.uniforms.uColor, c);
-    gl.uniform1f(this.uniforms.uEmission, m.emission || 0);
-    gl.uniform1f(this.uniforms.uCelestial, m.moonSurface ? 1 : m.sky ? 2 : 0);
-    gl.uniform3fv(this.uniforms.uSkySun, m.skySun || [0, 1, 0]);
-    gl.uniform1f(this.uniforms.uRoughness, m.roughness ?? (c[3] < 0.5 ? 1 : 0.76));
-    gl.bindBuffer(gl.ARRAY_BUFFER, g.positions);
-    gl.vertexAttribPointer(this.position, 3, gl.FLOAT, false, 0, 0);
-    gl.bindBuffer(gl.ARRAY_BUFFER, g.normals);
-    gl.vertexAttribPointer(this.normal, 3, gl.FLOAT, false, 0, 0);
+    set('color', c.join(), () => gl.uniform4fv(this.uniforms.uColor, c));
+    set('emission', m.emission || 0, () => gl.uniform1f(this.uniforms.uEmission, m.emission || 0));
+    const celestial = m.moonSurface ? 1 : m.sky ? 2 : 0;
+    set('celestial', celestial, () => gl.uniform1f(this.uniforms.uCelestial, celestial));
+    const skySun = m.skySun || DEFAULT_SKY_SUN;
+    set('skySun', skySun.join(), () => gl.uniform3fv(this.uniforms.uSkySun, skySun));
+    const surface = surfaceForMesh(m);
+    set('surface', surface, () => gl.uniform1f(this.uniforms.uSurface, surface));
+    set('size', m.size.join(), () => gl.uniform3fv(this.uniforms.uSize, m.size));
+    const roughness =
+      m.roughness ??
+      (surface === SURFACE.water
+        ? 0.12
+        : surface === SURFACE.glass
+          ? 0.16
+          : surface === SURFACE.steel
+            ? 0.3
+            : surface === SURFACE.grass
+              ? 0.96
+              : 0.76);
+    set('roughness', roughness, () => gl.uniform1f(this.uniforms.uRoughness, roughness));
+    set('geometry', key, () => {
+      gl.bindBuffer(gl.ARRAY_BUFFER, g.positions);
+      gl.vertexAttribPointer(this.position, 3, gl.FLOAT, false, 0, 0);
+      gl.bindBuffer(gl.ARRAY_BUFFER, g.normals);
+      gl.vertexAttribPointer(this.normal, 3, gl.FLOAT, false, 0, 0);
+    });
     gl.drawArrays(gl.TRIANGLES, 0, g.count);
   }
   dispose() {

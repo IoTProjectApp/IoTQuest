@@ -1,7 +1,8 @@
+import { Runtime } from '../public/runtime.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createWorldModel } from '../public/world-model.js';
-import { World3D } from '../public/world3d.js';
+import { World3D, frustumTest } from '../public/world3d.js';
 import { locations } from '../public/locations.js';
 import {
   multiply,
@@ -16,7 +17,7 @@ import {
   findFree,
   deviceState,
 } from '../public/world-math.js';
-import { defaults, baseEnv } from '../public/missions.js';
+import { defaults, baseEnv, missions, program } from '../public/missions.js';
 const areas = [
   ['Bedroom', 19, 17],
   ['Bathroom', 30, 15],
@@ -96,6 +97,35 @@ test('world uses real 3D furniture, plants and articulated meshes in all six roo
     assert.ok(o.size.every((v) => Number.isFinite(v) && v > 0));
   }
 });
+test('frustum culling skips objects outside the view, including the mirrored view', () => {
+  const MIRROR = new Float32Array([-1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]),
+    view = lookAt([0, 5, 10], [0, 0, 0]),
+    projection = perspective(0.78, 1.6, 0.1, 160);
+  const straight = multiply(projection, view);
+  for (const matrix of [straight, multiply(projection, multiply(view, MIRROR))]) {
+    const visible = frustumTest(matrix);
+    assert.equal(visible({ pos: [0, 0, 0], size: [1, 1, 1] }), true, 'At the target');
+    assert.equal(visible({ pos: [100, 0, 0], size: [1, 1, 1] }), false, 'Far to the side');
+    assert.equal(visible({ pos: [0, 0, 40], size: [1, 1, 1] }), false, 'Behind the camera');
+    assert.equal(visible({ pos: [0, 0, -400], size: [1, 1, 1] }), false, 'Past the far plane');
+    assert.equal(visible({ pos: [30, 0, 0], size: [60, 1, 1] }), true, 'Large object reaching in');
+    assert.equal(visible({ pos: [0, 0, 0] }), true, 'Default size');
+    const level = lookAt([0, 0, 10], [0, 0, 0]),
+      sharp = frustumTest(
+        multiply(projection, matrix === straight ? level : multiply(level, MIRROR)),
+        900 / 2 / Math.tan(0.39),
+      );
+    assert.equal(sharp({ pos: [0, 0, -100], size: [0.05, 0.05, 0.05] }), false, 'Sub-pixel');
+    assert.equal(sharp({ pos: [0, 0, -100], size: [2, 2, 2] }), true, 'Large at distance');
+    assert.equal(sharp({ pos: [0, 0, 0], size: [0.05, 0.05, 0.05] }), true, 'Small but near');
+    for (const flag of ['sky', 'emission'])
+      assert.equal(
+        sharp({ pos: [0, 0, -100], size: [0.05, 0.05, 0.05], [flag]: 1 }),
+        true,
+        flag + ' is always drawn',
+      );
+  }
+});
 test('perspective projection places camera target at screen centre and clips points behind the camera', () => {
   const m = multiply(perspective(Math.PI / 3, 2), lookAt([10, 10, 10], [0, 0, 0])),
     p = projectPoint(m, [0, 0, 0], 1000, 500);
@@ -172,7 +202,7 @@ test('reset camera retains the selected room and restores its close-up framing',
   assert.deepEqual(world.target, [expected[0], 0.75, expected[2]]);
   world.resetCamera();
   assert.equal(world.overview, true);
-  assert.equal(world.distance, 35);
+  assert.equal(world.distance, 130);
 });
 test('Sky view uses an eye-height camera and can centre the actual moon in mirrored homes', () => {
   const { world, state } = renderer();
@@ -715,4 +745,168 @@ test('chat started before a destination renders uses actor world positions', () 
   const expected = [actor.x, actor.z];
   world.render(2, 0.016);
   assert.deepEqual(actor.talkPosition, expected);
+});
+
+test('community buildings and road users render in 3D on the world simulation clock', () => {
+  const { world, state } = renderer();
+  state.simClockMs = 0;
+  state.skyStartHour = 8;
+  world.showCommunity();
+  for (let i = 0; i < 60; i++) world.render(i * 0.016, 0.016);
+  const c = world.model.community;
+  assert.ok(c.objects.length > 300);
+  assert.ok(world.model.colliders.some((b) => b.community));
+  assert.equal(world.target[0], (c.origin.x + 44) / 2);
+  const factory = c.sim.map.buildings.find((b) => b.type === 'factory');
+  assert.ok(world.project([c.origin.x + factory.x, 4, factory.z]).visible);
+  for (let i = 1; i <= 100; i++) {
+    state.simClockMs = i * 200;
+    world.render(i * 0.2, 0.016);
+  }
+  assert.ok(c.sim.vehicles.length > 0);
+  assert.ok(c.vehicles.some((v) => v.body.opacity === 1));
+  assert.ok(c.people.some((p) => p.body.opacity === 1));
+  assert.ok(Math.abs(c.sim.time - 20) < 1e-6);
+  const held = c.vehicles.map((v) => [...v.body.pos]);
+  state.paused = true;
+  state.simClockMs += 1000;
+  world.render(21, 0.016);
+  assert.deepEqual(
+    c.vehicles.map((v) => v.body.pos),
+    held,
+  );
+  assert.ok(Math.abs(c.sim.time - 20) < 1e-6);
+});
+test('factory controller keeps driving 3D machinery', () => {
+  const { world, state } = renderer();
+  state.simClockMs = 0;
+  world.showCommunity();
+  world.render(0, 0.016);
+  const c = world.model.community;
+  c.sim.density = c.sim.pedestrianDensity = 0;
+  c.sim.startController(
+    'void setup(){ pinMode(7,OUTPUT); pinMode(3,OUTPUT); } void loop(){ digitalWrite(7,1); digitalWrite(3,1); delay(200); }',
+    'cpp',
+  );
+  const before = c.machinery.map((m) => m.mesh.pos[0]);
+  for (let i = 1; i <= 400; i++) {
+    state.simClockMs = i * 200;
+    world.render(i * 0.2, 0.016);
+  }
+  assert.equal(c.sim.outputs[7], 1);
+  assert.notDeepEqual(
+    c.machinery.map((m) => m.mesh.pos[0]),
+    before,
+  );
+  assert.ok(c.lights.every((l) => l.emission === 1));
+  world.setRegion('marrakech');
+  assert.equal(world.model.community.sim.map.handedness, 1);
+  assert.equal(world.model.community.sim.controller, undefined);
+});
+
+test('normal World view includes the original home and factory', () => {
+  const { world, state } = renderer();
+  const c = world.model.community;
+  state.simClockMs = 0;
+  c.sim.density = c.sim.pedestrianDensity = 0;
+  world.setView('world', null);
+  for (let i = 0; i < 60; i++) world.render(i * 0.016, 0.016);
+  const home = c.sim.map.buildings.find((b) => b.type === 'home'),
+    factory = c.sim.map.buildings.find((b) => b.type === 'factory');
+  assert.ok(world.project([home.x + c.origin.x, 2, home.z]).visible);
+  assert.ok(world.project([factory.x + c.origin.x, 4, factory.z]).visible);
+  assert.notDeepEqual(world.move(state.player, 'up', 1), state.player, 'Property walking works');
+});
+
+test('native factory components use normal GPIO wiring and the main controller drives real machinery', () => {
+  const { world, state } = renderer(),
+    c = world.model.community;
+  const q = missions.find((m) => m.communityQuest && m.communityType === 'factory');
+  const a = c.areas.find((a) => a[0] === q.area);
+  state.devices = defaults(q.ids, 'ESP32').map((d) => ({ ...d, area: q.area }));
+  state.areas = [...areas, ...c.areas];
+  state.communityMission = true;
+  state.running = true;
+  state.simClockMs = 0;
+  state.env = { ...state.env, temp: 25, vibration: 20 };
+  world.focusCommunityArea(q.area);
+  state.player = world.findFree({ x: a[1], y: a[2] + 5 });
+  const runtime = new Runtime(program(q, 'cpp', state.devices, true), 'cpp', state.devices);
+  state.outputs = runtime.step(state.env).outputs;
+  world.render(0, 0.016);
+  assert.equal(c.sim.outputs[7], 1);
+  assert.equal(world.deviceObjects.length, 4);
+  for (const device of world.deviceObjects) {
+    assert.ok(device.x > 40);
+    assert.equal(collides(device.x, device.z, world.model.colliders, 0.3), false);
+  }
+  const moved = world.move(state.player, 'left', 1);
+  assert.ok(toWorld(moved)[0] > 40);
+  state.env.temp = 45;
+  state.outputs = runtime.step(state.env).outputs;
+  state.simClockMs = 200;
+  world.render(0.2, 0.016);
+  assert.equal(c.sim.outputs[7], 0);
+  assert.equal(c.warning.emission, 1);
+});
+test('native road controller rejects conflicting GPIO phase proposals in the world', () => {
+  const { world, state } = renderer(),
+    q = missions.find((m) => m.communityQuest && m.ids.includes('trafficEW'));
+  state.devices = defaults(q.ids, 'ESP32').map((d) => ({ ...d, area: q.area }));
+  state.areas = [...areas, ...world.model.community.areas];
+  state.communityMission = true;
+  state.running = true;
+  state.outputs = Object.fromEntries(state.devices.filter((d) => d.output).map((d) => [d.pin, 1]));
+  world.render(0, 0.016);
+  assert.match(world.model.community.sim.signals.messages.at(-1), /Conflicting/);
+});
+
+test('clicking a rendered building selects it while orbit drags and cancellation do not', () => {
+  const { world, canvas } = renderer(),
+    selected = [];
+  world.onBuildingSelect = (type) => selected.push(type);
+  canvas.setPointerCapture = () => {};
+  canvas.focus = () => {};
+  canvas.getBoundingClientRect = () => ({ left: 20, top: 40 });
+  world.render(0, 0.016);
+  const b = world.model.community.sim.map.buildings.find((b) => b.type === 'factory');
+  const p = world.project([world.model.community.origin.x + b.x, 3, b.z]);
+  assert.equal(world.pickCommunityBuilding(p.x, p.y), 'factory');
+  const e = { button: 0, pointerId: 1, clientX: p.x + 20, clientY: p.y + 40 };
+  canvas.listeners.get('pointerdown')(e);
+  canvas.listeners.get('pointerup')(e);
+  assert.deepEqual(selected, ['factory']);
+  canvas.listeners.get('pointerdown')(e);
+  canvas.listeners.get('pointermove')({ ...e, clientX: e.clientX + 25 });
+  canvas.listeners.get('pointerup')(e);
+  canvas.listeners.get('pointerdown')(e);
+  canvas.listeners.get('pointercancel')(e);
+  canvas.listeners.get('pointerup')(e);
+  assert.deepEqual(selected, ['factory']);
+  assert.equal(world.pickCommunityBuilding(0, 0), null);
+});
+
+test('edge-on projected building faces cannot select an unrelated point on their extended line', () => {
+  const { world } = renderer();
+  world.render(0, 0.016);
+  world.project = (p) => ({ x: p[0], y: 100, visible: true });
+  assert.equal(world.pickCommunityBuilding(-1000, 100), null);
+});
+
+test('procedural water and reflections share the simulation clock and freeze on pause or reduced motion', () => {
+  const { world, state } = renderer();
+  state.simClockMs = 1000;
+  world.render(1, 0.016);
+  assert.equal(world.surfaceTime, 1);
+  state.paused = true;
+  state.simClockMs = 9000;
+  world.render(9, 0.016);
+  assert.equal(world.surfaceTime, 1);
+  state.paused = false;
+  state.reduced = true;
+  world.render(9, 0.016);
+  assert.equal(world.surfaceTime, 1);
+  state.reduced = false;
+  world.render(9, 0.016);
+  assert.equal(world.surfaceTime, 9);
 });

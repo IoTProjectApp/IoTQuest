@@ -592,6 +592,50 @@ test('travel globe pauses while inactive, falls back on context loss, rebuilds o
     frames.restore();
   }
 });
+test('a deliberately released globe context comes back as the globe without a fallback notice', async () => {
+  const { TravelGlobe } = await import('../public/globe.js');
+  const frames = animationFrames(),
+    ctx2d = new Proxy({}, { get: () => () => {} }),
+    oldDocument = globalThis.document,
+    gl = fakeGL(),
+    canvas = eventCanvas(
+      new Proxy(gl, {
+        get: (obj, key) =>
+          key === 'getExtension'
+            ? () => ({
+                loseContext: () => canvas.fire('webglcontextlost'),
+                restoreContext: () => canvas.fire('webglcontextrestored'),
+              })
+            : obj[key],
+      }),
+    ),
+    map = eventCanvas(ctx2d),
+    errors = [];
+  globalThis.document = { createElement: () => ({ getContext: () => ctx2d }) };
+  let restored = 0;
+  try {
+    const globe = new TravelGlobe(canvas, map, [], [{ id: 'a', latitude: 5, longitude: 5 }], {
+      onError: (m) => errors.push(m),
+      onRestore: () => restored++,
+    });
+    assert.equal(globe.releaseGraphics(), true);
+    assert.equal(globe.contextLost, true);
+    assert.equal(globe.restoreGraphics(), true);
+    assert.equal(globe.contextLost, false);
+    assert.equal(globe.mode, 'globe');
+    assert.deepEqual(errors, []);
+    assert.equal(restored, 0);
+    // A genuine loss afterwards still falls back and announces the recovery.
+    canvas.fire('webglcontextlost');
+    canvas.fire('webglcontextrestored');
+    assert.equal(errors.length, 1);
+    assert.equal(restored, 1);
+    globe.dispose();
+  } finally {
+    globalThis.document = oldDocument;
+    frames.restore();
+  }
+});
 test('clouds appear with cloud cover, turn grey in storms and never cross the property', async () => {
   const { addClouds, updateClouds } = await import('../public/clouds.js');
   const { createWorldModel } = await import('../public/world-model.js');

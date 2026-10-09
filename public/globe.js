@@ -103,6 +103,7 @@ export class TravelGlobe {
     this.frameId = null;
     this.idleTimer = null;
     this.contextLost = false;
+    this.deliberateLoss = false;
     this.disposed = false;
     this.yaw = radians(95);
     this.pitch = 0.25;
@@ -277,10 +278,13 @@ export class TravelGlobe {
       );
     });
     on(c, 'webglcontextrestored', () => {
+      // A deliberate suspend (releaseGraphics) never fell back, so it comes back quietly.
+      const deliberate = this.deliberateLoss;
+      this.deliberateLoss = false;
       try {
         this.init();
         this.contextLost = false;
-        this.onRestore?.();
+        if (!deliberate) this.onRestore?.();
         this.wake();
       } catch {
         this.onError?.('3D graphics unavailable. The accessible 2D atlas is ready.');
@@ -353,6 +357,7 @@ export class TravelGlobe {
     if (!this.gl || this.contextLost || typeof this.contextRecovery?.loseContext !== 'function')
       return false;
     this.graphicsSuspended = true;
+    this.deliberateLoss = true;
     this.contextLost = true;
     this.contextRecovery.loseContext();
     return true;

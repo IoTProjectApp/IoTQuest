@@ -350,6 +350,10 @@ export function createWorldModel(variant = {}) {
   dynamic.gateRight.anchor = [1.5, 0, 11.55];
   dynamic.gateCollider = { x: 0, z: 11.55, w: 3, d: 0.15, disabled: false };
   colliders.push(dynamic.gateCollider);
+  // The front fence either side of the gate, out to the edge of the walkable garden (x ±14, kept
+  // inside the tank so the community district's placement does not move).
+  const fenceDepth = { stone: 0.45, hedge: 1.2 }[variant.fence] || 0.15;
+  for (const side of [-1, 1]) colliders.push({ x: side * 7.75, z: 11.55, w: 12.5, d: fenceDepth });
   box(1.5, 0.72, 11.55, 0.17, 1.45, 0.17, '#9b805d');
   box(-1.5, 0.72, 11.55, 0.17, 1.45, 0.17, '#9b805d');
   // Trees, hedges, rocks and flowers around the island.

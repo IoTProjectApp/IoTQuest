@@ -671,7 +671,11 @@ export class World3D {
     this.frameId = requestAnimationFrame(this.frame);
   }
   syncDevices(state) {
-    const signature = JSON.stringify(state.devices.map((d) => [d.id, d.area, d.pin]));
+    // Upgrades add colliders, so devices find their spots again when the upgrades change.
+    const signature = JSON.stringify([
+      this.upgradeSignature,
+      state.devices.map((d) => [d.id, d.area, d.pin]),
+    ]);
     if (signature === this.deviceSignature) return;
     this.deviceSignature = signature;
     const kept = this.model.objects.filter((o) => !o.device);
@@ -735,7 +739,12 @@ export class World3D {
     this.upgradeSignature = signature;
     const kept = this.model.objects.filter((o) => !o.upgrade);
     this.model.objects.splice(0, this.model.objects.length, ...kept);
+    // Installed upgrades are solid; their colliders go with them when they are removed.
+    const colliders = this.model.colliders.filter((c) => !c.upgrade);
+    this.model.colliders.splice(0, this.model.colliders.length, ...colliders);
+    const solid = (x, z, w, d) => this.model.colliders.push({ x, z, w, d, upgrade: true });
     if (ids.includes('solar')) {
+      solid(-4, 8.5, 2.2, 1.2);
       this.model.box(-4, 0.4, 8.5, 0.12, 0.8, 0.12, '#7e8c81', { upgrade: true });
       this.model.box(-4, 0.88, 8.5, 2.2, 0.12, 1.25, '#497c9a', {
         rotation: [-0.3, 0, 0],
@@ -747,10 +756,14 @@ export class World3D {
           upgrade: true,
         });
     }
-    if (ids.includes('battery'))
+    if (ids.includes('battery')) {
       this.model.box(-2.4, 0.35, 8.5, 0.6, 0.65, 0.45, '#94a989', { upgrade: true });
-    if (ids.includes('rainTank'))
+      solid(-2.4, 8.5, 0.6, 0.45);
+    }
+    if (ids.includes('rainTank')) {
       this.model.cylinder(11.9, 1.08, -3.6, 0.75, 2, '#83acb7', { upgrade: true });
+      solid(11.9, -3.6, 1.5, 1.5);
+    }
   }
   animate(state, t, dt) {
     // The community sim steps 20 times per simulated second, so a large jump (returning to a
@@ -772,8 +785,8 @@ export class World3D {
       state.simClockMs !== undefined
         ? state.simClockMs / 1000
         : this.visualClock * (state.speed || 1);
-    this.syncDevices(state);
     this.syncUpgrades(state);
+    this.syncDevices(state);
     const { env, outputs, player, reduced, color: toolColor, appearance } = state;
     const p = toWorld(player),
       moved = this.lastPlayer

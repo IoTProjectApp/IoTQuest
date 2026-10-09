@@ -123,6 +123,8 @@ export function resolveMove(
     dz = Math.cos(yaw) * f - Math.sin(yaw) * r;
   let nx = clamp(x + dx, bounds.minX, bounds.maxX),
     nz = clamp(z + dz, bounds.minZ, bounds.maxZ);
+  // Someone already inside an obstacle (an upgrade installed where they stand) can walk out.
+  if (collides(x, z, colliders)) return fromWorld(nx, nz);
   if (collides(nx, z, colliders)) nx = x;
   if (collides(nx, nz, colliders)) nz = z;
   return fromWorld(nx, nz);

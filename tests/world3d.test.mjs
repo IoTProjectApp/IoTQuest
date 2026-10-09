@@ -175,6 +175,49 @@ test('walking cannot leave the property', () => {
   for (let i = 0; i < 500; i++) p = resolveMove(p, 'down', 1, 0, []);
   assert.ok(p.y <= 97);
 });
+test('the front fence stops walking at every destination; only the open gate lets the technician through', async () => {
+  const { createRegionalModel } = await import('../public/regions.js');
+  const walk = (x, colliders) => {
+    let p = fromWorld(x, 9.5);
+    for (let i = 0; i < 40; i++) p = resolveMove(p, 'down', 0.5, 0, colliders);
+    return toWorld(p)[2];
+  };
+  for (const id of ['legacy', ...locations.map((l) => l.id)]) {
+    const m = createRegionalModel(id);
+    for (const x of [-13, -8, -2.2, 2.2, 6, 13.9])
+      assert.ok(walk(x, m.colliders) < 11.55, id + ' fence at x ' + x);
+    assert.ok(walk(0, m.colliders) < 11.55, id + ' closed gate');
+    m.dynamic.gateCollider.disabled = true;
+    assert.ok(walk(0, m.colliders) > 11.9, id + ' open gate');
+  }
+});
+test('installed upgrades are solid and stop being solid once removed', () => {
+  const { world, state } = renderer();
+  const blocked = (x, z) => collides(x, z, world.model.colliders);
+  state.upgrades = ['solar', 'battery', 'rainTank'];
+  world.render(1, 0.016);
+  assert.ok(blocked(-4, 8.5) && blocked(-2.4, 8.5) && blocked(11.9, -3.6));
+  // A technician standing where an upgrade appears can still walk out of it.
+  const out = resolveMove(fromWorld(-4, 8.5), 'down', 4, 0, world.model.colliders);
+  assert.ok(toWorld(out)[2] > 8.5);
+  state.upgrades = ['battery'];
+  world.render(2, 0.016);
+  assert.ok(!blocked(-4, 8.5) && blocked(-2.4, 8.5) && !blocked(11.9, -3.6));
+  state.upgrades = [];
+  world.render(3, 0.016);
+  assert.equal(world.model.colliders.filter((c) => c.upgrade).length, 0);
+});
+test('devices find new spots clear of a newly installed rain tank', () => {
+  const { world, state } = renderer();
+  state.devices = defaults(['pump', 'valve', 'level', 'soil'], 'ESP32').map((d) => ({
+    ...d,
+    area: 'Water tank',
+  }));
+  state.upgrades = ['rainTank'];
+  world.render(1, 0.016);
+  for (const { x, z } of world.deviceObjects)
+    assert.equal(collides(x, z, world.model.colliders, 0.3), false);
+});
 test('3D device states come from GPIO outputs, not mission success', () => {
   const d = { id: 'pump', pin: 26 };
   assert.equal(deviceState(d, { 26: 1 }, { ...baseEnv, tank: 80 }).flow, true);

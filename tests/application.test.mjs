@@ -14,7 +14,7 @@ import {
 } from '../public/conversations.js';
 import { residentsForSections, createGreetingTracker } from '../public/section-residents.js';
 import { toWorld, fromWorld } from '../public/world-math.js';
-import { ADC_SIGNALS, ADC_SCALE } from '../public/signals.js';
+import { ADC_SIGNALS, ADC_SCALE, outputLevel } from '../public/signals.js';
 import { checkPredictions } from '../public/weather-quests.js';
 import { neededNow, situationReason } from '../public/situation.js';
 import { conversationHTML } from '../public/conversation-view.js';
@@ -391,6 +391,7 @@ function harness(
     understandingScore,
     ADC_SIGNALS,
     ADC_SCALE,
+    outputLevel,
     missionBudget,
     checkPredictions,
     neededNow,

@@ -20,7 +20,7 @@ import { localSkyDate, DEFAULT_OBSERVER } from './astronomy.js';
 import { Runtime } from './runtime.js';
 import { World3D } from './world3d.js';
 import { toWorld, fromWorld } from './world-math.js';
-import { ADC_SIGNALS, ADC_SCALE } from './signals.js';
+import { ADC_SIGNALS, ADC_SCALE, outputLevel } from './signals.js';
 import { locations, locationById, adaptMissions, progressForLocation } from './locations.js';
 import { WeatherService, advanceEnvironment } from './weather.js';
 import { advancedMenu } from './advanced-tools.js';
@@ -170,6 +170,8 @@ let activeFault = null,
   selectedDevice = null,
   lastInputs = {},
   outputKinds = {},
+  // The full scale of each output's last write (1 digital, 255 analogWrite, 1023 duty, ...).
+  outputScales = {},
   inFlight = false,
   requestEnv = null,
   inspectionVariables = {};
@@ -300,7 +302,9 @@ const project = () => {
   return projects[key];
 };
 const planned = () => defaults(mission().ids.length ? mission().ids : ['ldr', 'led'], state.board);
-const code = () => project().code[state.language] ?? program(mission(), state.language, planned());
+const code = () =>
+  project().code[state.language] ??
+  program(mission(), state.language, planned(), false, state.board);
 let saveTimer = null;
 // Coalesce saves during rapid input such as typing; flushed when the page is hidden.
 function saveSoon() {
@@ -1564,7 +1568,13 @@ function renderCode() {
   $('resetCode').onclick = () => {
     if (!canEdit('Programmer') || blockedByHunt('Reset')) return;
     stop(false);
-    project().code[state.language] = program(mission(), state.language, planned());
+    project().code[state.language] = program(
+      mission(),
+      state.language,
+      planned(),
+      false,
+      state.board,
+    );
     // Start the Guide again from the first unfinished step.
     delete coachStep[state.activeLocation + ':' + activeKey() + ':' + state.language];
     markEdited();
@@ -1609,6 +1619,7 @@ function recordPlot(data) {
         t: data.time,
         inputs: data.inputs || {},
         outputs: data.outputs || {},
+        scales: data.outputScales || {},
         lines: fresh > 0 ? data.logs.slice(-fresh) : [],
       },
     ];
@@ -1771,7 +1782,7 @@ function loadExample() {
     ? activeFault.solution(state.language, ds)
     : activeFault?.source
       ? activeFault.source(state.language, ds, true)
-      : program(mission(), state.language, ds, true);
+      : program(mission(), state.language, ds, true, state.board);
   stop(false);
   markEdited();
   renderCode();
@@ -2124,6 +2135,7 @@ function run() {
     simTime = data.time;
     lastInputs = data.inputs || {};
     outputKinds = data.outputKinds || {};
+    outputScales = data.outputScales || {};
     inspectionVariables = data.variables || {};
     if (data.env) {
       const changes = requestEnv
@@ -2146,9 +2158,11 @@ function run() {
         state.env,
         0.2,
         lab.upgrades,
+        outputScales,
       );
       state.env = withBoard(
         advanceEnvironment(state.env, project().devices, outputs, 0.2, {
+          scales: outputScales,
           mode: state.weatherMode,
           weather: state.weatherByLocation[state.activeLocation],
           location: currentLocation(),
@@ -2265,6 +2279,7 @@ function stop(notify = false) {
   outputs = {};
   lastInputs = {};
   outputKinds = {};
+  outputScales = {};
   sendBoardOutputs({});
   renderEffects();
   renderSteps();
@@ -2475,14 +2490,14 @@ function renderEffects() {
           ? 'background:radial-gradient(circle,' + esc(state.color) + 'bb,transparent 68%);'
           : '') +
         'opacity:' +
-        (outputs[d.pin] === 1 ? 1 : Math.min(1, outputs[d.pin] / 255)) +
+        outputLevel(outputs[d.pin], outputScales[d.pin]) +
         '"></div>';
     if (d.id === 'fan')
       effect =
         '<span class="fan-rotor ' +
         (on ? 'spinning' : '') +
         '" style="animation-duration:' +
-        Math.max(0.15, 1 / Math.max(1, outputs[d.pin] / 50)) +
+        Math.max(0.15, 1 / Math.max(1, 5.1 * outputLevel(outputs[d.pin], outputScales[d.pin]))) +
         's">✣</span>';
     if (['pump', 'valve'].includes(d.id) && on && state.env.tank > 0)
       effect = '<div class="water-flow"></div>';
@@ -2602,6 +2617,8 @@ function testSolution() {
               result.outputs,
               { ...baseEnv, ...env },
               0.2,
+              undefined,
+              result.outputScales,
             );
         }
         let actual = m.ids
@@ -2629,7 +2646,15 @@ function testSolution() {
         const pump = ds.find((d) => d.id === 'pump');
         for (let i = 0; i < 220; i++) {
           let r = dynamic.step(env);
-          assessment = updateResources(assessment, ds, r.outputs, env, 0.2);
+          assessment = updateResources(
+            assessment,
+            ds,
+            r.outputs,
+            env,
+            0.2,
+            undefined,
+            r.outputScales,
+          );
           let on = (r.outputs[pump.pin] || 0) > 0;
           if (i === 0) first = on;
           if (on && env.tank > 0) {
@@ -2897,6 +2922,7 @@ function debugChallenge() {
     state.language,
     project().devices.length ? project().devices : planned(),
     true,
+    state.board,
   ).replace(
     state.language === 'cpp' ? 'HIGH' : 'value(1)',
     state.language === 'cpp' ? 'LOW' : 'value(0)',
@@ -3174,7 +3200,7 @@ $('characterBtn').onclick = () => {
 function languageGuide() {
   modal(
     'Your programming field guide',
-    '<div class="guide"><h3>Two languages. One connected world.</h3><p>Arduino runs <code>setup()</code> once and <code>loop()</code> every simulation tick. MicroPython creates its pin objects once, then runs a <code>while True:</code> loop. Switch languages to load its starter without losing devices or wires.</p><h3>Supported language subset</h3><p>Numbers, booleans, strings, variables, arithmetic (+ − * / %), comparisons, logical operators, assignments, if/else (and Python elif), while loops, functions with parameters and return values. Use <code>delay(ms)</code> or <code>time.sleep_ms(ms)</code> to pause until the next tick. Integer C variables drop decimals, so <code>7 / 2</code> is 3; Python has <code>//</code> and <code>global</code>. Blocks use braces in Arduino and exactly four spaces per level in Python.</p><p>Arduino: <code>pinMode</code>, <code>digitalRead</code>, <code>digitalWrite</code>, <code>analogRead</code>, <code>analogWrite</code>, <code>servoWrite</code>, <code>millis</code>, <code>delay</code>, <code>Serial.begin/print/println</code> (<code>print</code> continues a line; <code>println</code> ends it). Print <code>label:value</code> pairs, e.g. <code>Serial.print("light:"); Serial.println(light);</code>, to graph them in the Serial plotter.</p><p>MicroPython: <code>Pin</code>, <code>ADC</code>, <code>PWM</code>; <code>value</code>, <code>on/off</code>, <code>read</code>, <code>read_u16</code>, <code>duty/duty_u16</code>, <code>freq</code>; <code>time.ticks_ms</code>, <code>time.sleep/sleep_ms</code>, <code>print</code>. Helpers: <code>abs/min/max/int</code>.</p><h3>Virtual device readings</h3><p>Light, moisture, rain, tank and potentiometer: 0–4095, or 0–65520 with <code>read_u16()</code>. Temperature is a calibrated Celsius channel; distance is centimetres. These virtual channels replace physical sensor libraries for beginner exercises. <code>digitalWrite</code> values are 0/1. PWM uses 0–255 or 0–65535; <code>servoWrite</code> uses 0–180 degrees.</p><h3>Timing & sandbox limits</h3><p>One tick is 200 ms at 1× speed. A delay suspends the program until the next tick and resumes on the following line; its argument does not schedule a real sleep. Use <code>millis()</code> or <code>time.ticks_ms()</code> for accurate simulated timing. Every tick has a 20,000-operation budget and runs in an isolated worker. Infinite loops produce a useful error.</p><h3>Unsupported features</h3><p>This is a teaching interpreter, not a complete compiler. Arrays, lists, dictionaries, classes, pointers, for loops, comprehensions, external libraries, #include, hardware interrupts, network access, dynamic code, and file access are unsupported. Unsupported syntax stops the program with an error. Motors and pumps use virtual driver modules.</p></div>',
+    '<div class="guide"><h3>Two languages. One connected world.</h3><p>Arduino runs <code>setup()</code> once and <code>loop()</code> every simulation tick. MicroPython creates its pin objects once, then runs a <code>while True:</code> loop. Switch languages to load its starter without losing devices or wires.</p><h3>Supported language subset</h3><p>Numbers (including hex such as <code>0xFF</code> and <code>1000UL</code>), booleans, strings, variables, arithmetic (+ − * / %), bit operators (&amp; | ^ ~ &lt;&lt; &gt;&gt;), comparisons, logical operators, assignments including <code>+=</code>, <code>-=</code>, <code>*=</code>, <code>/=</code> and <code>%=</code>, if/else (and Python elif), while loops, functions with parameters and return values. Use <code>delay(ms)</code> or <code>time.sleep_ms(ms)</code> to pause until the next tick. Integer C variables drop decimals, so <code>7 / 2</code> is 3, and whole numbers wrap at 32 bits like on the board; Python has <code>//</code> and <code>global</code>. Blocks use braces in Arduino and exactly four spaces per level in Python.</p><p>Arduino: <code>pinMode</code>, <code>digitalRead</code>, <code>digitalWrite</code>, <code>analogRead</code>, <code>analogWrite</code>, <code>servoWrite</code>, <code>millis</code>, <code>delay</code>, <code>map</code>, <code>constrain</code>, <code>abs/min/max</code>, <code>Serial.begin/print/println</code> (<code>print</code> continues a line; <code>println</code> ends it; decimals print with 2 places, or <code>println(x, 3)</code> for 3). Print <code>label:value</code> pairs, e.g. <code>Serial.print("light:"); Serial.println(light);</code>, to graph them in the Serial plotter.</p><p>MicroPython: <code>Pin</code>, <code>ADC</code>, <code>PWM</code>; <code>value</code>, <code>on/off</code>, <code>read</code>, <code>read_u16</code>, <code>duty/duty_u16</code>, <code>freq</code>; <code>time.ticks_ms</code>, <code>time.ticks_diff</code>, <code>time.sleep/sleep_ms</code>, <code>print</code>. Helpers: <code>abs/min/max/int/float/round/str</code>. On the Raspberry Pi Pico, analogue pins only have <code>read_u16()</code> (use <code>read_u16() &gt;&gt; 4</code> for 0–4095) and PWM only <code>duty_u16()</code>; <code>read()</code> and <code>duty()</code> are ESP32 only.</p><h3>Virtual device readings</h3><p>Light, moisture, rain, tank and potentiometer: 0–4095, or 0–65520 with <code>read_u16()</code>. Temperature is a calibrated Celsius channel; distance is centimetres. These virtual channels replace physical sensor libraries for beginner exercises. <code>digitalWrite</code> values are 0/1. PWM uses 0–255 (<code>analogWrite</code>), 0–1023 (<code>duty</code>) or 0–65535 (<code>duty_u16</code>); <code>servoWrite</code> uses 0–180 degrees.</p><h3>Timing & sandbox limits</h3><p>One tick is 200 ms at 1× speed. A delay suspends the program until the next tick and resumes on the following line; its argument does not schedule a real sleep. Use <code>millis()</code> or <code>time.ticks_ms()</code> for accurate simulated timing. Every tick has a 20,000-operation budget and runs in an isolated worker. Infinite loops produce a useful error.</p><h3>Unsupported features</h3><p>This is a teaching interpreter, not a complete compiler. Arrays, lists, dictionaries, classes, pointers, for loops, comprehensions, external libraries, #include, hardware interrupts, network access, dynamic code, and file access are unsupported. Unsupported syntax stops the program with an error. Motors and pumps use virtual driver modules.</p></div>',
   );
 }
 function help() {

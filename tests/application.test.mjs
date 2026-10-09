@@ -623,6 +623,22 @@ test("changing controller keeps each board's code and challenges keep their prog
   const devices = defaults(unsafe.ids, 'Raspberry Pi Pico');
   assert.equal(h.api.code(), unsafe.source(h.api.state.language, devices));
 });
+test('pausing one quest does not leave another quest or a reload frozen', () => {
+  const h = harness();
+  installAndWire(h, 0);
+  h.api.setClockSpeed(0);
+  assert.equal(h.api.labState().paused, true);
+  h.api.setClockSpeed(1);
+  h.api.selectMission(1);
+  h.api.labState().paused = true; // saved by an older version
+  h.api.selectMission(0);
+  h.api.selectMission(1);
+  assert.equal(h.api.labState().paused, false, 'The clock runs at 1×');
+  const reloaded = harness(JSON.parse(h.storage.get('iotquest-v1')));
+  reloaded.api.state.travelScreen = false;
+  reloaded.api.renderMission();
+  assert.equal(reloaded.api.labState().paused, false);
+});
 test('movement changes technician coordinates and stays inside world bounds', () => {
   const h = harness();
   h.api.resumeLegacy();

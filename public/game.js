@@ -405,7 +405,29 @@ function markEdited({ typing = false } = {}) {
   if (typing) saveSoon();
   else save();
 }
+// Badge icons repeat in order once every icon has been used (there are more quests than icons).
+const BADGE_ICONS = [
+  '☾',
+  '⌂',
+  '♧',
+  '❄',
+  '◈',
+  '≋',
+  '☀',
+  '✧',
+  '⚑',
+  '✦',
+  '♨',
+  '☂',
+  '⚙',
+  '✪',
+  '❖',
+  '☘',
+];
 function renderMission() {
+  // Pausing belongs to the clock the student sees (speed 0, or a program held in the debugger),
+  // not to each quest's saved lab: otherwise a quest paused earlier stays frozen at 1×.
+  labState().paused = speed === 0 || (!!state.debugPaused && running);
   syncSkyControls();
   let m = mission();
   $('missionTitle').textContent = m.title;
@@ -2994,7 +3016,7 @@ function progress() {
             '<div class="badge ' +
             (currentCompletions()[missionKey(i)] ? '' : 'locked') +
             '"><span class="badge-icon">' +
-            ['☾', '⌂', '♧', '❄', '◈', '≋', '☀', '✧'][i] +
+            BADGE_ICONS[i % BADGE_ICONS.length] +
             '</span><strong>' +
             esc(m.badge) +
             '</strong><small>' +

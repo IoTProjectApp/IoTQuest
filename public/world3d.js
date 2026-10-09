@@ -137,6 +137,33 @@ function parseColor(hex) {
     h.length === 8 ? parseInt(h.slice(6, 8), 16) / 255 : 1,
   ];
 }
+const DEFAULT_SKY_SUN = [0, 1, 0];
+const MIN_PIXEL_RADIUS = 1;
+const geometryKey = (m) => (roundedObject(m) ? 'roundedBox' : m.shape);
+// Objects the student cannot see are skipped: the community districts double the scene, and on
+// software renderers (low-end Chromebooks) each draw costs about the same however small it is.
+// Each object is tested by a sphere around its unit geometry (centred, about ±0.5) against the six
+// clip planes of the view-projection matrix (which includes the mirror flip). With pixelScale
+// (pixels per unit at distance 1), objects under about a pixel across are skipped too, except
+// sky objects such as stars and anything that glows.
+export function frustumTest(m, pixelScale = 0) {
+  const planes = [0, 1, 2].flatMap((axis) =>
+    [1, -1].map((sign) => {
+      const p = [0, 1, 2, 3].map((col) => m[col * 4 + 3] + sign * m[col * 4 + axis]),
+        length = Math.hypot(p[0], p[1], p[2]) || 1;
+      return p.map((v) => v / length);
+    }),
+  );
+  return (o) => {
+    const [x, y, z] = o.pos,
+      [w, h, d] = o.size || [1, 1, 1],
+      r = 0.6 * Math.hypot(w, h, d) + 0.25;
+    for (const p of planes) if (p[0] * x + p[1] * y + p[2] * z + p[3] < -r) return false;
+    if (!pixelScale || o.sky || o.moonSurface || o.emission) return true;
+    const distance = m[3] * x + m[7] * y + m[11] * z + m[15];
+    return distance <= 0 || ((r - 0.25) * pixelScale) / distance >= MIN_PIXEL_RADIUS;
+  };
+}
 export class World3D {
   constructor(canvas, { getState, onFrame, onError, onRecover, onBuildingSelect } = {}) {
     this.canvas = canvas;
@@ -1020,9 +1047,11 @@ export class World3D {
       mirrored,
     });
     const view = lookAt(viewEye, target);
+    const fov = this.skyView ? 0.78 / (this.skyZoom || 1) : 0.78;
+    this.pixelScale = height / 2 / Math.tan(fov / 2);
     this.matrix = multiply(
       perspective(
-        this.skyView ? 0.78 / (this.skyZoom || 1) : 0.78,
+        fov,
         width / height,
         0.1,
         this.communityView ? 650 : this.landscapeView || this.currentDistance > 95 ? 320 : 160,
@@ -1103,14 +1132,18 @@ export class World3D {
     gl.uniform3fv(this.uniforms['uLights[0]'], lights.flat());
     gl.uniform3fv(this.uniforms['uLightColor[0]'], lightColors.flat());
     const opaque = [],
-      transparent = [];
+      transparent = [],
+      visible = frustumTest(this.matrix, this.pixelScale);
     for (const m of this.model.objects) {
       const c = color(m.color),
         alpha = (m.opacity ?? 1) * c[3];
-      if (alpha < 0.001) continue;
+      if (alpha < 0.001 || !visible(m)) continue;
       (alpha < 0.99 ? transparent : opaque).push(m);
     }
     gl.depthMask(true);
+    // Opaque order does not matter: group by shape so each geometry's buffers bind once.
+    this.drawState = {};
+    opaque.sort((a, b) => (geometryKey(a) < geometryKey(b) ? -1 : 1));
     for (const m of opaque) this.draw(m);
     transparent.sort(
       (a, b) =>
@@ -1122,42 +1155,54 @@ export class World3D {
     gl.depthMask(true);
     this.onFrame?.(this, s);
   }
+  // Each WebGL call costs about the same as a small draw on software renderers, so values that
+  // match the previous object's are not sent again (drawState resets every frame).
   draw(m) {
     const gl = this.gl,
-      g = this.geometries[roundedObject(m) ? 'roundedBox' : m.shape],
+      key = geometryKey(m),
+      g = this.geometries[key],
       mat = modelMatrix(m.pos, m.size, m.rotation),
       normal = this.normalScratch,
-      c = this.colorScratch;
+      c = this.colorScratch,
+      last = (this.drawState ||= {}),
+      set = (name, value, send) => {
+        if (last[name] === value) return;
+        last[name] = value;
+        send();
+      };
     for (let k = 0; k < 3; k++)
       for (let r = 0; r < 3; r++) normal[k * 3 + r] = mat[k * 4 + r] / (m.size[k] * m.size[k] || 1);
     c.set(color(m.color));
     c[3] *= m.opacity ?? 1;
     gl.uniformMatrix4fv(this.uniforms.uModel, false, mat);
     gl.uniformMatrix3fv(this.uniforms.uNormal, false, normal);
-    gl.uniform4fv(this.uniforms.uColor, c);
-    gl.uniform1f(this.uniforms.uEmission, m.emission || 0);
-    gl.uniform1f(this.uniforms.uCelestial, m.moonSurface ? 1 : m.sky ? 2 : 0);
-    gl.uniform3fv(this.uniforms.uSkySun, m.skySun || [0, 1, 0]);
+    set('color', c.join(), () => gl.uniform4fv(this.uniforms.uColor, c));
+    set('emission', m.emission || 0, () => gl.uniform1f(this.uniforms.uEmission, m.emission || 0));
+    const celestial = m.moonSurface ? 1 : m.sky ? 2 : 0;
+    set('celestial', celestial, () => gl.uniform1f(this.uniforms.uCelestial, celestial));
+    const skySun = m.skySun || DEFAULT_SKY_SUN;
+    set('skySun', skySun.join(), () => gl.uniform3fv(this.uniforms.uSkySun, skySun));
     const surface = surfaceForMesh(m);
-    gl.uniform1f(this.uniforms.uSurface, surface);
-    gl.uniform3fv(this.uniforms.uSize, m.size);
-    gl.uniform1f(
-      this.uniforms.uRoughness,
+    set('surface', surface, () => gl.uniform1f(this.uniforms.uSurface, surface));
+    set('size', m.size.join(), () => gl.uniform3fv(this.uniforms.uSize, m.size));
+    const roughness =
       m.roughness ??
-        (surface === SURFACE.water
-          ? 0.12
-          : surface === SURFACE.glass
-            ? 0.16
-            : surface === SURFACE.steel
-              ? 0.3
-              : surface === SURFACE.grass
-                ? 0.96
-                : 0.76),
-    );
-    gl.bindBuffer(gl.ARRAY_BUFFER, g.positions);
-    gl.vertexAttribPointer(this.position, 3, gl.FLOAT, false, 0, 0);
-    gl.bindBuffer(gl.ARRAY_BUFFER, g.normals);
-    gl.vertexAttribPointer(this.normal, 3, gl.FLOAT, false, 0, 0);
+      (surface === SURFACE.water
+        ? 0.12
+        : surface === SURFACE.glass
+          ? 0.16
+          : surface === SURFACE.steel
+            ? 0.3
+            : surface === SURFACE.grass
+              ? 0.96
+              : 0.76);
+    set('roughness', roughness, () => gl.uniform1f(this.uniforms.uRoughness, roughness));
+    set('geometry', key, () => {
+      gl.bindBuffer(gl.ARRAY_BUFFER, g.positions);
+      gl.vertexAttribPointer(this.position, 3, gl.FLOAT, false, 0, 0);
+      gl.bindBuffer(gl.ARRAY_BUFFER, g.normals);
+      gl.vertexAttribPointer(this.normal, 3, gl.FLOAT, false, 0, 0);
+    });
     gl.drawArrays(gl.TRIANGLES, 0, g.count);
   }
   dispose() {

@@ -53,6 +53,7 @@ import { formatCode as formatSource, FormatError, INDENT } from './code-format.j
 import { coachSteps, readingText } from './code-coach.js';
 import { checkPredictions } from './weather-quests.js';
 import { neededNow, situationReason } from './situation.js';
+import { boundaryScenarios } from './quest-boundaries.js';
 import { conversationHTML } from './conversation-view.js';
 import { predictionHTML } from './prediction-view.js';
 import { declutterLabels } from './world-labels.js';
@@ -2487,12 +2488,23 @@ function testSolution() {
   else {
     let assessment = createLabState().resources;
     try {
-      const runtime = new Runtime(code(), state.language, ds, state.board);
-      for (const [name, env, expected] of m.scenarios) {
+      const runtime = new Runtime(code(), state.language, ds, state.board),
+        // Limit checks test every threshold from both sides; they are not part of the
+        // energy and water budget, which is measured over the quest's own scenarios.
+        limitChecks = boundaryScenarios(m, baseEnv);
+      for (const [name, env, expected] of [...m.scenarios, ...limitChecks]) {
         let result;
+        const budgeted = !limitChecks.some((c) => c[0] === name);
         for (let i = 0; i < 25; i++) {
           result = runtime.step({ ...baseEnv, ...env });
-          assessment = updateResources(assessment, ds, result.outputs, { ...baseEnv, ...env }, 0.2);
+          if (budgeted)
+            assessment = updateResources(
+              assessment,
+              ds,
+              result.outputs,
+              { ...baseEnv, ...env },
+              0.2,
+            );
         }
         let actual = m.ids
           .map((id) => ds.find((d) => d.id === id))

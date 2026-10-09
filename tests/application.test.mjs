@@ -1,5 +1,6 @@
 import { residentialLots } from '../public/community-residences.js';
 import { communityStations, COMMUNITY_ORIGIN } from '../public/community-world.js';
+import { boundaryScenarios } from '../public/quest-boundaries.js';
 import { World3D } from '../public/world3d.js';
 import { collides } from '../public/world-math.js';
 import {
@@ -328,6 +329,7 @@ function harness(
     DEFAULT_OBSERVER,
     missions,
     residentialLots,
+    boundaryScenarios,
     communityStations,
     COMMUNITY_ORIGIN,
     baseEnv,

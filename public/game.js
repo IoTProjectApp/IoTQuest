@@ -1977,6 +1977,8 @@ function prerequisites() {
   if (!ds.length) return ['Install at least one component first.'];
   return validate(ds, state.board);
 }
+const START_TIMEOUT_MS = 15000,
+  TICK_TIMEOUT_MS = 10000;
 function run() {
   if (!canEdit('Tester')) return;
   state.debugPaused = false;
@@ -2094,11 +2096,14 @@ function run() {
     ...batchOptions(1),
     trace: true,
   });
+  // A backstop for a worker that stops answering: the runtime itself stops infinite loops with
+  // "Execution limit reached". The first answer includes loading the worker and compiling the
+  // program, which takes several seconds on a slow Chromebook, so allow plenty of time.
   watchdog = setTimeout(() => {
     logs.push('Error: execution timed out.');
     stop(false);
     updateReadings();
-  }, 1500);
+  }, START_TIMEOUT_MS);
   renderSteps();
   updateReadings();
   if (tab === 'dashboard') renderDashboard();
@@ -2147,7 +2152,7 @@ function tick() {
     logs.push('Error: execution timed out.');
     stop(false);
     updateReadings();
-  }, 3000);
+  }, TICK_TIMEOUT_MS);
 }
 
 function stop(notify = false) {

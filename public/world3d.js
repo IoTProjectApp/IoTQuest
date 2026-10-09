@@ -639,7 +639,13 @@ export class World3D {
   }
   frame(time) {
     if (this.disposed || this.contextLost) return;
-    if (this.getState()?.visible === false) {
+    // Hidden (another screen, or the Code layout leaves the canvas 0×0): skip drawing and label
+    // projection, but keep the loop so the view resumes as soon as it is shown again.
+    if (
+      this.getState()?.visible === false ||
+      !this.canvas.clientWidth ||
+      !this.canvas.clientHeight
+    ) {
       this.lastTime = time;
       this.frameId = requestAnimationFrame(this.frame);
       return;

@@ -526,6 +526,36 @@ test('3D render errors are reported once and the loop keeps running; restored co
     frames.restore();
   }
 });
+test('a 0×0 canvas (hidden Code layout) skips drawing and label projection until it is shown', () => {
+  const frames = animationFrames(),
+    canvas = eventCanvas(fakeGL()),
+    projected = [];
+  try {
+    const state = {
+      devices: [],
+      env: { ...baseEnv },
+      outputs: {},
+      player: { x: 48, y: 77 },
+      color: '#547b5b',
+      reduced: false,
+      speed: 1,
+      areas,
+    };
+    canvas.clientWidth = canvas.clientHeight = 0;
+    new World3D(canvas, { getState: () => state, onFrame: (w) => projected.push(w.width) });
+    frames.step(16);
+    frames.step(32);
+    assert.deepEqual(projected, []);
+    assert.equal(frames.queue.size, 1, 'The loop keeps polling while hidden');
+    canvas.clientWidth = 800;
+    canvas.clientHeight = 450;
+    frames.step(48);
+    assert.deepEqual(projected, [800]);
+    assert.equal(frames.queue.size, 1);
+  } finally {
+    frames.restore();
+  }
+});
 test('travel globe pauses while inactive, falls back on context loss, rebuilds on restore and disposes listeners', async () => {
   const { TravelGlobe } = await import('../public/globe.js');
   const frames = animationFrames(),

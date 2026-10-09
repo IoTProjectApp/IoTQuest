@@ -175,6 +175,49 @@ test('walking cannot leave the property', () => {
   for (let i = 0; i < 500; i++) p = resolveMove(p, 'down', 1, 0, []);
   assert.ok(p.y <= 97);
 });
+test('the front fence stops walking at every destination; only the open gate lets the technician through', async () => {
+  const { createRegionalModel } = await import('../public/regions.js');
+  const walk = (x, colliders) => {
+    let p = fromWorld(x, 9.5);
+    for (let i = 0; i < 40; i++) p = resolveMove(p, 'down', 0.5, 0, colliders);
+    return toWorld(p)[2];
+  };
+  for (const id of ['legacy', ...locations.map((l) => l.id)]) {
+    const m = createRegionalModel(id);
+    for (const x of [-13, -8, -2.2, 2.2, 6, 13.9])
+      assert.ok(walk(x, m.colliders) < 11.55, id + ' fence at x ' + x);
+    assert.ok(walk(0, m.colliders) < 11.55, id + ' closed gate');
+    m.dynamic.gateCollider.disabled = true;
+    assert.ok(walk(0, m.colliders) > 11.9, id + ' open gate');
+  }
+});
+test('installed upgrades are solid and stop being solid once removed', () => {
+  const { world, state } = renderer();
+  const blocked = (x, z) => collides(x, z, world.model.colliders);
+  state.upgrades = ['solar', 'battery', 'rainTank'];
+  world.render(1, 0.016);
+  assert.ok(blocked(-4, 8.5) && blocked(-2.4, 8.5) && blocked(11.9, -3.6));
+  // A technician standing where an upgrade appears can still walk out of it.
+  const out = resolveMove(fromWorld(-4, 8.5), 'down', 4, 0, world.model.colliders);
+  assert.ok(toWorld(out)[2] > 8.5);
+  state.upgrades = ['battery'];
+  world.render(2, 0.016);
+  assert.ok(!blocked(-4, 8.5) && blocked(-2.4, 8.5) && !blocked(11.9, -3.6));
+  state.upgrades = [];
+  world.render(3, 0.016);
+  assert.equal(world.model.colliders.filter((c) => c.upgrade).length, 0);
+});
+test('devices find new spots clear of a newly installed rain tank', () => {
+  const { world, state } = renderer();
+  state.devices = defaults(['pump', 'valve', 'level', 'soil'], 'ESP32').map((d) => ({
+    ...d,
+    area: 'Water tank',
+  }));
+  state.upgrades = ['rainTank'];
+  world.render(1, 0.016);
+  for (const { x, z } of world.deviceObjects)
+    assert.equal(collides(x, z, world.model.colliders, 0.3), false);
+});
 test('3D device states come from GPIO outputs, not mission success', () => {
   const d = { id: 'pump', pin: 26 };
   assert.equal(deviceState(d, { 26: 1 }, { ...baseEnv, tank: 80 }).flow, true);
@@ -232,6 +275,19 @@ test('Sky view uses an eye-height camera and can centre the actual moon in mirro
   world.setView('world');
   assert.equal(world.skyView, false);
   assert.ok(world.pitch > 0);
+});
+test('Sky view looks through a visible roof instead of at its underside', () => {
+  const { world, state } = renderer();
+  state.roofsVisible = true;
+  world.render(1, 0.016);
+  assert.ok(world.model.roofs.length > 0);
+  assert.ok(world.model.roofs.every((r) => r.opacity === 1));
+  world.setView('sky');
+  world.render(2, 0.016);
+  assert.ok(world.model.roofs.every((r) => r.opacity < 0.2));
+  world.setView('world');
+  world.render(3, 0.016);
+  assert.ok(world.model.roofs.every((r) => r.opacity === 1));
 });
 test('Landscape view widens the camera and scenery holds still when the game is paused', () => {
   const { world, state } = renderer();
@@ -526,6 +582,36 @@ test('3D render errors are reported once and the loop keeps running; restored co
     frames.restore();
   }
 });
+test('a 0×0 canvas (hidden Code layout) skips drawing and label projection until it is shown', () => {
+  const frames = animationFrames(),
+    canvas = eventCanvas(fakeGL()),
+    projected = [];
+  try {
+    const state = {
+      devices: [],
+      env: { ...baseEnv },
+      outputs: {},
+      player: { x: 48, y: 77 },
+      color: '#547b5b',
+      reduced: false,
+      speed: 1,
+      areas,
+    };
+    canvas.clientWidth = canvas.clientHeight = 0;
+    new World3D(canvas, { getState: () => state, onFrame: (w) => projected.push(w.width) });
+    frames.step(16);
+    frames.step(32);
+    assert.deepEqual(projected, []);
+    assert.equal(frames.queue.size, 1, 'The loop keeps polling while hidden');
+    canvas.clientWidth = 800;
+    canvas.clientHeight = 450;
+    frames.step(48);
+    assert.deepEqual(projected, [800]);
+    assert.equal(frames.queue.size, 1);
+  } finally {
+    frames.restore();
+  }
+});
 test('travel globe pauses while inactive, falls back on context loss, rebuilds on restore and disposes listeners', async () => {
   const { TravelGlobe } = await import('../public/globe.js');
   const frames = animationFrames(),
@@ -587,6 +673,80 @@ test('travel globe pauses while inactive, falls back on context loss, rebuilds o
     globe.dispose();
     assert.equal(frames.queue.size, 0);
     assert.ok([...canvas.listeners.values(), ...map.listeners.values()].every((l) => !l.length));
+  } finally {
+    globalThis.document = oldDocument;
+    frames.restore();
+  }
+});
+test('a deliberately released globe context comes back as the globe without a fallback notice', async () => {
+  const { TravelGlobe } = await import('../public/globe.js');
+  const frames = animationFrames(),
+    ctx2d = new Proxy({}, { get: () => () => {} }),
+    oldDocument = globalThis.document,
+    gl = fakeGL(),
+    canvas = eventCanvas(
+      new Proxy(gl, {
+        get: (obj, key) =>
+          key === 'getExtension'
+            ? () => ({
+                loseContext: () => canvas.fire('webglcontextlost'),
+                restoreContext: () => canvas.fire('webglcontextrestored'),
+              })
+            : obj[key],
+      }),
+    ),
+    map = eventCanvas(ctx2d),
+    errors = [];
+  globalThis.document = { createElement: () => ({ getContext: () => ctx2d }) };
+  let restored = 0;
+  try {
+    const globe = new TravelGlobe(canvas, map, [], [{ id: 'a', latitude: 5, longitude: 5 }], {
+      onError: (m) => errors.push(m),
+      onRestore: () => restored++,
+    });
+    assert.equal(globe.releaseGraphics(), true);
+    assert.equal(globe.contextLost, true);
+    assert.equal(globe.restoreGraphics(), true);
+    assert.equal(globe.contextLost, false);
+    assert.equal(globe.mode, 'globe');
+    assert.deepEqual(errors, []);
+    assert.equal(restored, 0);
+    // A genuine loss afterwards still falls back and announces the recovery.
+    canvas.fire('webglcontextlost');
+    canvas.fire('webglcontextrestored');
+    assert.equal(errors.length, 1);
+    assert.equal(restored, 1);
+    globe.dispose();
+  } finally {
+    globalThis.document = oldDocument;
+    frames.restore();
+  }
+});
+test('the travel globe follows only the first finger of a two-finger touch', async () => {
+  const { TravelGlobe } = await import('../public/globe.js');
+  const frames = animationFrames(),
+    ctx2d = new Proxy({}, { get: () => () => {} }),
+    oldDocument = globalThis.document,
+    canvas = eventCanvas(fakeGL()),
+    map = eventCanvas(ctx2d);
+  canvas.setPointerCapture = () => {};
+  globalThis.document = { createElement: () => ({ getContext: () => ctx2d }) };
+  try {
+    const globe = new TravelGlobe(canvas, map, [], [{ id: 'a', latitude: 5, longitude: 5 }]);
+    canvas.fire('pointerdown', { pointerId: 1, clientX: 100, clientY: 100 });
+    canvas.fire('pointerdown', { pointerId: 2, clientX: 500, clientY: 400 });
+    const yaw = globe.yaw,
+      pitch = globe.pitch;
+    canvas.fire('pointermove', { pointerId: 2, clientX: 520, clientY: 420 });
+    assert.equal(globe.yaw, yaw);
+    assert.equal(globe.pitch, pitch);
+    canvas.fire('pointerup', { pointerId: 2, clientX: 520, clientY: 420 });
+    assert.equal(globe.drag.id, 1);
+    canvas.fire('pointermove', { pointerId: 1, clientX: 110, clientY: 100 });
+    assert.ok(Math.abs(globe.yaw - (yaw - 0.07)) < 1e-9);
+    canvas.fire('pointercancel', { pointerId: 1 });
+    assert.equal(globe.drag, null);
+    globe.dispose();
   } finally {
     globalThis.document = oldDocument;
     frames.restore();
@@ -780,6 +940,21 @@ test('community buildings and road users render in 3D on the world simulation cl
   );
   assert.ok(Math.abs(c.sim.time - 20) < 1e-6);
 });
+test('a lab clock that jumped hours ahead advances the community by a capped step, not the whole gap', () => {
+  const { world, state } = renderer();
+  state.simClockMs = 0;
+  world.render(0, 0.016);
+  const sim = world.model.community.sim,
+    before = sim.time;
+  state.simClockMs = 6 * 3600 * 1000;
+  const started = performance.now();
+  world.render(1, 0.016);
+  assert.ok(sim.time - before <= 10 + 1e-6, 'At most ten simulated seconds in one frame');
+  assert.ok(performance.now() - started < 2000);
+  state.simClockMs += 1000;
+  world.render(2, 0.016);
+  assert.ok(Math.abs(sim.time - before - 11) < 1e-6, 'Normal steps resume afterwards');
+});
 test('factory controller keeps driving 3D machinery', () => {
   const { world, state } = renderer();
   state.simClockMs = 0;
@@ -887,6 +1062,28 @@ test('clicking a rendered building selects it while orbit drags and cancellation
   canvas.listeners.get('pointerup')(e);
   assert.deepEqual(selected, ['factory']);
   assert.equal(world.pickCommunityBuilding(0, 0), null);
+});
+
+test('a second finger cannot take over a camera drag', () => {
+  const { world, canvas } = renderer();
+  canvas.setPointerCapture = () => {};
+  canvas.focus = () => {};
+  const fire = (type, e) => canvas.listeners.get(type)({ button: 0, ...e });
+  fire('pointerdown', { pointerId: 1, clientX: 100, clientY: 100 });
+  fire('pointerdown', { pointerId: 2, clientX: 600, clientY: 300 });
+  const yaw = world.yaw;
+  fire('pointermove', { pointerId: 2, clientX: 620, clientY: 300 });
+  assert.equal(world.yaw, yaw);
+  fire('pointerup', { pointerId: 2, clientX: 620, clientY: 300 });
+  assert.equal(world.drag.id, 1);
+  fire('pointermove', { pointerId: 1, clientX: 110, clientY: 100 });
+  assert.ok(Math.abs(world.yaw - (yaw - 0.07)) < 1e-9);
+  fire('pointerup', { pointerId: 1, clientX: 110, clientY: 100 });
+  assert.equal(world.drag, null);
+  // A pointer whose capture was lost cannot leave the camera stuck mid-drag.
+  fire('pointerdown', { pointerId: 3, clientX: 0, clientY: 0 });
+  fire('lostpointercapture', { pointerId: 3 });
+  assert.equal(world.drag, null);
 });
 
 test('edge-on projected building faces cannot select an unrelated point on their extended line', () => {

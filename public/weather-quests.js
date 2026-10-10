@@ -7,7 +7,8 @@ export const weatherQuests = [
     area: 'Entrance',
     resident: 'Alex',
     role: 'The weather watcher',
-    quote: '“Strong wind can arrive quickly. Can our weather station warn us when it gets windy?”',
+    quote:
+      '“The wind can pick up fast round here. Can our weather station warn us when it gets strong?”',
     goal: 'Sound the buzzer at wind speeds of 40 km/h or above. Stop below 40 km/h.',
     ids: ['wind', 'buzzer'],
     conditions: ['wind >= 40'],
@@ -26,7 +27,7 @@ export const weatherQuests = [
       ids: ['wind', 'buzzer', 'rain'],
       conditions: ['wind >= 40 || rain >= 2000'],
       goal: 'Alert at wind speeds of 40 km/h or above OR a rain sensor reading of 2000 or above. Stop only when both are below their thresholds.',
-      hint: 'Use wind >= 40 OR rain >= 2000. Wind is km/h; rain is the simulated 0–4095 channel.',
+      hint: 'Use wind >= 40 OR rain >= 2000. Wind is in km/h, and rain is the simulated 0–4095 channel.',
       scenarios: [
         ['Calm and dry', { wind: 12, rain: 0 }, [0]],
         ['Wind threshold', { wind: 40, rain: 0 }, [1]],
@@ -44,14 +45,14 @@ export const weatherQuests = [
     resident: 'Maya',
     role: 'The seedling grower',
     quote:
-      '“Cold nights can damage our seedlings. Warn me when the outdoor temperature reaches the frost threshold.”',
+      '“One cold night can kill our seedlings. Can you warn me when it gets cold enough outside for frost?”',
     goal: 'Sound the buzzer when outdoor temperature is 2°C or below; stop above 2°C.',
     ids: ['outside', 'buzzer'],
     conditions: ['outdoorTemp <= 2'],
     xp: 220,
     badge: 'Frost guardian',
     learn: ['Live outdoor temperature', 'Negative readings'],
-    hint: 'Read the outdoor temperature in Celsius. Use outdoorTemp <= 2, including the boundary and negative temperatures.',
+    hint: 'Read the outdoor temperature in Celsius and use outdoorTemp <= 2. That covers exactly 2°C and every negative temperature.',
     scenarios: [
       ['Mild afternoon', { outdoorTemp: 12, armed: 1 }, [0]],
       ['Just above threshold', { outdoorTemp: 3, armed: 1 }, [0]],
@@ -79,7 +80,8 @@ export const weatherQuests = [
     area: 'Living room',
     resident: 'Sam',
     role: 'The home cook',
-    quote: '“Let’s use the outdoor weather to decide when the cooling fan should run.”',
+    quote:
+      '“On hot days the living room heats up fast. Can the fan go by the temperature outside?”',
     goal: 'Run the fan at outdoor temperatures of 30°C or above. Stop below 30°C.',
     ids: ['outside', 'fan'],
     conditions: ['outdoorTemp >= 30'],
@@ -98,7 +100,7 @@ export const weatherQuests = [
       ids: ['outside', 'fan', 'humidity'],
       conditions: ['outdoorTemp >= 30 || humidity >= 75'],
       goal: 'Run the fan when outdoor temperature reaches 30°C OR humidity reaches 75%. Stop when both readings are below their thresholds.',
-      hint: 'Use outdoorTemp >= 30 OR humidity >= 75. Both channels are calibrated, rather than scaled to 4095.',
+      hint: 'Use outdoorTemp >= 30 OR humidity >= 75. Both channels read in real units (°C and %), not 0–4095.',
       scenarios: [
         ['Cool and comfortable', { outdoorTemp: 22, humidity: 50 }, [0]],
         ['Heat boundary', { outdoorTemp: 30, humidity: 50 }, [1]],
@@ -115,14 +117,14 @@ export const weatherQuests = [
     area: 'Plant beds',
     resident: 'Maya',
     role: 'The water saver',
-    quote: '“Our sprinklers should stop when rain is already watering the garden.”',
-    goal: 'Open the irrigation valve only below rain reading 400. Close it at 400 or above.',
+    quote: '“There’s no point running the sprinklers when the rain is already doing the job.”',
+    goal: 'Open the irrigation valve only when the rain reading is below 400. Close it at 400 or above.',
     ids: ['rain', 'valve'],
     conditions: ['rain < 400'],
     xp: 240,
     badge: 'Rain saver',
     learn: ['Live rainfall', 'Rain interlock'],
-    hint: 'Rain is a simulated 0–4095 reading. Compare rain < 400. Rain percentages are converted to that sensor scale.',
+    hint: 'Rain is a simulated 0–4095 reading, so compare rain < 400. The weather’s rain percentage is scaled to that range for you.',
     scenarios: [
       ['Dry weather', { rain: 0, soil: 20, tank: 80 }, [1]],
       ['Just below rain threshold', { rain: 399 / 40.95, soil: 20, tank: 80 }, [1]],
@@ -133,7 +135,7 @@ export const weatherQuests = [
     advanced: {
       ids: ['rain', 'valve', 'soil', 'level'],
       conditions: ['rain < 400 && soil < 2400 && tank > 400'],
-      goal: 'Water only below rain reading 400 AND soil reading 2400, with tank reading above 400. Close the valve in rain, at the soil target, or at the tank reserve.',
+      goal: 'Water only when the rain reading is below 400 AND the soil reading is below 2400 AND the tank reading is above 400. Close the valve if any check fails.',
       hint: 'Combine rain < 400, soil < 2400 and tank > 400 using AND. Any failed check must close the valve.',
       scenarios: [
         ['Dry soil, clear weather, water available', { rain: 0, soil: 20, tank: 80 }, [1]],
@@ -152,7 +154,8 @@ export const weatherQuests = [
     area: 'Greenhouse',
     resident: 'Maya',
     role: 'The greenhouse grower',
-    quote: '“Heavy cloud makes the greenhouse gloomy. Can the grow lights respond to cloud cover?”',
+    quote:
+      '“Heavy cloud makes the greenhouse gloomy. Could the grow lights come on when it clouds over?”',
     goal: 'Turn the grow lights on at 80% cloud cover or above. Turn them off below 80%.',
     ids: ['cloud', 'led'],
     conditions: ['cloud >= 80'],

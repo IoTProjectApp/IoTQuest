@@ -17,7 +17,7 @@ export const logicQuests = [
     xp: 160,
     badge: 'Just right',
     learn: ['Ranges', 'Two comparisons', 'Inclusive bounds'],
-    hint: 'A range needs two comparisons joined by &&: temp >= 18 and temp <= 24. Check both ends are included.',
+    hint: 'A range needs two comparisons joined by &&: temp >= 18 and temp <= 24. Check that exactly 18 and exactly 24 turn the light on.',
     scenarios: [
       ['Comfortable', { temp: 21 }, [1]],
       ['Too cold', { temp: 12 }, [0]],
@@ -112,7 +112,7 @@ export const logicQuests = [
     xp: 170,
     badge: 'Flood watch',
     learn: ['Escalating thresholds', 'One sensor, two outputs', 'Warnings'],
-    hint: 'Each output has its own threshold on the same reading. Between 3500 and 3900 only the valve is on.',
+    hint: 'Each output has its own threshold on the same reading. Above 3500, up to and including 3900, only the valve is on.',
     scenarios: [
       ['Normal pond', { pond: 60 }, [0, 0]],
       ['High pond', { pond: 3700 / ADC }, [1, 0]],

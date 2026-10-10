@@ -15,7 +15,7 @@ export const components = [
     signal: 'wind',
     analog: true,
     area: 'Entrance',
-    desc: 'Virtual calibrated wind speed in km/h, following local weather in Live mode. Physical anemometers need a sensor driver.',
+    desc: 'Virtual calibrated wind speed in km/h. In Live mode it follows local weather. A physical anemometer needs a sensor driver.',
   },
   {
     id: 'cloud',
@@ -24,14 +24,14 @@ export const components = [
     signal: 'cloud',
     analog: true,
     area: 'Greenhouse',
-    desc: 'Virtual cloud cover percentage, 0–100, following local weather in Live mode. This is weather-service data rather than a physical GPIO sensor.',
+    desc: 'Virtual cloud cover percentage, 0–100. In Live mode it follows local weather. It comes from a weather service, not a physical GPIO sensor.',
   },
   {
     id: 'occupancy',
     name: 'Resident presence',
     icon: '⌂',
     signal: 'occupied',
-    desc: 'Simulated household occupancy: HIGH when residents are home. Replace with a physical presence-sensing strategy on hardware.',
+    desc: 'Simulated household occupancy: HIGH when residents are home. On real hardware you need your own way to detect people.',
     area: 'Living room',
   },
   {
@@ -111,7 +111,7 @@ export const components = [
     name: 'Water pump',
     icon: '≋',
     output: true,
-    desc: 'A pump feeds irrigation. A transistor driver and flyback diode are included in the virtual module; do not connect a real pump directly to GPIO.',
+    desc: 'A pump for watering the garden. The virtual module includes a transistor driver and flyback diode. Never connect a real pump straight to a GPIO pin.',
     area: 'Plant beds',
   },
   {
@@ -120,7 +120,7 @@ export const components = [
     icon: '♨',
     signal: 'temp',
     analog: true,
-    desc: 'Virtual calibrated temperature channel returns degrees Celsius. Real DHT sensors need a library.',
+    desc: 'Virtual calibrated temperature channel that reads in degrees Celsius. Real DHT sensors need a library.',
     area: 'Living room',
   },
   {
@@ -128,7 +128,7 @@ export const components = [
     name: 'Cooling fan',
     icon: '✣',
     output: true,
-    desc: 'A PWM fan module with an integrated motor driver; output changes rotation speed and cooling.',
+    desc: 'A PWM fan module with a built-in motor driver. The output sets how fast it spins and how much it cools.',
     area: 'Living room',
   },
   {
@@ -153,7 +153,7 @@ export const components = [
     icon: '▥',
     signal: 'tank',
     analog: true,
-    desc: 'Tank level mapped to 0–4095. Empty tanks need a pump interlock.',
+    desc: 'Tank level as a 0–4095 reading. Use it to stop the pump when the tank is empty.',
     area: 'Water tank',
   },
   {
@@ -169,7 +169,7 @@ export const components = [
     name: 'RGB light',
     icon: '◈',
     output: true,
-    desc: 'Virtual single-channel RGB module: PWM controls brightness; colour follows the character colour setting.',
+    desc: 'Virtual single-channel RGB module. PWM sets the brightness, and the colour follows your character colour setting.',
     resistor: '220 Ω',
     area: 'Bedroom',
   },
@@ -202,7 +202,7 @@ export const components = [
     name: 'Ultrasonic distance',
     icon: '◍',
     signal: 'distance',
-    desc: 'Virtual calibrated distance input in centimetres. Real HC-SR04 needs trigger and echo pins and level shifting.',
+    desc: 'Virtual calibrated distance input in centimetres. A real HC-SR04 needs trigger and echo pins and level shifting.',
     area: 'Entrance',
   },
   {
@@ -261,7 +261,7 @@ export const missions = [
     resident: 'Alex',
     role: 'The evening commuter',
     quote:
-      '“My hands are always full when I get home. A porch light that notices me would be wonderful.”',
+      '“My hands are always full when I get home. Could the porch light come on by itself when I walk up?”',
     goal: 'Turn the porch light on when the PIR reads HIGH, and off when it reads LOW.',
     ids: ['pir', 'porch'],
     xp: 120,
@@ -283,12 +283,12 @@ export const missions = [
     role: 'The garden enthusiast',
     quote:
       '“My tomatoes keep drying out. Can you water them automatically and stop before their roots get soggy?”',
-    goal: 'Run the pump below moisture reading 2400. Stop at 2400 or higher, and never run with an empty tank.',
+    goal: 'Run the pump when the soil reading is below 2400. Stop at 2400 or higher, and never run it with an empty tank.',
     ids: ['soil', 'pump', 'level'],
     xp: 150,
     badge: 'Green thumb',
     learn: ['Multiple inputs', 'Logical AND', 'Feedback control'],
-    hint: 'Use soil < 2400 && tank > 0 in Arduino, or soil < 2400 and tank > 0 in Python. The pump must turn off in the else branch.',
+    hint: 'Use soil < 2400 && tank > 0 in Arduino, or soil < 2400 and tank > 0 in Python. Turn the pump off in the else branch.',
     conditions: ['soil < 2400 && tank > 0'],
     scenarios: [
       ['Dry soil', { soil: 20, tank: 80 }, [1]],
@@ -304,13 +304,13 @@ export const missions = [
     resident: 'Sam',
     role: 'The home cook',
     quote:
-      '“The living room gets hot in the afternoon. Let’s keep the fan running only when we need it.”',
+      '“The living room gets hot in the afternoon. I only want the fan on when it’s actually warm.”',
     goal: 'Run the fan above 27°C; stop at 27°C or below.',
     ids: ['temp', 'fan'],
     xp: 170,
     badge: 'Cool thinker',
     learn: ['Temperature', 'Functions', 'PWM extension'],
-    hint: 'The calibrated virtual temperature input returns Celsius. Compare temperature > 27.',
+    hint: 'The virtual temperature input is calibrated in Celsius. Compare temp > 27.',
     conditions: ['temp > 27'],
     scenarios: [
       ['Cool room', { temp: 22 }, [0]],
@@ -325,13 +325,13 @@ export const missions = [
     resident: 'Alex',
     role: 'The evening commuter',
     quote:
-      '“Could you alert me if the garage opens while security is armed? I don’t want alerts while I’m working there.”',
+      '“Could you warn me if the garage door opens while security is armed? I don’t want it going off while I’m working in there.”',
     goal: 'Sound the buzzer only when the door is open AND security is armed.',
     ids: ['door', 'buzzer', 'button'],
     xp: 180,
     badge: 'House guardian',
     learn: ['Boolean logic', 'Security states', 'Failure cases'],
-    hint: 'door == HIGH && armed == HIGH. Check every combination.',
+    hint: 'Use door == HIGH && armed == HIGH. Test all four combinations of door and arm switch.',
     conditions: ['door == 1 && armed == 1'],
     scenarios: [
       ['Closed and armed', { door: 0, armed: 1 }, [0]],
@@ -347,12 +347,12 @@ export const missions = [
     role: 'The home cook',
     quote:
       '“The pump must never run dry. Please switch it off whenever the tank drops to its reserve level.”',
-    goal: 'Run the pump only when tank reading is above 400 and soil is below 2400.',
+    goal: 'Run the pump only when the tank reading is above 400 and the soil reading is below 2400.',
     ids: ['level', 'pump', 'soil'],
     xp: 200,
     badge: 'Water wise',
     learn: ['Interlocks', 'Boundaries', 'Safe outputs'],
-    hint: 'tank > 400 && soil < 2400. Exactly 400 must be off.',
+    hint: 'Use tank > 400 && soil < 2400. A tank reading of exactly 400 must leave the pump off.',
     conditions: ['tank > 400 && soil < 2400'],
     scenarios: [
       ['Needs water', { tank: 80, soil: 10 }, [1]],
@@ -367,13 +367,13 @@ export const missions = [
     resident: 'Maya',
     role: 'The garden enthusiast',
     quote:
-      '“The seedlings need water, warmth, and enough light. Can one controller look after all three?”',
-    goal: 'Fan on above 27°C; grow light on below 1800; valve on below soil 2400.',
+      '“The seedlings need water and light, and they wilt if the greenhouse gets too hot. Can one controller look after all of that?”',
+    goal: 'Fan on above 27°C. Grow light on below a light reading of 1800. Valve on below a soil reading of 2400.',
     ids: ['temp', 'fan', 'ldr', 'led', 'soil', 'valve'],
     xp: 250,
     badge: 'Greenhouse genius',
     learn: ['Multiple outputs', 'Functions', 'Non-blocking timing'],
-    hint: 'Use three independent if/else blocks. Each output has its own condition. Use millis() or time.ticks_ms() for timed extensions.',
+    hint: 'Give each output its own if/else block and its own condition. If you add timing later, use millis() or time.ticks_ms().',
     conditions: ['temp > 27', 'light < 1800', 'soil < 2400'],
     scenarios: [
       ['Hot, dark, dry', { temp: 32, light: 10, soil: 20 }, [1, 1, 1]],
@@ -389,8 +389,8 @@ export const missions = [
     resident: 'Alex',
     role: 'The evening commuter',
     quote:
-      '“You’ve made each room smarter. Now let’s bring everything together on one controller.”',
-    goal: 'Control path lights in darkness, porch lights on motion, and cooling above 27°C independently.',
+      '“Each part of the house works on its own now. Can one controller run the path lights, porch light and fan together?”',
+    goal: 'Path lights on below a light reading of 1800. Porch light on when the PIR reads HIGH. Fan on above 27°C. Each output works independently.',
     ids: ['ldr', 'led', 'pir', 'porch', 'temp', 'fan'],
     xp: 300,
     badge: 'IoT architect',

@@ -49,7 +49,7 @@ export const communityComponents = [
     icon: '☀',
     output: true,
     area: 'Community roads',
-    desc: 'Driven street lamps: HIGH lights the neighbourhood, LOW switches them off.',
+    desc: 'Street lamps: HIGH lights the neighbourhood, LOW switches them off.',
   },
   {
     id: 'walkButton',
@@ -68,7 +68,7 @@ export const communityComponents = [
     desc:
       'HIGH proposes ' +
       axis +
-      ' green. Every proposal passes the traffic safety interlock; conflicting greens are rejected.',
+      ' green. The traffic safety interlock checks every proposal and rejects conflicting greens.',
   })),
   {
     id: 'walkPhase',
@@ -76,7 +76,7 @@ export const communityComponents = [
     icon: '🚶',
     output: true,
     area: 'Community roads',
-    desc: 'HIGH proposes WALK; LOW withdraws it. The interlock inserts amber and clearance and protects crossing occupants.',
+    desc: 'HIGH proposes WALK; LOW withdraws it. The interlock adds the amber and clearance phases and protects people on the crossing.',
   },
   {
     id: 'spaceSensor',
@@ -93,7 +93,7 @@ export const communityComponents = [
     icon: '▤',
     output: true,
     area: 'Parking area',
-    desc: 'HIGH opens the barrier along the designated parking route; LOW closes it.',
+    desc: 'HIGH opens the barrier on the parking route; LOW closes it.',
   },
 ];
 const quest = (type, area, title, ids, conditions, scenarios, goal, learn) => ({
@@ -108,10 +108,13 @@ const quest = (type, area, title, ids, conditions, scenarios, goal, learn) => ({
   learn,
   resident: 'Alex',
   role: 'Community technician',
-  quote: '“Can you install and wire these devices, then program this part of our community?”',
+  quote:
+    '“Could you wire up these devices and write the program for this part of the neighbourhood?”',
   xp: 180,
   badge: title,
-  hint: goal + ' Give every output an OFF path. Use the Guide, Run, and Test in the main editor.',
+  hint:
+    goal +
+    ' Give every output an else branch that turns it off. The Guide, Run and Test are in the main editor.',
 });
 export const communityQuests = [
   quest(
@@ -153,7 +156,7 @@ export const communityQuests = [
       ['Bright comfortable room', { temp: 24, occupied: 1, light: 80 }, [0, 0]],
       ['Cool dark room', { temp: 24, occupied: 1, light: 10 }, [0, 1]],
     ],
-    'Ventilate above 26°C and light the room below light reading 1500, only while occupied. Watch energy use in Resources.',
+    'While the office is occupied, run the fan above 26°C and turn the light on below light reading 1500. Both stay off when it is empty. Watch energy use in Resources.',
     ['Occupancy', 'Comfort', 'Energy monitoring'],
   ),
   quest(
@@ -180,7 +183,7 @@ export const communityQuests = [
       ['Truck at bay', { bay: 1 }, [1]],
       ['Bay clear', { bay: 0 }, [0]],
     ],
-    'Light the warning while a delivery occupies the loading bay. Switch it off when clear.',
+    'Light the warning while a delivery is in the loading bay. Switch it off when the bay is clear.',
     ['Vehicle sensing', 'Loading bays', 'Warning lights'],
   ),
   quest(
@@ -194,7 +197,7 @@ export const communityQuests = [
       ['Dry stock area', { humidity: 50 }, [0]],
       ['At boundary', { humidity: 75 }, [0]],
     ],
-    'Warn above humidity 75% and switch the warning off at 75% or below.',
+    'Turn the warning on above 75% humidity and off at 75% or below.',
     ['Humidity', 'Stock monitoring', 'Boundaries'],
   ),
   quest(
@@ -210,7 +213,7 @@ export const communityQuests = [
       ['Temperature boundary', { temp: 40, vibration: 20 }, [0, 1]],
       ['Vibration boundary', { temp: 25, vibration: 80 }, [0, 1]],
     ],
-    'Run the conveyor only below 40°C AND vibration 80. Otherwise stop it and light the warning.',
+    'Run the conveyor only while the temperature is below 40°C AND vibration is below 80. Otherwise stop it and light the warning.',
     ['Temperature', 'Vibration', 'Machine interlocks'],
   ),
   quest(
@@ -237,7 +240,7 @@ export const communityQuests = [
       ['Vehicle phase', { pedRequest: 0 }, [1, 0, 0]],
       ['Pedestrian request', { pedRequest: 1 }, [0, 0, 1]],
     ],
-    'Propose EW green when no crossing is requested; propose WALK when requested. Keep NS red. Rejected proposals appear in Serial debugging.',
+    'Propose EW green when no crossing is requested and WALK when one is. Keep NS red (LOW). Serial debugging shows any rejected proposals.',
     ['Requests', 'Signal phases', 'Safety interlock'],
   ),
   quest(
@@ -267,7 +270,7 @@ communityQuests.push(
       ['Daylight', { light: 80 }, [0]],
       ['At threshold', { light: 1800 / 40.95 }, [0]],
     ],
-    'Light the porch when the light reading is below 1800. Turn it off in daylight.',
+    'Light the porch when the light reading is below 1800. Turn it off at 1800 or above.',
     ['Light sensors', 'Residential lighting'],
   ),
   quest(
@@ -295,7 +298,7 @@ communityQuests.push(
       ['Moist garden', { soil: 80, tank: 80 }, [0]],
       ['Empty tank', { soil: 20, tank: 0 }, [0]],
     ],
-    'Water below soil reading 2048 while water remains in the tank. Stop when moist or the tank is empty.',
+    'Water below soil reading 2048 while the tank reading is above 0. Stop at soil 2048 or above, or when the tank is empty.',
     ['Moisture', 'Irrigation', 'Water conservation'],
   ),
 );

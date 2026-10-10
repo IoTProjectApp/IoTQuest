@@ -1,5 +1,6 @@
-# Runs the test suite on pushes to main and dev and on every pull request, and
-# publishes the built game to GitHub Pages when main passes.
+# Runs the test suite on pushes to main and dev and on every pull request. When main or dev
+# passes, publishes both to GitHub Pages: main at the site root for students, dev at /dev/ as a
+# labelled test copy with its own saved progress.
 name: Test and deploy
 
 on:
@@ -32,11 +33,6 @@ jobs:
         run: npm test
       - name: Build
         run: npm run build
-      - name: Upload site
-        if: matrix.node == 22
-        uses: actions/upload-pages-artifact@v5
-        with:
-          path: dist/client
 
   # Drives the real game in headless Chromium (software WebGL) to catch layout, theme and
   # accessibility regressions. Kept out of the deploy gate until it has proven stable on CI.
@@ -53,16 +49,44 @@ jobs:
       - name: Run browser tests
         run: npm run test:browser
 
+  # Pages holds one site, so every deploy rebuilds both branches from their latest commits (each
+  # passed these checks before it could be merged). One deploy at a time, so a main deploy and a
+  # dev deploy never overwrite each other with an older copy of the other branch.
   deploy:
     needs: test
-    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    if: (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/dev') && github.event_name != 'pull_request'
     runs-on: ubuntu-latest
+    concurrency:
+      group: pages-deploy
+      cancel-in-progress: false
     permissions:
+      contents: read
       pages: write
       id-token: write
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: main
+          path: main
+      - uses: actions/checkout@v7
+        with:
+          ref: dev
+          path: dev
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - name: Build main and dev
+        run: |
+          node main/scripts/build.mjs
+          node dev/scripts/build.mjs --channel=dev
+          mkdir site
+          cp -R main/dist/client/. site/
+          cp -R dev/dist/client site/dev
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: site
       - id: deployment
         uses: actions/deploy-pages@v5

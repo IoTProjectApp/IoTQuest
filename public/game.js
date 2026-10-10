@@ -74,7 +74,11 @@ import {
 import { buildProgressReport, progressFileName } from './progress-report.js';
 import { understandingQuestions, answerQuestion, understandingScore } from './understanding.js';
 const $ = (id) => document.getElementById(id);
-const STORAGE_KEY = 'iotquest-v1',
+// The test copy at /dev/ (channel.js) saves separately so trying it never changes the main site's
+// progress. It starts from a copy of the main site's progress until it first saves.
+const CHANNEL = globalThis.IOTQUEST_CHANNEL || '',
+  MAIN_STORAGE_KEY = 'iotquest-v1',
+  STORAGE_KEY = CHANNEL ? 'iotquest-' + CHANNEL + '-v1' : MAIN_STORAGE_KEY,
   TICK_MS = 200,
   ADVANCED_COMPONENT_XP = 150,
   EVIDENCE_LIMIT = 50,
@@ -96,7 +100,13 @@ const areas = [
 const baseAreas = areas.map((a) => [...a]);
 let saved = {};
 try {
-  saved = sanitizeSaved(JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}'));
+  saved = sanitizeSaved(
+    JSON.parse(
+      localStorage.getItem(STORAGE_KEY) ||
+        (CHANNEL && localStorage.getItem(MAIN_STORAGE_KEY)) ||
+        '{}',
+    ),
+  );
 } catch {}
 let state = {
   mission: 0,
@@ -3137,7 +3147,9 @@ function settings() {
   $('resetProgress').onclick = () => {
     if (!confirm('Delete all saved progress, projects and badges in this browser?')) return;
     try {
-      localStorage.removeItem(STORAGE_KEY);
+      // The test copy keeps an empty save, or the reload would copy the main site's back in.
+      if (CHANNEL) localStorage.setItem(STORAGE_KEY, '{}');
+      else localStorage.removeItem(STORAGE_KEY);
     } catch {}
     window.location.reload();
   };

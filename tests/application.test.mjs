@@ -250,6 +250,7 @@ function harness(
     darkPreference = false,
     weatherFetch = undefined,
     wideScreen = false,
+    channel = undefined,
   } = {},
 ) {
   const pending = [],
@@ -310,6 +311,7 @@ function harness(
     };
   const windowListeners = {};
   const ctx = vm.createContext({
+    IOTQUEST_CHANNEL: channel,
     document,
     fetch: weatherFetch,
     window: { addEventListener: (type, fn) => (windowListeners[type] = fn) },
@@ -1223,6 +1225,25 @@ test('early appearance bootstrap respects saved preferences and tolerates unavai
   });
   assert.equal(root.dataset.theme, 'dark');
 });
+test('the test copy labels itself and reads its own appearance setting first', async () => {
+  const bootstrap = await readFile('public/theme-init.js', 'utf8');
+  for (const [entries, expected] of [
+    [{ 'iotquest-v1': { theme: 'dark' } }, 'dark'],
+    [{ 'iotquest-v1': { theme: 'dark' }, 'iotquest-dev-v1': { theme: 'light' } }, 'light'],
+  ]) {
+    const root = { dataset: {}, style: {} },
+      document = { documentElement: root, title: 'IoT Quest' };
+    vm.runInNewContext(bootstrap, {
+      IOTQUEST_CHANNEL: 'dev',
+      document,
+      localStorage: { getItem: (k) => (entries[k] ? JSON.stringify(entries[k]) : null) },
+      matchMedia: () => ({ matches: false }),
+    });
+    assert.equal(root.dataset.theme, expected);
+    assert.equal(root.dataset.channel, 'dev');
+    assert.equal(document.title, 'Test version · IoT Quest');
+  }
+});
 
 test('weather Retry restores live readings without stopping running student code', async () => {
   let calls = 0;
@@ -1649,6 +1670,19 @@ test('a tab stops saving once another tab saves newer progress', () => {
   h.api.selectMission(1);
   assert.equal(h.storage.get('iotquest-v1'), newer, "The other tab's progress is kept");
   assert.match(h.document.getElementById('saved').textContent, /another tab/);
+});
+test('the test copy at /dev/ starts from the main progress but never saves over it', () => {
+  const main = { xp: 321, theme: 'dark' };
+  const h = harness(main, { channel: 'dev' });
+  assert.equal(h.api.state.xp, 321, 'Starts from the main site progress');
+  installAndWire(h, 0);
+  h.api.state.xp = 400;
+  h.document.getElementById('connectAll').click();
+  assert.equal(h.storage.get('iotquest-v1'), JSON.stringify(main), 'Main progress untouched');
+  assert.equal(JSON.parse(h.storage.get('iotquest-dev-v1')).xp, 400);
+  // Another main-site tab saving does not make the test copy stale, and the reverse.
+  h.windowEvent('storage', { key: 'iotquest-v1', newValue: '{}' });
+  assert.doesNotMatch(h.document.getElementById('saved').textContent, /another tab/);
 });
 test('saved test evidence keeps full copies only for the latest runs', () => {
   const h = harness();

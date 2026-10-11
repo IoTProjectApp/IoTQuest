@@ -4391,6 +4391,9 @@ function projectWorldLabels(engine) {
         visible: v.visible,
         priority,
         movable: el.id === 'player' && !!engine.indoorArea,
+        // Community building (and crossing) buttons stay reachable by keyboard even when there
+        // is no room to show them.
+        essential: !!el.classList?.contains('community-building-target'),
       });
   };
   for (const el of document.querySelectorAll('[data-area]')) {
@@ -4482,7 +4485,12 @@ function projectWorldLabels(engine) {
     );
     communityTargets.querySelectorAll('[data-community-building]').forEach((button) => {
       const b = sim.map.buildings.find((b) => b.type === button.dataset.communityBuilding);
-      place(button, [engine.model.community.origin.x + b.x, b.type === 'factory' ? 8 : 5, b.z], 2);
+      // Placed before resident tags (2) so the buttons get first choice of the free space.
+      place(
+        button,
+        [engine.model.community.origin.x + b.x, b.type === 'factory' ? 8 : 5, b.z],
+        1.5,
+      );
     });
   }
   const { rect, blocked } = worldControlBoxes(engine);

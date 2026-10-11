@@ -31,7 +31,7 @@ html[data-theme='light'] .editor-toolbar select {
 }
 html[data-theme='light'] .editor-toolbar .text-btn,
 html[data-theme='light'] .editor-actions button {
-  color: #657798;
+  color: #607291;
 }
 html[data-theme='light'] .editor-actions button:hover {
   background: #e4eafa;
@@ -42,7 +42,7 @@ html[data-theme='light'] .editor-actions .primary {
 }
 html[data-theme='light'] .line-numbers {
   background: #f5f7fc;
-  color: #8593aa;
+  color: #667183;
   border-color: #e6ebf5;
 }
 html[data-theme='light'] .highlight {
@@ -244,13 +244,13 @@ html[data-theme='dark'] .outline:hover {
 }
 html[data-theme='dark'] #freeExploration,
 html[data-theme='dark'] .primary {
-  background: #6776e9;
+  background: #5865d0;
   color: #fff;
-  border-color: #6776e9;
+  border-color: #5865d0;
 }
 html[data-theme='dark'] #freeExploration:hover,
 html[data-theme='dark'] .primary:hover {
-  background: #7b88f1;
+  background: #606cd8;
 }
 html[data-theme='dark'] .travel-summary > span {
   background: #172234bb;
@@ -810,6 +810,9 @@ html[data-theme='dark'] .destination-panel .enter-location {
 }
 html[data-theme='dark'] .split-handle::after {
   background: #334159;
+}
+html[data-theme='dark'] .split-handle:focus-visible {
+  outline-color: #8d9bff;
 }
 html[data-theme='dark'] .split-handle:hover::after,
 html[data-theme='dark'] .split-handle:focus-visible::after,

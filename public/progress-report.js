@@ -259,18 +259,26 @@ export const needsReview = (q) =>
   q.understandAnswered >= q.understandTotal &&
   q.understood * 2 < q.understandTotal;
 
+// Numbers the quests the same way for the grid and the CSV. Built-in quests keep their quest
+// number; teacher quests (which each student may have imported in a different order) are numbered
+// by quest id, in the order they first appear going through the students alphabetically, so the
+// same quest has the same number for every student. Returns the 0-based number of a quest.
+function questNumbers() {
+  const teacher = new Map();
+  return (q) => {
+    if (q.location !== 'teacher') return q.index;
+    if (!teacher.has(q.difficulty)) teacher.set(q.difficulty, new Map());
+    const ids = teacher.get(q.difficulty),
+      id = q.questId || q.title;
+    if (!ids.has(id)) ids.set(id, ids.size);
+    return ids.get(id);
+  };
+}
+
 // The class grid for one destination and level: quest columns and one row per student.
 export function classGrid(reports, viewId) {
-  // Built-in quests keep their quest number as the column; teacher quests (which each student
-  // may have imported in a different order) get one column per quest id.
   const columns = [],
-    teacherColumns = new Map(),
-    column = (q) => {
-      if (q.location !== 'teacher') return q.index;
-      const id = q.questId || q.title;
-      if (!teacherColumns.has(id)) teacherColumns.set(id, teacherColumns.size);
-      return teacherColumns.get(id);
-    },
+    column = questNumbers(),
     rows = latestReports(reports).map((r) => {
       const cells = [];
       for (const q of r.quests)
@@ -324,7 +332,8 @@ export function progressCSV(reports) {
     'Language',
     'Report date',
   ];
-  const lines = [header.map(csvCell).join(',')];
+  const lines = [header.map(csvCell).join(',')],
+    number = questNumbers();
   for (const r of latestReports(reports))
     for (const q of r.quests)
       lines.push(
@@ -333,7 +342,7 @@ export function progressCSV(reports) {
           r.classCode,
           q.locationName,
           q.difficulty,
-          q.index + 1,
+          number(q) + 1,
           q.title,
           q.status,
           q.attempts,
@@ -352,5 +361,6 @@ export function progressCSV(reports) {
           .map(csvCell)
           .join(','),
       );
-  return lines.join('\r\n') + '\r\n';
+  // The byte order mark tells Excel the file is UTF-8, so names in any script open correctly.
+  return '\ufeff' + lines.join('\r\n') + '\r\n';
 }

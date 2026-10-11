@@ -2,6 +2,32 @@ import { buildTree } from './vegetation.js';
 import { houseDesign } from './house-design.js';
 import { addAnimal, updateAnimals } from './animals.js';
 
+// Sample a continuous centreline so river banks follow gentle bends instead of box corners.
+export function riverCurve(points, subdivisions = 5) {
+  const result = [];
+  for (let i = 0; i < points.length - 1; i++) {
+    const a = points[Math.max(0, i - 1)],
+      b = points[i],
+      c = points[i + 1],
+      d = points[Math.min(points.length - 1, i + 2)];
+    for (let j = 0; j < subdivisions; j++) {
+      const t = j / subdivisions;
+      result.push(
+        b.map(
+          (v, k) =>
+            0.5 *
+            (2 * v +
+              (-a[k] + c[k]) * t +
+              (2 * a[k] - 5 * v + 4 * c[k] - d[k]) * t * t +
+              (-a[k] + 3 * v - 3 * c[k] + d[k]) * t * t * t),
+        ),
+      );
+    }
+  }
+  result.push([...points.at(-1)]);
+  return result;
+}
+
 export function addLandscape(model, location = { id: 'legacy', climate: 'temperate', iso: 'AUS' }) {
   if (model.landscape) return model.landscape;
   const seed = houseDesign(location).seed;
@@ -40,16 +66,20 @@ export function addLandscape(model, location = { id: 'legacy', climate: 'tempera
   box(0, -0.61, 0, 640, 1, 480, colours.ground, { landscapeGround: true });
   for (let i = 0; i < 8; i++) {
     const x = -73 + i * 20 + rand() * 6,
-      z = -57 - rand() * 9,
-      width = 22 + rand() * 14,
+      z = -57 - rand() * 9 - (i % 3) * 7,
+      width = 34 + rand() * 18,
       height = (alpine ? 20 : dry ? 13 : 12) + rand() * 12,
-      depth = 24 + rand() * 9;
+      depth = 30 + rand() * 12;
     const mountain = mesh(
-      'mountain',
+      'ridge',
       [x, height / 2 - 0.12, z],
       [width, height, depth],
       i % 2 ? colours.hill : colours.rock,
-      { terrainFeature: 'mountain' },
+      {
+        terrainFeature: 'mountain',
+        surface: 'terrain',
+        rotation: [0, Math.sin(seed + i * 2.4) * 0.3, 0],
+      },
     );
     landscape.mountains.push(mountain);
     if (alpine && i % 2 === 0)
@@ -95,35 +125,43 @@ export function addLandscape(model, location = { id: 'legacy', climate: 'tempera
       angle = Math.atan2(dx, dz),
       x = (from[0] + to[0]) / 2,
       z = (from[1] + to[1]) / 2;
-    box(x, -0.075, z, width + 1.6, 0.13, length + 1, colours.rock, {
+    mesh('cylinder', [x, -0.045, z], [width + 1.6, 0.13, length + width + 1.6], colours.rock, {
       rotation: [0, angle, 0],
       terrainFeature: 'river-bank',
     });
-    const water = box(x, 0.015, z, width, 0.06, length + 0.7, dry ? '#76969a' : '#668f9b', {
-      rotation: [0, angle, 0],
-      roughness: 0.2,
-      opacity: 0.88,
-      terrainFeature: tributary ? 'tributary' : 'river',
-    });
+    const water = mesh(
+      'cylinder',
+      [x, 0.015, z],
+      [width, 0.06, length + width],
+      dry ? '#76969a' : '#537e88',
+      {
+        rotation: [0, angle, 0],
+        roughness: 0.2,
+        opacity: 1,
+        terrainFeature: tributary ? 'tributary' : 'river',
+      },
+    );
     const flow = box(x, 0.055, z, width * 0.5, 0.012, 0.18, '#b7d4d0', {
       rotation: [0, angle, 0],
-      opacity: 0.22,
+      opacity: 0.1,
       terrainFeature: 'water-flow',
     });
     landscape.waters.push({ mesh: water, flow, x, z, angle, length, phase: rand(), kind: 'river' });
   };
-  for (let i = 0; i < points.length - 1; i++) channel(points[i], points[i + 1], 4.4 + rand());
-  channel([-20, -57], [-33, -44], 2.2, true);
-  channel([-33, -44], [riverX - 1, -36], 2.7, true);
+  const curve = riverCurve(points);
+  for (let i = 0; i < curve.length - 1; i++)
+    channel(curve[i], curve[i + 1], 4.8 + Math.sin(i * 0.2) * 0.3);
+  channel([-44, -57], [-39, -44], 2.2, true);
+  channel([-39, -44], [riverX - 1, -36], 2.7, true);
   // Lake and softly irregular shoreline beside the river. No water sits in a quest area.
   const lakeX = riverX - 2,
     lakeZ = 16;
   mesh('cylinder', [lakeX, -0.02, lakeZ], [22, 0.2, 17], colours.rock, {
     terrainFeature: 'lake-bank',
   });
-  const lake = mesh('cylinder', [lakeX, 0.06, lakeZ], [19, 0.06, 14], '#618896', {
+  const lake = mesh('cylinder', [lakeX, 0.015, lakeZ], [19, 0.06, 14], '#537e88', {
     roughness: 0.18,
-    opacity: 0.9,
+    opacity: 1,
     terrainFeature: 'lake',
   });
   const ripples = Array.from({ length: 3 }, (_, i) =>

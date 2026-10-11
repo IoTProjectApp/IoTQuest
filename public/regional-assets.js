@@ -1,3 +1,4 @@
+import { neighbourProfiles } from './neighbour-profiles.js';
 import { buildTree } from './vegetation.js';
 import { extraLocations } from './destination-catalog.js';
 import { melbourneSuburbs } from './melbourne.js';
@@ -562,6 +563,8 @@ const NEIGHBOUR_LOOK = {
 function addMelbourneStreet(l, m) {
   const look = NEIGHBOUR_LOOK[l.style];
   if (!look) return;
+  const streetStart = m.objects.length;
+  m.neighbourHouses = [];
   const { box, cylinder, sphere, windows } = m,
     grass = '#a5bd87',
     pick = (list, i) => list[i % list.length];
@@ -604,6 +607,7 @@ function addMelbourneStreet(l, m) {
   }
   // Neighbouring houses: fronts face the street.
   const house = (x, z, width, depth, facing, i) => {
+    const first = m.objects.length;
     // Vary each lot's built form as well as its paint; keep attached terraces
     // within their narrow frontage and detached houses within their own lot.
     width *= look.attached ? 0.96 + (i % 3) * 0.018 : 0.91 + (i % 4) * 0.035;
@@ -684,15 +688,32 @@ function addMelbourneStreet(l, m) {
     );
     if (!look.attached)
       box(x, 0.3, frontZ + facing * 1.6, width + 1.6, 0.4, 0.08, i % 2 ? '#f1ede2' : '#8d7a63');
+    const type = 'neighbour' + (i + 1),
+      parts = m.objects.slice(first);
+    for (const part of parts) part.neighbourHouse = type;
+    m.neighbourHouses.push({
+      ...neighbourProfiles[i],
+      type,
+      x,
+      z,
+      w: width,
+      d: depth,
+      facing,
+      attached: !!look.attached,
+      parts,
+    });
   };
   const across = look.attached ? 4.8 : 11,
     width = look.attached ? 4.6 : 7.4;
   let i = 0;
-  for (let x = -30 + across / 2; x <= 30; x += across) house(x, 27.2, width, 6.4, -1, i++);
+  // Keep each facade inside the street (attached: 12 across + 6 beside = 18 profiles).
+  for (let x = -30 + across / 2; x + across / 2 <= 30; x += across)
+    house(x, 27.2, width, 6.4, -1, i++);
   for (const side of [-1, 1]) {
     // Beside the property: houses facing the same street, set back from the footpath.
     if (look.attached) {
       for (let k = 0; k < 3; k++) house(side * (19.6 + k * across), -2.5, width, 9, 1, i++);
     } else house(side * 25.5, -1.5, width + 1.5, 8.5, 1, i++);
   }
+  for (const part of m.objects.slice(streetStart)) part.regionalStreet = true;
 }

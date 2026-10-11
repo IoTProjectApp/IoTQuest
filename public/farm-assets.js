@@ -1,3 +1,4 @@
+import { buildFeedStation, updateFeedStation } from './farm-feed-station.js';
 import { buildFarmHomeLane } from './farm-home-access.js';
 import { buildFarmPondGarden } from './farm-pond-garden.js';
 import { buildTree } from './vegetation.js';
@@ -260,6 +261,7 @@ export function buildFarm(l, m) {
       herd('goat', PADDOCKS.back, 4);
       break;
   }
+  buildFeedStation(m, farm, l.style);
   buildFarmHomeLane(m);
   buildFarmPondGarden(m);
   for (const animal of m.animals)
@@ -285,6 +287,12 @@ export function updateFarm(model, devices, outputs, env, t, reduced) {
   if (!farm) return;
   const daylight = Math.min(1, Math.max(0, (env.light ?? 70) / 65)),
     animals = model.animals || [];
+  // While the feed or water runs low, the station's herd waits there instead of grazing.
+  const station = updateFeedStation(model, devices, outputs, env);
+  const home = (a, route = []) =>
+    station?.claims(a)
+      ? goal(a, 'feeding', route, station.around)
+      : goal(a, 'home', route, a.paddock);
   if (farm.henDoor) {
     // Without a door circuit the farmer opens the door by day and shuts it at night.
     const open = devices?.some((d) => d.id === 'gate')
@@ -295,7 +303,7 @@ export function updateFarm(model, devices, outputs, env, t, reduced) {
     for (const a of animals.filter((a) => a.kind === 'chicken')) {
       if (daylight > 0.35) {
         // Morning: out through an open door; with the door shut the hens stay in.
-        if (open || a.goalKey !== 'roost') goal(a, 'home', [door], a.paddock);
+        if (open || a.goalKey !== 'roost') home(a, [door]);
       } else if (open) goal(a, 'roost', [door, [-6, -22]], [-7.5, -23.2, -4.5, -21], true);
       else if (a.goalKey !== 'roost') {
         // Hens behind a shut house approach around its nearest side, through open ground.
@@ -329,15 +337,10 @@ export function updateFarm(model, devices, outputs, env, t, reduced) {
           [-6, -26, 6, -17.5],
         );
       else
-        goal(
-          a,
-          'home',
-          [
-            [s * 14, -22],
-            [s * 21, -22],
-          ],
-          a.paddock,
-        );
+        home(a, [
+          [s * 14, -22],
+          [s * 21, -22],
+        ]);
     }
   }
   if (farm.troughWater) {
@@ -348,7 +351,7 @@ export function updateFarm(model, devices, outputs, env, t, reduced) {
     // A low trough brings the thirsty sheep in the windmill paddock crowding round.
     for (const a of animals.filter((a) => a.kind === 'sheep' && a.paddock[0] > 0))
       if (level < 0.3) goal(a, 'thirsty', [], [20.5, -23.5, 27, -16.5]);
-      else goal(a, 'home', [], a.paddock);
+      else home(a);
   }
   if (farm.shelters) {
     const misting = on(devices, outputs, 'valve') && (env.tank ?? 0) > 0;
@@ -363,7 +366,10 @@ export function updateFarm(model, devices, outputs, env, t, reduced) {
       const shelter = farm.shelters[a.paddock[0] < 0 ? 0 : 1];
       if ((env.temp ?? 24) > 30)
         goal(a, 'shade', [], [shelter.x - 2.2, shelter.z - 1.6, shelter.x + 2.2, shelter.z + 1.6]);
-      else goal(a, 'home', [], a.paddock);
+      else home(a);
     }
   }
+  // Stock with no other routine (the station paddock's sheep) also follow the station.
+  for (const a of animals)
+    if (station && (!a.goalKey || a.goalKey === 'home' || a.goalKey === 'feeding')) home(a);
 }

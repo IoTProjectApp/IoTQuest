@@ -47,17 +47,16 @@ export function buildStationDriveway({ b, add }) {
       surface: 'plain',
     });
   }
-  // A marked apron and directional arrows connect the bay directly to the main street.
-  for (const direction of [-1, 1]) {
-    const x = 86,
-      zz = z + direction * 1.6;
-    draw(x, 0.16, zz, 2, 0.012, 0.1, '#eee8cd', { surface: 'plain' });
-    for (const side of [-1, 1])
-      draw(x + direction * 0.65, 0.16, zz + side * 0.24, 0.65, 0.012, 0.09, '#eee8cd', {
-        surface: 'plain',
-        rotation: [0, (-side * direction * Math.PI) / 4, 0],
-      });
-  }
+  // Arrows on both halves of the apron point from the gate out to the main street (+x).
+  const arrow = (x, zz) => {
+    const mark = (cx, cz, w, yaw) =>
+      draw(cx, 0.16, cz, w, 0.012, 0.1, '#eee8cd', { surface: 'plain', rotation: [0, yaw, 0] });
+    const apex = x + 1;
+    mark(x, zz, 2, 0);
+    // Each stroke of the head runs back from the apex, away from the shaft.
+    for (const side of [-1, 1]) mark(apex - 0.26, zz + side * 0.26, 0.75, side * (Math.PI / 4));
+  };
+  for (const side of [-1, 1]) arrow((gateX + 87) / 2 + 0.5, z + side * 1.6);
   for (let offset = -2.5; offset <= 2.5; offset += 1)
     draw(88, 0.165, z + offset, 1.8, 0.012, 0.45, '#eee8cd', {
       surface: 'plain',

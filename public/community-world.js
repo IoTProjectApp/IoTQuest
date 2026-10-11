@@ -171,8 +171,9 @@ export function addCommunityWorld(model, location) {
     }
   for (const b of sim.map.buildings) {
     if (b.type === 'parking') {
-      box(32, 0.11, 37, 16, 0.08, 10, '#89958d');
-      for (let x = 26; x <= 38; x += 4) box(x, 0.16, 37, 0.1, 0.03, 7, '#f3ebc8');
+      // Drawn from the simulation's footprint, which is also what a click on the lot selects.
+      box(b.x, 0.11, b.z, b.w, 0.08, b.d, '#89958d');
+      for (let x = b.x - 6; x <= b.x + 6; x += 4) box(x, 0.16, b.z, 0.1, 0.03, b.d - 3, '#f3ebc8');
       continue;
     }
     const facade = ['warehouse', 'factory'].includes(b.type)

@@ -68,7 +68,7 @@ test('visual materials and ground shadows preserve geometry, collisions and rout
   );
   assert.equal(JSON.stringify(m.colliders), colliders);
   assert.equal(JSON.stringify(m.community.sim.map.roads.edges), routes);
-  assert.equal(m.visualShadows.length, 20);
+  assert.equal(m.visualShadows.length, 21, 'Includes the post office; open-air lots cast none');
   for (const { building: b } of m.community.civic)
     assert.ok(
       m.visualShadows.some(

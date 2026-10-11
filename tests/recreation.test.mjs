@@ -26,7 +26,9 @@ test('pool and gym occupy separate connected plots with safe entrances at every 
       assert.equal(collides(room[1], room[2], model.colliders), false);
       assert.ok(room[3].bounds.maxX - room[3].bounds.minX > 10);
       assert.ok(furniture.length > 25);
-      const staff = model.actors.find((a) => a.id === 'recreation:' + b.type);
+      const staff = model.actors.find(
+        (a) => a.id === 'recreation:' + b.type || a.id === 'openblock:' + b.type,
+      );
       assert.equal(staff.name, b.resident);
       assert.equal(collides(staff.x, staff.z, model.colliders), false);
       if (b.type === 'park') {
@@ -278,4 +280,39 @@ test('pool and gym have enclosed changing rooms and shower rooms with doorways',
         `${type} doorway at ${x}, ${z}`,
       );
   }
+});
+
+test('football field, outdoor gym and post office fill the free northern blocks only', () => {
+  for (const [id, expected] of [
+    ['legacy', 3],
+    ['fitzroy', 0],
+    ['brunswick', 0],
+  ]) {
+    const model = createRegionalModel(id),
+      c = addCommunityWorld(
+        model,
+        locations.find((l) => l.id === id),
+      );
+    const types = c.openBlocks.map((item) => item.building.type);
+    assert.equal(types.length, expected, id);
+    for (const type of types) {
+      assert.ok(c.sim.map.buildings.some((b) => b.type === type));
+      assert.ok(c.areas.some((a) => a[3].communityType === type));
+    }
+  }
+  const model = createRegionalModel('legacy'),
+    c = addCommunityWorld(model);
+  const football = c.openBlocks.find((item) => item.building.type === 'football');
+  assert.equal(football.players.length, 10);
+  const before = football.players.map((p) => [p.x, p.z]);
+  updateCommunityWorld(
+    model,
+    { env: { light: 70, rain: 0 }, devices: [], outputs: {}, running: false, paused: false },
+    2,
+  );
+  assert.notDeepEqual(
+    football.players.map((p) => [p.x, p.z]),
+    before,
+    'Players move',
+  );
 });

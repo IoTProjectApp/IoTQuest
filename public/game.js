@@ -3958,6 +3958,7 @@ function renderSectionResidents() {
         (c) =>
           c.key.startsWith('worker:') ||
           c.key.startsWith('neighbour:') ||
+          c.key.startsWith('openblock:') ||
           c.key.startsWith('civic-section:'),
       ),
     )

@@ -73,7 +73,11 @@ export function prepareWorldMaterials(model) {
   for (const vehicle of model.community?.vehicles || []) vehicle.glass.surface = 'glass';
   model.visualShadows = [{ x: -5.85, z: -6, w: 15.4, d: 11.2, h: 3, opacity: 0.45 }];
   for (const b of model.community?.sim.map.buildings || [])
-    if (!b.playground && !['home', 'roads', 'parking', 'park', 'basketball'].includes(b.type)) {
+    if (
+      !b.playground &&
+      !b.openAir &&
+      !['home', 'roads', 'parking', 'park', 'basketball'].includes(b.type)
+    ) {
       // A lot may declare a smaller footprint (e.g. the pool's canopy) relative to its centre.
       const f = b.shadow || { dx: 0, dz: 0, w: b.w, d: b.d };
       model.visualShadows.push({

@@ -1,6 +1,7 @@
 import { connectFarmHomeCars } from './farm-home-access.js';
 import { connectHomeDriveway, drawHomeStreetDriveway } from './home-driveway.js';
 import { recreationLots, buildRecreationAreas } from './community-recreation.js';
+import { addOpenBlocks, updateOpenBlocks } from './open-blocks.js';
 import { integrateRegionalNeighbours } from './regional-neighbourhood.js';
 import { buildTrafficSignals, trafficAspect } from './traffic-signals.js';
 import { connectFarmDriveway, connectFarmFootpath, drawFarmDriveway } from './farm-driveway.js';
@@ -363,6 +364,10 @@ export function addCommunityWorld(model, location) {
   const gauge = box(-12, 1.8, 24, 0.16, 0.2, 0.9, '#83c99f');
   const civic = buildCivicBuildings(model, { sim, origin, box, objects });
   const recreation = buildRecreationAreas(model, { sim, origin, box });
+  // Football field, outdoor gym and post office, where the northern blocks are free.
+  const openBlocks = addOpenBlocks(model, { sim, origin, box, sphere });
+  areas.push(...openBlocks.areas);
+  recreation.push(...openBlocks.items);
   const sections = civic.flatMap((building) => building.sections);
   areas.push(...sections.map((section) => section.area));
   const residences = buildCommunityResidences(model, { sim, origin, location, box, objects });
@@ -549,6 +554,7 @@ export function addCommunityWorld(model, location) {
     residences,
     civic,
     recreation,
+    openBlocks: openBlocks.items,
     sections,
     furnishings,
     rain,
@@ -573,6 +579,7 @@ export function updateCommunityWorld(model, state, seconds) {
   if (!c) return;
   const { sim, origin } = c;
   updateCivicBuildings([...c.civic, ...c.recreation], state);
+  updateOpenBlocks(c.openBlocks || [], sim.time, state.reduced);
   sim.rain = state.env.rain || 0;
   sim.temperature = state.communityMission
     ? (state.env.temp ?? 24)

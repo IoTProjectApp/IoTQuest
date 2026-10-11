@@ -146,3 +146,21 @@ test('vehicles approaching the new civic junction stop on red and proceed on the
   sim.advance(25);
   assert.ok(vehicle.index > 0, 'Vehicle never passed its new traffic light');
 });
+
+test('town street lamps switch on at dusk unless a program drives the street-light output', () => {
+  const m = createRegionalModel('legacy'),
+    c = addCommunityWorld(m);
+  const lit = (light, outputs) => {
+    c.sim.outputs = outputs;
+    updateCommunityWorld(
+      m,
+      { env: { light, rain: 0 }, devices: [], outputs: {}, running: false, paused: true },
+      0,
+    );
+    return c.lights.every((l) => l.emission > 0);
+  };
+  assert.equal(lit(70, {}), false, 'Off in daylight');
+  assert.equal(lit(20, {}), true, 'On automatically after dark');
+  assert.equal(lit(20, { 3: 0 }), false, 'A program holding the output LOW keeps them off');
+  assert.equal(lit(70, { 3: 1 }), true, 'A program can switch them on in daylight');
+});

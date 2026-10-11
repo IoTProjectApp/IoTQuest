@@ -48,9 +48,10 @@ jobs:
       - run: npx playwright install --with-deps chromium
       - name: Run browser tests
         run: npm run test:browser
-      # Screenshots and traces of failed tests; open a trace with `npx playwright show-trace`.
+      # Screenshots and traces of failed tests, also when the job times out; open a trace with
+      # `npx playwright show-trace`.
       - name: Upload failure traces
-        if: failure()
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: browser-test-failures

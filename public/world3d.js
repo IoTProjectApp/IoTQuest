@@ -309,8 +309,7 @@ export class World3D {
     if (!this.gl)
       throw Error('WebGL is unavailable. Enable hardware acceleration to explore the 3D world.');
     this.contextRecovery = this.gl.getExtension('WEBGL_lose_context');
-    this.softwareRenderer = isSoftwareRenderer(this.gl);
-    this.maxPixelRatio = this.softwareRenderer ? 1 : 2;
+    this.maxPixelRatio = isSoftwareRenderer(this.gl) ? 1 : 2;
     this.model = createRegionalModel(getState?.().locationId || 'legacy');
     addCommunityWorld(this.model, locationById(getState?.().locationId));
     prepareWorldMaterials(this.model);
@@ -807,11 +806,6 @@ export class World3D {
       this.frameId = requestAnimationFrame(this.frame);
       return;
     }
-    // A software renderer draws on the CPU slower than frames are requested, so unfinished frames
-    // queue up (seconds of them on slow machines) and every call that needs an answer from the
-    // GPU, such as starting the travel globe, waits for the whole queue while clicks go
-    // unanswered. getError waits for the previous frame, so at most one is ever in flight.
-    if (this.softwareRenderer) this.gl.getError();
     const dt = Math.min(0.05, Math.max(0.001, (time - this.lastTime) / 1000));
     this.lastTime = time;
     try {

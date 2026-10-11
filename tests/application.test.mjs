@@ -56,7 +56,12 @@ import {
   adaptMissions,
   progressForLocation,
 } from '../public/locations.js';
-import { WeatherService, advanceEnvironment, fallbackWeather } from '../public/weather.js';
+import {
+  WeatherService,
+  advanceEnvironment,
+  fallbackWeather,
+  servoLevel,
+} from '../public/weather.js';
 import {
   createLabState,
   simulateBatch,
@@ -76,7 +81,7 @@ import { isLocationUnlocked, completedQuestCount } from '../public/locations.js'
 import { advancedMenu } from '../public/advanced-tools.js';
 import { weatherHTML } from '../public/travel.js';
 import { esc, setHTML } from '../public/html.js';
-import { sanitizeSaved } from '../public/persistence.js';
+import { sanitizeSaved, sanitizeEvidence } from '../public/persistence.js';
 import { highlight } from '../public/syntax-highlight.js';
 import { SerialPlotter, findThresholds, PLOT_LIMIT } from '../public/plotter.js';
 import { diagnose } from '../public/diagnostics.js';
@@ -348,6 +353,7 @@ function harness(
     progressForLocation,
     WeatherService,
     advanceEnvironment,
+    servoLevel,
     weatherHTML,
     createLabState,
     simulateBatch,
@@ -440,7 +446,7 @@ function harness(
   });
   vm.runInContext(
     source.replace(/^import [^;]*;\n/gm, '') +
-      '\nglobalThis.api={attachWorld:w=>{world3d=w;renderSectionResidents()},allAreas,projectWorldLabels,changeView,state,project,mission,selectMission,installDialog,switchTab,testSolution,run,stop,tick,changeBoard,move,code,loadExample,renderCode,renderMission,getOutputs:()=>outputs,getTests:()=>testResults,getPassed:()=>currentPassed,getRunning:()=>running,labState,startFault,exitFault,setClockSpeed,setDifficulty,pauseExecution,stepExecution,resumeExecution,enterLocation,resumeLegacy,returnToGlobe,applyLocalWeather,setWeatherMode,advanceWorld,refreshWeather,missionKey,getPlotSamples:()=>plotSamples,previewImport,exportManifest,startBugHunt,getActiveFault:()=>activeFault,setLayout,renderCoach,downloadProgress,labContext,exportProject,interact,enterArea,getConversation:()=>activeConversation,getTab:()=>tab,declutterLabels,startFault,importTeacherQuest,questList,boardLink,selectCommunityBuilding};',
+      '\nglobalThis.api={attachWorld:w=>{world3d=w;renderSectionResidents()},allAreas,projectWorldLabels,changeView,state,project,mission,selectMission,installDialog,switchTab,testSolution,run,stop,tick,changeBoard,move,code,loadExample,renderCode,renderMission,getOutputs:()=>outputs,getTests:()=>testResults,getPassed:()=>currentPassed,getRunning:()=>running,labState,startFault,exitFault,setClockSpeed,setDifficulty,pauseExecution,stepExecution,resumeExecution,enterLocation,resumeLegacy,returnToGlobe,applyLocalWeather,setWeatherMode,advanceWorld,refreshWeather,missionKey,getPlotSamples:()=>plotSamples,previewImport,exportManifest,startBugHunt,getActiveFault:()=>activeFault,setLayout,renderCoach,downloadProgress,labContext,exportProject,interact,enterArea,getConversation:()=>activeConversation,getTab:()=>tab,declutterLabels,startFault,importTeacherQuest,questList,boardLink,selectCommunityBuilding,restoreBackup};',
     ctx,
   );
   return {
@@ -2521,3 +2527,426 @@ for (const language of ['cpp', 'python'])
       assert.equal(h.api.getPassed(), true, q.title);
     }
   });
+
+// ---- Regressions from the 2026-10-11 review ---------------------------------------------
+const importZip = (manifest) =>
+  zipFiles({
+    'project.json': JSON.stringify({
+      format: 'iot-quest-project',
+      version: 1,
+      technician: 'Ari',
+      locationId: 'legacy',
+      slot: 'mission',
+      missionIndex: 0,
+      difficulty: 'beginner',
+      board: 'ESP32',
+      language: 'cpp',
+      code: { cpp: '// imported\nvoid setup(){}\nvoid loop(){}' },
+      devices: [],
+      results: [],
+      ...manifest,
+    }),
+  });
+const solveQuest = (h, index) => {
+  installAndWire(h, index);
+  h.api.loadExample();
+  h.api.testSolution();
+  assert.equal(h.api.getPassed(), true);
+};
+test('Spot the bugs opens only for a quest passed with the student’s own code', () => {
+  // A brand-new student in a dashboard quest cannot reach a worked solution through the hunt.
+  const h = harness();
+  h.api.switchTab('dashboard');
+  h.document.querySelectorAll('[data-dashboard-quest]')[0].click();
+  const dashboard = h.api.getActiveFault();
+  assert.ok(dashboard.track);
+  h.api.switchTab('faults');
+  assert.equal(
+    h.document.getElementById('startHunt'),
+    null,
+    'No hunt card while it does not apply',
+  );
+  h.api.labContext().startBugHunt();
+  assert.equal(h.api.getActiveFault(), dashboard);
+  // Nor can a fault workshop: they start from quest 1's finished program.
+  h.api.labContext().startFault('ground');
+  assert.equal(h.api.getActiveFault(), dashboard);
+  // Another challenge does not open the hunt of an unsolved quest either.
+  const s = harness();
+  solveQuest(s, 0);
+  s.api.selectMission(5);
+  s.api.startFault('spoof');
+  s.api.switchTab('faults');
+  assert.equal(s.document.getElementById('startHunt'), null);
+  s.api.labContext().startBugHunt();
+  assert.equal(s.api.getActiveFault().id, 'spoof');
+  // The solved quest offers its hunt.
+  s.api.selectMission(0);
+  s.api.switchTab('faults');
+  assert.ok(s.document.getElementById('startHunt'));
+  s.document.getElementById('startHunt').click();
+  assert.equal(s.api.getActiveFault().kind, 'hunt');
+});
+test('a hunt during a teacher quest has its own slot and reward, and does not break the quest’s', async () => {
+  const { buildCustomQuest, questFile } = await import('../public/custom-quests.js');
+  const h = harness();
+  solveQuest(h, 0);
+  const quest = buildCustomQuest({
+    title: 'Fan on hot',
+    sensor: 'temp',
+    output: 'fan',
+    operator: '>',
+    threshold: 28,
+  });
+  h.api.importTeacherQuest(questFile(quest));
+  h.api.startFault(quest.id);
+  h.api.labContext().startBugHunt();
+  assert.equal(h.api.getActiveFault().id, quest.id, 'Unsolved teacher quest: no hunt');
+  h.api.state.completed['fault:' + quest.id] = { xp: 0 };
+  h.api.labContext().startBugHunt();
+  const hunt = h.api.getActiveFault();
+  assert.equal(hunt.kind, 'hunt');
+  assert.equal(hunt.id, 'hunt:ESP32:cpp:custom:' + quest.id);
+  assert.equal(hunt.rewardKey, 'fault:hunt:custom:' + quest.id);
+  assert.equal(hunt.mission.title, 'Fan on hot');
+  // A teacher-quest hunt saved by older versions in quest 1's slot is replaced, not reused.
+  h.api.state.projects['fault:hunt:ESP32:cpp:0'] = structuredClone(h.api.project());
+  h.api.exitFault();
+  h.api.selectMission(0);
+  h.api.startBugHunt();
+  assert.equal(h.api.getActiveFault().mission.title, missions[0].title);
+  assert.deepEqual(
+    h.api
+      .project()
+      .devices.map((d) => d.id)
+      .sort(),
+    [...missions[0].ids].sort(),
+  );
+  h.api.project().hunt.phase = 'fix';
+  h.api.project().code.cpp = program(missions[0], 'cpp', h.api.project().devices, true);
+  h.api.testSolution();
+  assert.equal(h.api.getPassed(), true);
+});
+test('quests wired before the controller changed elsewhere follow the new board', () => {
+  const h = harness();
+  solveQuest(h, 0);
+  const esp32Code = h.api.code();
+  installAndWire(h, 1);
+  h.api.changeBoard('Raspberry Pi Pico');
+  h.api.selectMission(0);
+  assert.equal(h.api.state.board, 'Raspberry Pi Pico');
+  assert.deepEqual(validate(h.api.project().devices, 'Raspberry Pi Pico'), []);
+  assert.equal(h.api.project().board, 'Raspberry Pi Pico');
+  assert.equal(h.api.project().codeByBoard.ESP32.cpp, esp32Code, 'ESP32 code kept aside');
+  h.api.switchTab('code');
+  h.api.run();
+  assert.notEqual(h.api.getTab(), 'wiring', 'The circuit check passes on the new board');
+  h.api.stop(false);
+  h.api.changeBoard('ESP32');
+  assert.equal(h.api.code(), esp32Code);
+  h.api.testSolution();
+  assert.equal(h.api.getPassed(), true);
+  // Older saves did not record a project's board: it is read from the pins.
+  const saved = JSON.parse(h.storage.get('iotquest-v1'));
+  for (const p of Object.values(saved.projects)) delete p.board;
+  saved.board = saved.legacyBoard = 'Raspberry Pi Pico';
+  const old = harness(saved);
+  old.api.resumeLegacy();
+  old.api.selectMission(0);
+  assert.deepEqual(validate(old.api.project().devices, 'Raspberry Pi Pico'), []);
+  assert.equal(old.api.project().codeByBoard.ESP32.cpp, esp32Code);
+  // An old project already wired for the current board is left exactly as it was.
+  const same = JSON.parse(h.storage.get('iotquest-v1'));
+  for (const p of Object.values(same.projects)) delete p.board;
+  const kept = harness(same);
+  kept.api.selectMission(0);
+  assert.equal(kept.api.code(), esp32Code);
+  assert.equal(
+    kept.api
+      .project()
+      .devices.map((d) => d.pin)
+      .join(),
+    same.projects[0].devices.map((d) => d.pin).join(),
+  );
+  assert.equal(kept.api.project().board, 'ESP32');
+});
+test('Stop, typing and a failed start never leave the world clock paused', () => {
+  const h = harness();
+  h.api.selectMission(0);
+  h.api.pauseExecution(); // Nothing installed: the program cannot start.
+  assert.equal(h.api.getRunning(), false);
+  assert.equal(h.api.labState().paused, false);
+  assert.ok(!h.api.state.debugPaused);
+  let t = h.api.labState().elapsedMs;
+  h.advanceTimer();
+  assert.ok(h.api.labState().elapsedMs > t, 'Clock still runs');
+  installAndWire(h, 0);
+  h.api.loadExample();
+  for (const leave of [
+    () => h.api.stop(true),
+    () => {
+      h.api.switchTab('code');
+      const input = h.document.getElementById('codeInput');
+      input.value += '\n// typing stops the paused program';
+      input.dispatchEvent({ type: 'input' });
+    },
+  ]) {
+    h.api.run();
+    h.api.pauseExecution();
+    assert.equal(h.api.labState().paused, true);
+    leave();
+    assert.equal(h.api.getRunning(), false);
+    assert.equal(h.api.labState().paused, false);
+    t = h.api.labState().elapsedMs;
+    h.advanceTimer();
+    assert.ok(h.api.labState().elapsedMs > t, 'Clock runs after the program stops');
+  }
+});
+test('malformed imported evidence is cleaned and cannot break saving, even after reload', async () => {
+  const evidence = [
+    { type: 'test', at: '2026-01-01', results: 'oops' },
+    { type: 'test', at: '2026-01-02', results: [null, 3, { name: 'ok', pass: 'yes' }] },
+    { type: 'edit', at: 5, count: 'many' },
+    null,
+    'junk',
+    ...Array.from({ length: 70 }, (_, i) => ({ type: 'test', at: '2026-02-' + i, results: [] })),
+  ];
+  const h = harness();
+  installAndWire(h, 0);
+  await h.api.previewImport(importZip({ lab: { evidence } }), 'bad.zip');
+  h.document.getElementById('confirmImport').click();
+  const lab = h.api.labState();
+  assert.ok(lab.evidence.every((e) => !('results' in e) || Array.isArray(e.results)));
+  assert.ok(lab.evidence.filter((e) => e.type === 'test').length <= 50);
+  assert.equal(lab.evidence.at(-1).type, 'import');
+  h.api.switchTab('code');
+  const input = h.document.getElementById('codeInput');
+  input.value += '\n// typing';
+  input.dispatchEvent({ type: 'input' });
+  h.api.testSolution();
+  // An old save that already holds such records loads clean.
+  const saved = JSON.parse(h.storage.get('iotquest-v1'));
+  saved.projects[0].lab.evidence.unshift({ type: 'test', at: 'x', results: [null] }, 7);
+  const again = harness(saved);
+  again.api.selectMission(0);
+  assert.ok(
+    again.api.labState().evidence.every((e) => e && (!e.results || Array.isArray(e.results))),
+  );
+  for (let i = 0; i < 6; i++) again.api.testSolution();
+  assert.deepEqual(sanitizeEvidence('nope'), []);
+  assert.deepEqual(
+    sanitizeEvidence([{ type: 'test', results: [{ name: 'a', pass: true, extra: 1 }], x: 1 }]),
+    [{ type: 'test', at: '', results: [{ name: 'a', pass: true }] }],
+  );
+});
+test('an import that fails part way leaves the game exactly as it was', async () => {
+  const h = harness();
+  installAndWire(h, 0);
+  const mine = h.api.code() + '\n// mine';
+  h.api.project().code.cpp = mine;
+  const plan = await h.api.previewImport(importZip({}), 'odd.zip');
+  plan.devices = null; // Something the import cannot open.
+  h.document.getElementById('confirmImport').click();
+  assert.equal(h.document.getElementById('modalTitle').textContent, 'Project not imported');
+  assert.equal(h.api.state.projects[0].code.cpp, mine);
+  assert.ok(!Object.keys(h.api.state.projects).some((k) => k.includes('~backup-')));
+  assert.equal(h.api.project().devices.length, missions[0].ids.length);
+});
+test('an import for a locked destination opens there', async () => {
+  const h = harness();
+  installAndWire(h, 0);
+  await h.api.previewImport(importZip({ locationId: 'bergen', missionIndex: 5 }), 'bergen.zip');
+  h.document.getElementById('confirmImport').click();
+  assert.equal(h.api.state.activeLocation, 'bergen');
+  assert.equal(h.api.state.mission, 5);
+  assert.match(h.api.code(), /imported/);
+  assert.doesNotMatch(h.api.state.projects[0].code.cpp ?? '', /imported/);
+});
+test('area markers and E at a building keep a free build, a challenge and a running program', () => {
+  const h = harness();
+  attachRenderedWorld(h);
+  const marker = (name) =>
+    h.document.querySelectorAll('[data-area]').find((b) => b.dataset.area === name);
+  h.document.getElementById('freeBtn').click();
+  marker('Factory floor').click();
+  assert.equal(h.api.mission().title, 'Your smart world');
+  assert.equal(h.document.getElementById('freeBtn').textContent, '⚑ Back to quests');
+  h.document.getElementById('freeBtn').click();
+  installAndWire(h, 0);
+  h.api.loadExample();
+  h.api.run();
+  marker('Shop floor').click();
+  assert.equal(h.api.getRunning(), true);
+  assert.equal(h.api.mission().title, missions[0].title);
+  h.api.stop(false);
+  h.api.startFault('spoof');
+  h.api.interact(); // E beside the shop floor, where the technician now stands.
+  assert.equal(h.api.getActiveFault()?.id, 'spoof');
+  // With nothing under way, a marker still opens that building's quest.
+  h.api.exitFault();
+  marker('Factory floor').click();
+  assert.equal(h.api.mission().area, 'Factory floor');
+});
+test('the Free build button always matches whether Free build is on', async () => {
+  const h = harness();
+  const btn = h.document.getElementById('freeBtn');
+  btn.click();
+  assert.equal(btn.textContent, '⚑ Back to quests');
+  h.api.selectMission(1);
+  assert.equal(btn.textContent, '◇ Free build');
+  btn.click();
+  h.api.resumeLegacy();
+  assert.equal(btn.textContent, '◇ Free build');
+  btn.click();
+  h.api.state.completed = Object.fromEntries(missions.map((_, i) => [i, { xp: 0 }]));
+  await h.api.enterLocation(locations[0].id);
+  assert.equal(btn.textContent, '◇ Free build');
+});
+test('a corrupt saved home quest or controller falls back instead of breaking Original home', async () => {
+  for (const saved of [
+    { activeLocation: 'kyoto', legacyMission: 99, legacyBoard: 'Z80' },
+    { activeLocation: 'kyoto', legacyMission: '2', board: 7 },
+    { locationProgress: { kyoto: { board: 42, projects: { 0: { board: 'x', devices: [] } } } } },
+  ]) {
+    const clean = sanitizeSaved(saved);
+    assert.ok(!('legacyMission' in clean) || Number.isInteger(clean.legacyMission));
+    assert.ok(!('legacyBoard' in clean) && !('board' in clean));
+    const h = harness(saved);
+    h.api.resumeLegacy();
+    assert.equal(h.api.mission().title, missions[0].title);
+    assert.equal(h.api.state.board, 'ESP32');
+    h.api.state.completed = Object.fromEntries(missions.map((_, i) => [i, { xp: 0 }]));
+    await h.api.enterLocation('kyoto');
+    assert.equal(h.api.state.board, 'ESP32');
+    assert.ok(h.api.mission().title);
+  }
+});
+test('a real board receives digital outputs as 1/0 and PWM converted to its 0–255 range', () => {
+  const fan = [{ id: 'fan', pin: 26, output: true, name: 'Fan' }];
+  const step = (src, board) => new Runtime(src, 'python', fan, board).step({}, 200);
+  const pico = step(
+    'from machine import Pin, PWM\nfan = PWM(Pin(26))\nwhile True:\n    fan.duty_u16(16384)\n    time.sleep_ms(200)',
+    'Raspberry Pi Pico',
+  );
+  assert.equal(outputLine(pico.outputs, fan, pico.outputScales), 'OUT 26=64\n');
+  const esp = step(
+    'from machine import Pin, PWM\nfan = PWM(Pin(26))\nwhile True:\n    fan.duty(512)\n    time.sleep_ms(200)',
+    'ESP32',
+  );
+  assert.equal(outputLine(esp.outputs, fan, esp.outputScales), 'OUT 26=128\n');
+  assert.equal(outputLine({ 26: 1 }, fan, { 26: 1 }), 'OUT 26=1\n');
+  assert.equal(outputLine({ 26: 1 }, fan, { 26: 255 }), 'OUT 26=2\n', '1 would mean HIGH');
+  assert.equal(outputLine({ 26: 0 }, fan, { 26: 255 }), 'OUT 26=0\n');
+  // The board programs read 0/1 as LOW/HIGH and anything else as an 8-bit level.
+  assert.match(boardProgram(fan, 'ESP32'), /analogWrite\(pin, value == 1 \? 255 : value\)/);
+  assert.match(boardProgram(fan, 'Raspberry Pi Pico'), /value in \(0, 1\)[\s\S]*min\(value, 255\)/);
+  // The game passes the running program's scales.
+  const h = harness();
+  installAndWire(h, 0);
+  h.api.switchTab('code');
+  const lamp = h.api.project().devices.find((d) => d.output);
+  h.api.project().code.cpp =
+    'void setup() { pinMode(' +
+    lamp.pin +
+    ', OUTPUT); }\nvoid loop() { analogWrite(' +
+    lamp.pin +
+    ', 1); delay(200); }';
+  const sent = [];
+  h.api.boardLink.port = {};
+  h.api.boardLink.send = (line) => sent.push(line);
+  h.api.run();
+  assert.equal(sent.at(-1), 'OUT ' + lamp.pin + '=2\n');
+  h.api.boardLink.port = null;
+});
+test('lowering the bedroom blind shades the room, whatever call lowers it', () => {
+  const servo = [{ id: 'servo', pin: 26, output: true, name: 'Servo' }];
+  const temp = (out, scale) => {
+    let env = { temp: 24, outdoorTemp: 24, light: 95, soil: 50, tank: 50, humidity: 50 };
+    for (let i = 0; i < 600; i++)
+      env = advanceEnvironment(env, servo, { 26: out }, 1, { scales: { 26: scale } });
+    return env.temp;
+  };
+  const up = temp(0, 1),
+    high = temp(1, 1),
+    down = temp(180, 180),
+    half = temp(90, 180);
+  assert.ok(high < up && down < up, 'Lowered blinds keep the room cooler');
+  assert.ok(Math.abs(high - down) < 1e-9);
+  assert.ok(half < up && half > down);
+  assert.equal(servoLevel(1), 1);
+  assert.equal(servoLevel(90), 0.5);
+  // The 2D view turns the blind to 180° for digital HIGH too.
+  const index = missions.findIndex((m) => m.title === 'Bedroom Sun Blinds'),
+    h = harness();
+  solveQuest(h, index);
+  h.api.state.env.light = 95;
+  h.api.run();
+  assert.match(h.document.getElementById('deviceEffects').innerHTML, /rotate\(180deg\)/);
+});
+test('typing does not re-run Stop when nothing is running, and still stops a running program', () => {
+  const h = harness();
+  installAndWire(h, 0);
+  h.api.switchTab('code');
+  const serial = h.document.getElementById('serialText'),
+    input = h.document.getElementById('codeInput');
+  serial.textContent = 'untouched';
+  input.value += '\n// a';
+  input.dispatchEvent({ type: 'input' });
+  assert.equal(serial.textContent, 'untouched', 'No Stop (and its re-render) per keystroke');
+  h.api.loadExample();
+  h.api.switchTab('code');
+  h.api.run();
+  const running = h.document.getElementById('codeInput');
+  running.value += '\n// b';
+  running.dispatchEvent({ type: 'input' });
+  assert.equal(h.api.getRunning(), false);
+});
+test('typing just before another tab saves is kept for recovery, not lost', () => {
+  const h = harness();
+  installAndWire(h, 0);
+  h.api.switchTab('code');
+  const input = h.document.getElementById('codeInput');
+  input.value += '\n// typed a moment ago';
+  input.dispatchEvent({ type: 'input' }); // Saved 600 ms later, which never comes here.
+  const newer = JSON.stringify({ ...JSON.parse(h.storage.get('iotquest-v1')), xp: 900 });
+  h.storage.set('iotquest-v1', newer);
+  h.windowEvent('storage', { key: 'iotquest-v1', newValue: newer });
+  assert.equal(h.storage.get('iotquest-v1'), newer, "The other tab's progress is kept");
+  const unsaved = JSON.parse(h.storage.get('iotquest-v1-unsaved'));
+  assert.match(unsaved.code, /typed a moment ago/);
+  assert.equal(unsaved.project, '0');
+  h.document.getElementById('showUnsaved').click();
+  assert.match(h.document.getElementById('modalBody').innerHTML, /typed a moment ago/);
+  // Without pending typing there is nothing to recover.
+  const quiet = harness();
+  quiet.windowEvent('storage', { key: 'iotquest-v1', newValue: '{}' });
+  assert.equal(quiet.storage.get('iotquest-v1-unsaved'), undefined);
+  assert.equal(quiet.document.getElementById('showUnsaved'), null);
+});
+test('the Teacher dashboard restores an import backup and backs up the current work first', async () => {
+  const h = harness();
+  installAndWire(h, 0);
+  const mine = h.api.code() + '\n// mine';
+  h.api.project().code.cpp = mine;
+  await h.api.previewImport(importZip({}), 'ari.zip');
+  h.document.getElementById('confirmImport').click();
+  const imported = h.api.code();
+  h.document.getElementById('advancedTools').click();
+  h.document.getElementById('openTeacher').click();
+  const index = h.document
+    .getElementById('modalBody')
+    .innerHTML.match(/data-review="(\d+)">0~backup-/)[1];
+  h.document
+    .querySelectorAll('[data-review]')
+    .find((b) => b.dataset.review === index)
+    .click();
+  h.document.getElementById('restoreBackup').click();
+  assert.equal(h.api.code(), mine);
+  const backups = Object.keys(h.api.state.projects).filter((k) => k.startsWith('0~backup-'));
+  assert.equal(backups.length, 1);
+  assert.equal(h.api.state.projects[backups[0]].code.cpp, imported, 'Import kept as a backup');
+  assert.equal(h.api.labState().evidence.at(-1).type, 'restore');
+  assert.equal(JSON.parse(h.storage.get('iotquest-v1')).projects[0].code.cpp, mine);
+  // Plain projects have nothing to restore.
+  assert.equal(h.api.restoreBackup('legacy', '0'), false);
+});

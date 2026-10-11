@@ -1,5 +1,4 @@
-import { baseEnv } from './missions.js';
-import { ADC_SIGNALS, programReading } from './signals.js';
+import { ADC_SIGNALS, programReading, baseEnv } from './signals.js';
 // Quests that matter right now. A quest is needed when its own rule gives a different answer in
 // the current conditions than on a calm, ordinary day: at sunset "light < 1800" turns the path
 // lights on, so Light the Path becomes urgent; in a gale "wind < 40" closes the gate. This works

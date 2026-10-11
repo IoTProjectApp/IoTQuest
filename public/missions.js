@@ -4,7 +4,10 @@ import { weatherQuests } from './weather-quests.js';
 import { componentQuests } from './component-quests.js';
 import { logicQuests } from './logic-quests.js';
 import { guidedStarter } from './code-coach.js';
-import { ADC_SIGNALS, adcRead, isPico, picoWiring } from './signals.js';
+import { ADC_SIGNALS, adcRead, isPico, picoWiring, baseEnv } from './signals.js';
+// The calm-day sensor levels live in signals.js (which has no imports) so modules in an import
+// cycle with this one can use them; they are re-exported here for existing callers.
+export { baseEnv };
 export { ADC_SIGNALS };
 export const components = [
   ...communityComponents,
@@ -414,29 +417,6 @@ export const missions = [
 // Energy and water allowed across a quest's tests; a quest can set its own (the AC draws 800 W).
 export const missionBudget = (m) =>
   m.budget || { wh: m.ids.includes('pump') ? 0.35 : 0.15, litres: 45 };
-export const baseEnv = {
-  vibration: 5,
-  bay: 0,
-  pedRequest: 0,
-  spaces: 1,
-  light: 70,
-  motion: 0,
-  soil: 32,
-  tank: 80,
-  temp: 24,
-  rain: 0,
-  door: 0,
-  armed: 1,
-  distance: 100,
-  pot: 50,
-  humidity: 50,
-  occupied: 1,
-  appliance: 0,
-  pond: 60,
-  outdoorTemp: 24,
-  wind: 12,
-  cloud: 20,
-};
 export function defaults(ids, board) {
   let a = 0,
     d = 0,

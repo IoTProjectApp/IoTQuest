@@ -1,5 +1,6 @@
 import { components, defaults, missions } from './missions.js';
 import { locations, locationById, adaptMissions } from './locations.js';
+import { sanitizeEvidence } from './persistence.js';
 // Reads IoT Quest project ZIPs (our own exports, or the same files re-zipped by an operating
 // system). Every field is validated and rebuilt from trusted catalogues; nothing from the file
 // is used as markup, and rewards are never imported.
@@ -264,11 +265,11 @@ export function parseProject(files, fileName = 'project.zip') {
   if (!code[plan.language]) plan.language = Object.keys(code)[0];
   plan.devices = importDevices(plan.devices, plan.board);
   plan.results = cleanResults(plan.results);
-  const evidence = Array.isArray(plan.lab.evidence) ? plan.lab.evidence.filter(isRecord) : [];
-  plan.evidence = [
-    ...evidence.filter((e) => e.type === 'test').slice(-IMPORT_LIMITS.evidence),
-    ...evidence.filter((e) => e.type !== 'test').slice(-IMPORT_LIMITS.evidence),
-  ].sort((a, b) => String(a.at).localeCompare(String(b.at)));
+  // Each record is rebuilt field by field (a results field that is not a list of results would
+  // otherwise break every later save), keeping the latest test runs and other records.
+  plan.evidence = sanitizeEvidence(plan.lab.evidence).sort((a, b) =>
+    String(a.at).localeCompare(String(b.at)),
+  );
   delete plan.lab;
   plan.fileName = text(fileName, 120);
   plan.warnings = warnings;

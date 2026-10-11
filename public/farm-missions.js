@@ -24,7 +24,7 @@ const quests = {
     advanced: {
       ids: ['ldr', 'gate', 'pir'],
       conditions: ['light >= 1800 || motion == 1'],
-      goal: 'Open the door at light 1800 or above, and keep it open while the doorway motion sensor sees a late hen. Close it otherwise.',
+      goal: 'Open the door at a light reading of 1800 or above, and keep it open while the doorway motion sensor sees a late hen (HIGH). Close it otherwise.',
       hint: 'Use OR: light >= 1800 || motion == 1. A hen still in the doorway must never be shut out.',
       scenarios: [
         ['Bright morning', { light: 90, motion: 0 }, [1]],
@@ -58,7 +58,7 @@ const quests = {
     advanced: {
       ids: ['pond', 'pump', 'level'],
       conditions: ['pond < 2400 && tank > 400'],
-      goal: 'Refill the trough below level 2400, but only while the bore tank reading is above 400.',
+      goal: 'Refill the trough below level reading 2400, but only while the bore tank reading is above 400.',
       hint: 'Use pond < 2400 && tank > 400. A tank reading of exactly 400 must stop the pump.',
       scenarios: [
         ['Empty trough', { pond: 5, tank: 80 }, [1]],
@@ -91,7 +91,7 @@ const quests = {
     advanced: {
       ids: ['pir', 'gate', 'button'],
       conditions: ['motion == 1 && armed == 1'],
-      goal: 'Open the gate for a cow only while the milking-time switch (the arm button) is HIGH.',
+      goal: 'Open the gate for a cow only while the milking-time switch (the arm button) is HIGH. Keep it closed otherwise.',
       hint: 'Use motion == 1 && armed == 1. Cows wandering up outside milking time stay in the paddock.',
       scenarios: [
         ['Milking, cow arrives', { motion: 1, armed: 1 }, [1]],

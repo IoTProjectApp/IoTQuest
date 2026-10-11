@@ -326,10 +326,48 @@ export function createCommunity(location = {}) {
     walks.edge(park.node, '4:3/-1/-1');
     walks.edge('4:3/-1/-1', park.node);
   }
+  // Bus stops halfway along the busiest street lanes (both directions of each block). Buses pull
+  // in, wait, then pull away; community-world draws a shelter on the kerb beside each one.
+  const busStops = [];
+  for (const [a, b] of [
+    ['0:1', '1:1'],
+    ['2:1', '3:1'],
+    ['4:1', '5:1'],
+    ['1:2', '2:2'],
+    ['2:2', '3:2'],
+  ])
+    for (const [from, to] of [
+      [a, b],
+      [b, a],
+    ]) {
+      const edge = roads.edges[`${from}>${to}:out`]?.find((e) => e.to === `${from}>${to}:in`);
+      if (!edge) continue;
+      const start = roads.nodes[edge.from],
+        end = roads.nodes[edge.to];
+      const length = Math.hypot(end.x - start.x, end.z - start.z),
+        dx = (end.x - start.x) / length,
+        dz = (end.z - start.z) / length;
+      // 6 m past halfway in the direction of travel, so the two directions' stops are staggered
+      // at opposite ends of the block rather than facing each other.
+      const at = length / 2 + 6;
+      edge.busStop = {
+        id: `${from}>${to}`,
+        at,
+        x: start.x + dx * at,
+        z: start.z + dz * at,
+        dx,
+        dz,
+        // Towards the kerb on this lane's side of the road.
+        kx: -dz * handedness,
+        kz: dx * handedness,
+      };
+      busStops.push(edge.busStop);
+    }
   return {
     location,
     localSigns,
     handedness,
+    busStops,
     roads,
     walks,
     junctions,
@@ -338,6 +376,7 @@ export function createCommunity(location = {}) {
     buildings,
   };
 }
+export const BUS_DWELL = 4;
 export class Signals {
   constructor() {
     this.phase = 'EW';
@@ -683,6 +722,21 @@ export class CommunitySimulation {
       }
       let limit = (edge.turn || edge.driveway ? 2 : 7) * (this.rain > 0 ? 0.65 : 1);
       let gap = Infinity;
+      // Buses brake to a halt at each stop on their route, wait for passengers, then move on.
+      const stop = v.kind === 'bus' && edge.busStop && !edge.busStop.removed ? edge.busStop : null;
+      let stopGap = Infinity;
+      if (stop && v.servedStop !== stop) {
+        const toStop = stop.at - v.progress;
+        if (toStop > -0.5 && toStop <= 0.2 && v.speed < 0.6) {
+          v.servedStop = stop;
+          v.atStop = stop;
+          v.dwell = BUS_DWELL;
+          v.speed = 0;
+          continue;
+        }
+        if (toStop > 0) stopGap = toStop;
+      }
+      if (v.atStop && v.atStop !== stop) v.atStop = null;
       if (edge.approach && next?.junction) {
         const j = this.map.junctions.find((j) => j.id === next.junction);
         const waiting = this.people.some(
@@ -718,6 +772,8 @@ export class CommunitySimulation {
           gap = edge.length - v.progress;
         else if (edge.length - v.progress < 0.5) j.owner = v.id;
       }
+      // Applied after the junction check, which sets its own stopping distance.
+      gap = Math.min(gap, stopGap);
       for (const other of this.vehicles)
         if (other !== v && other.route[other.index] === edge && other.progress > v.progress)
           gap = Math.min(

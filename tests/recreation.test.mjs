@@ -317,3 +317,20 @@ test('football field, outdoor gym and post office fill the free northern blocks 
     'Players move',
   );
 });
+
+test('the park fountain jet pulses and droplets cascade into the basin', () => {
+  const model = createRegionalModel('legacy'),
+    c = addCommunityWorld(model);
+  const f = c.recreation.find((r) => r.fountain).fountain;
+  const st = { env: { light: 70 }, devices: [], outputs: {}, running: false, paused: false };
+  const heights = new Set(),
+    drops = [];
+  for (let i = 0; i < 12; i++) {
+    updateCommunityWorld(model, st, 0.15);
+    heights.add(f.jet.size[1].toFixed(3));
+    drops.push(f.outer[0].pos.slice());
+  }
+  assert.ok(heights.size > 3, 'Jet height varies');
+  assert.ok(new Set(drops.map((p) => p.join())).size > 3, 'Droplets move');
+  for (const d of [...f.inner, ...f.outer]) assert.ok(d.pos[1] > 0.7 && d.pos[1] < 3.8);
+});

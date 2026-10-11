@@ -1,9 +1,10 @@
 import { connectFarmHomeCars } from './farm-home-access.js';
 import { connectHomeDriveway, drawHomeStreetDriveway } from './home-driveway.js';
-import { recreationLots, buildRecreationAreas } from './community-recreation.js';
+import { recreationLots, buildRecreationAreas, updateFountain } from './community-recreation.js';
 import { addOpenBlocks, updateOpenBlocks } from './open-blocks.js';
 import { addWorldSky, updateWorldSky } from './world-sky.js';
 import { addRecreationPeople, updateRecreationPeople } from './recreation-people.js';
+import { buildBusStops, updateBusStops, BUS_PULL_IN } from './bus-stops.js';
 import { integrateRegionalNeighbours } from './regional-neighbourhood.js';
 import { buildTrafficSignals, trafficAspect } from './traffic-signals.js';
 import { connectFarmDriveway, connectFarmFootpath, drawFarmDriveway } from './farm-driveway.js';
@@ -371,6 +372,7 @@ export function addCommunityWorld(model, location) {
   areas.push(...openBlocks.areas);
   recreation.push(...openBlocks.items);
   const recreationPeople = addRecreationPeople(model, { recreation, origin, box, sphere });
+  const busStops = buildBusStops(model, { sim, origin, box, sphere });
   const sections = civic.flatMap((building) => building.sections);
   areas.push(...sections.map((section) => section.area));
   const residences = buildCommunityResidences(model, { sim, origin, location, box, objects });
@@ -407,6 +409,9 @@ export function addCommunityWorld(model, location) {
       roof: box(0, -20, 0, 1.5, 0.12, 1.45, '#dfc36b', { opacity: 0 }),
       grille: box(0, -20, 0, 0.08, 0.3, 0.75, '#39494b', { opacity: 0 }),
       cargo: box(0, -20, 0, 2.2, 1.7, 1.6, '#b6beb6', { opacity: 0 }),
+      // Buses only: the kerb-side door and the indicator that flashes as they pull out.
+      door: box(0, -20, 0, 0.9, 1.6, 0.06, '#3f5c66', { opacity: 0 }),
+      indicator: box(0, -20, 0, 0.2, 0.12, 0.08, '#e8a33a', { opacity: 0 }),
     };
     for (const side of [-1, 1]) {
       for (const axle of [-1, 1]) {
@@ -559,6 +564,7 @@ export function addCommunityWorld(model, location) {
     recreation,
     openBlocks: openBlocks.items,
     recreationPeople,
+    busStops,
     sections,
     furnishings,
     rain,
@@ -596,6 +602,8 @@ export function updateCommunityWorld(model, state, seconds) {
   updateCivicBuildings([...c.civic, ...c.recreation], state);
   updateOpenBlocks(c.openBlocks || [], sim.time, state.reduced);
   updateRecreationPeople(c.recreationPeople || [], sim.time, state.reduced);
+  for (const item of c.recreation) updateFountain(item.fountain, sim.time, state.reduced);
+  updateBusStops(c.busStops || [], sim, sim.time, state.reduced);
   updateWorldSky(c.sky, state.env, state.paused ? 0 : seconds, state.reduced);
   sim.rain = state.env.rain || 0;
   sim.temperature = state.communityMission
@@ -631,7 +639,20 @@ export function updateCommunityWorld(model, state, seconds) {
     const car = v.kind === 'car',
       truck = v.kind === 'truck';
     const paint = ['#768b89', '#c5c1ab', '#4e6c81', '#ac6955', '#899272'][v.id % 5];
-    const place = (mesh, dx, y, dz) => {
+    // A bus steers in to the kerb over the 10 m before its stop, and back out before the end of
+    // the lane so it is back in its lane by the junction.
+    const lane = v.route[v.index],
+      stop = v.kind === 'bus' ? lane?.busStop : null;
+    let kerbShift = 0;
+    if (stop && !stop.removed) {
+      const d = v.progress - stop.at,
+        out = Math.max(1, lane.length - stop.at - 0.5),
+        s = d < 0 ? 1 + d / 10 : 1 - d / out,
+        eased = Math.max(0, Math.min(1, s));
+      kerbShift = sim.map.handedness * BUS_PULL_IN * eased * eased * (3 - 2 * eased);
+    }
+    const place = (mesh, dx, y, dzLocal) => {
+      const dz = dzLocal + kerbShift;
       mesh.pos = [
         origin.x + v.x + Math.cos(v.angle) * dx - Math.sin(v.angle) * dz,
         y,
@@ -639,6 +660,7 @@ export function updateCommunityWorld(model, state, seconds) {
       ];
       mesh.rotation = [0, -v.angle, 0];
     };
+    place(parts.shadow, 0, 0.135, 0);
     parts.body.size = [v.length, car ? 0.75 : 1.35, v.width];
     parts.body.color = v.kind === 'bus' ? '#568b96' : paint;
     place(parts.body, 0, car ? 0.72 : 1.05, 0);
@@ -665,6 +687,17 @@ export function updateCommunityWorld(model, state, seconds) {
       parts.roof.size = [v.length, 0.3, v.width];
       parts.roof.bevel = [0.35, 0.13, 0.3];
       place(parts.roof, 0, 2.7, 0);
+    }
+    parts.door.opacity = parts.indicator.opacity = bus ? 1 : 0;
+    if (bus) {
+      const kerb = sim.map.handedness,
+        open = v.atStop && v.dwell > 0;
+      place(parts.door, v.length * 0.3, 1.2, kerb * (v.width / 2 + 0.02));
+      parts.door.color = open ? '#1d2528' : '#3f5c66';
+      parts.door.size = [open ? 0.25 : 0.9, 1.6, 0.06];
+      place(parts.indicator, v.length / 2 - 0.15, 0.95, kerb * (v.width / 2 + 0.02));
+      const flashing = v.atStop && v.dwell <= 0;
+      parts.indicator.emission = flashing && Math.floor(sim.time * 3) % 2 ? 1 : 0;
     }
     parts.cargo.opacity = truck ? 1 : 0;
     parts.cargo.size = [v.length * 0.62, 1.7, v.width * 0.98];

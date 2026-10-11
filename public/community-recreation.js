@@ -308,6 +308,7 @@ export function buildRecreationAreas(model, { sim, origin, box }) {
 
 function buildOutdoorPlot(model, { b, origin, box }) {
   const furniture = [];
+  let fountain = null;
   const add = (dx, y, dz, w, h, d, color, extra = {}) => {
     const mesh = box(b.x + dx, y, b.z + dz, w, h, d, color, {
       recreation: b.type,
@@ -354,9 +355,20 @@ function buildOutdoorPlot(model, { b, origin, box }) {
     cylinder(0, 1.3, -2, 0.25, 1.1, '#adb9af', { surface: 'stone' });
     cylinder(0, 1.9, -2, 1, 0.15, '#c5ccc0', { surface: 'stone' });
     cylinder(0, 2.02, -2, 0.9, 0.04, '#68c7cf', { surface: 'water' });
-    cylinder(0, 2.6, -2, 0.09, 1.2, '#90e1df', { opacity: 0.85, surface: 'water' });
-    for (const side of [-1, 1])
-      cylinder(side * 0.9, 1.36, -2, 0.035, 1.25, '#8bd9d5', { opacity: 0.75, surface: 'water' });
+    const jet = cylinder(0, 2.6, -2, 0.09, 1.2, '#90e1df', { opacity: 0.85, surface: 'water' });
+    // Droplets: an inner ring arcs from the jet into the upper bowl, an outer ring spills from
+    // the bowl's rim into the basin. Ripples spread across the basin.
+    const droplet = () =>
+      add(0, -20, -2, 0.1, 0.22, 0.1, '#d4f1f2', { surface: 'water', rounded: false });
+    fountain = {
+      centre: [origin.x + b.x, origin.z + b.z - 2],
+      jet,
+      inner: Array.from({ length: 14 }, droplet),
+      outer: Array.from({ length: 22 }, droplet),
+      ripples: Array.from({ length: 3 }, () =>
+        cylinder(0, 0.775, -2, 0.3, 0.01, '#e8f8f8', { opacity: 0, surface: 'water' }),
+      ),
+    };
     model.colliders.push({ x: origin.x + b.x, z: origin.z + b.z - 2, w: 5, d: 5, community: true });
     for (const dz of [-10, 10]) for (const dx of [-6, 6]) bench(dx, dz);
     // Patio chairs and tables sit on the outer lawns, clear of the fountain loop.
@@ -566,5 +578,35 @@ function buildOutdoorPlot(model, { b, origin, box }) {
     area: b.name,
     section: b.name,
   });
-  return { building: b, lamp, indicator, sections: [], furniture };
+  return { building: b, lamp, indicator, sections: [], furniture, fountain };
+}
+
+// The park fountain: a pulsing central jet, droplets cascading into the bowl and the basin, and
+// ripples spreading out. Reduced motion keeps a still jet with no moving droplets.
+export function updateFountain(f, time, reduced) {
+  if (!f) return;
+  const t = reduced ? 0 : time,
+    [cx, cz] = f.centre;
+  const pulse = 0.88 + 0.12 * Math.sin(t * 2.3) + 0.05 * Math.sin(t * 5.1);
+  f.jet.size[1] = 1.2 * pulse;
+  f.jet.pos[1] = 2.05 + (1.2 * pulse) / 2;
+  const top = 2.05 + 1.2 * pulse;
+  const place = (d, r, y, angle) => {
+    d.pos = [cx + Math.cos(angle) * r, y, cz + Math.sin(angle) * r];
+    d.opacity = reduced ? 0 : 1;
+  };
+  f.inner.forEach((d, i) => {
+    const s = (t * 1.4 + i / f.inner.length) % 1;
+    place(d, 0.85 * s, top + 0.5 * s - (top + 0.5 - 2.08) * s * s, i * 2.39996);
+  });
+  f.outer.forEach((d, i) => {
+    const s = (t * 1.1 + i / f.outer.length) % 1;
+    place(d, 0.95 + 1.05 * s, 2.0 + 0.18 * s - 1.4 * s * s, i * 2.39996);
+  });
+  f.ripples.forEach((ring, i) => {
+    const s = (t * 0.35 + i / f.ripples.length) % 1,
+      r = 0.4 + 1.6 * s;
+    ring.size = [r * 2, 0.01, r * 2];
+    ring.opacity = reduced ? 0 : 0.45 * (1 - s);
+  });
 }

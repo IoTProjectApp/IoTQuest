@@ -237,3 +237,19 @@ test('native code maintains its requested traffic phase across full cycles and r
   assert.equal(s.signals.pending, null);
   assert.notEqual(s.signals.phase, 'RED', 'Automatic coordination resumes after stop');
 });
+
+test('only town infrastructure devices drive the shared town outputs', async () => {
+  const { applyNativeCommunityOutputs } = await import('../public/community-quests.js');
+  const s = empty();
+  for (const [area, lit] of [
+    ['Shop floor', 1],
+    ['Community roads', 1],
+    [undefined, 1],
+    ['Living room', 0],
+    ['Riverside gym', 0],
+    ['Some future area', 0],
+  ]) {
+    applyNativeCommunityOutputs(s, [{ id: 'led', output: true, pin: 2, area }], { 2: 1 }, false);
+    assert.equal(s.outputs[3] || 0, lit, String(area));
+  }
+});

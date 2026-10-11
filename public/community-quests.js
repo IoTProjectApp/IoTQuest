@@ -1,7 +1,5 @@
 import { civicLots } from './community-civic.js';
 import { residentialLots } from './community-residences.js';
-import { recreationLots } from './community-recreation.js';
-import { neighbourProfiles } from './neighbour-profiles.js';
 // These quests are appended, so existing home/farm project and completion indices stay stable.
 export const communityComponents = [
   {
@@ -406,21 +404,21 @@ export const nativeOutputChannels = {
   led: 3,
   buzzer: 4,
 };
-// Devices inside homes, civic buildings, sections, recreation areas and neighbour houses stay
-// local to that building instead of driving the town's shared output channels.
-const privateAreaNames = new Set(
-  [...residentialLots, ...civicLots, ...recreationLots, ...neighbourProfiles].map((b) => b.name),
-);
-export function applyNativeCommunityOutputs(sim, devices, outputs, running, sectionNames = []) {
+// Only the town's own infrastructure drives its shared output channels. Devices in homes, civic
+// buildings, recreation areas, neighbour houses and any future area stay local to that building.
+export const townOutputAreas = new Set([
+  'Shop floor',
+  'Business office',
+  'Loading bay',
+  'Factory floor',
+  'Community roads',
+  'Parking area',
+]);
+export function applyNativeCommunityOutputs(sim, devices, outputs, running) {
   sim.nativeActive = true;
   const next = {};
   for (const d of devices)
-    if (
-      d.output &&
-      nativeOutputChannels[d.id] &&
-      !privateAreaNames.has(d.area) &&
-      !sectionNames.includes(d.area)
-    )
+    if (d.output && nativeOutputChannels[d.id] && (!d.area || townOutputAreas.has(d.area)))
       next[nativeOutputChannels[d.id]] = Number(outputs[d.pin] || 0);
   sim.outputs = next;
   sim.parkingControlled = devices.some((d) => d.id === 'parkBarrier');

@@ -305,11 +305,12 @@ test('football field, outdoor gym and post office fill the free northern blocks 
   const football = c.openBlocks.find((item) => item.building.type === 'football');
   assert.equal(football.players.length, 10);
   const before = football.players.map((p) => [p.x, p.z]);
-  updateCommunityWorld(
-    model,
-    { env: { light: 70, rain: 0 }, devices: [], outputs: {}, running: false, paused: false },
-    2,
-  );
+  for (let i = 0; i < 4; i++)
+    updateCommunityWorld(
+      model,
+      { env: { light: 70, rain: 0 }, devices: [], outputs: {}, running: false, paused: false },
+      0.5,
+    );
   assert.notDeepEqual(
     football.players.map((p) => [p.x, p.z]),
     before,

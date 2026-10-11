@@ -1,4 +1,5 @@
 import { fromWorld } from './world-math.js';
+import { figure, placeFigure, gaitPose, standPose, SKIN } from './figures.js';
 
 // The three northern blocks are free unless a location's terrace or suburb neighbours already
 // live there (see regional-neighbourhood.js); in that case none of these places are built.
@@ -47,46 +48,6 @@ export const openBlockLots = [
   stationX: b.x - 9,
   stationZ: b.z,
 }));
-
-const SKIN = ['#c79878', '#8d5a3c', '#e0b993', '#a8714f', '#f0cfb0'];
-
-// A simple standing person, built from parts that can be moved together.
-function figure(add, sphere, origin, x, z, shirt, shorts, skin) {
-  const parts = [];
-  const part = (mesh, dx, dy, dz) => {
-    parts.push({ mesh, dx, dy, dz });
-    return mesh;
-  };
-  for (const side of [-1, 1]) {
-    part(add(0, 0, 0, 0.16, 0.62, 0.18, skin, { bevel: 0.06 }), 0, 0.53, side * 0.12);
-    part(add(0, 0, 0, 0.26, 0.1, 0.18, '#2c3134', { bevel: 0.04 }), 0.04, 0.24, side * 0.12);
-  }
-  part(add(0, 0, 0, 0.3, 0.26, 0.46, shorts, { bevel: 0.08 }), 0, 0.92, 0);
-  part(add(0, 0, 0, 0.3, 0.56, 0.48, shirt, { bevel: 0.12 }), 0, 1.3, 0);
-  for (const side of [-1, 1])
-    part(add(0, 0, 0, 0.14, 0.5, 0.14, skin, { bevel: 0.06 }), 0, 1.3, side * 0.32);
-  part(sphere(0, 0, 0, 0.17, skin), 0, 1.76, 0);
-  const person = { parts, x, z, origin };
-  placeFigure(person, x, z, 0, 0);
-  return person;
-}
-
-function placeFigure(person, x, z, angle, stride) {
-  person.x = x;
-  person.z = z;
-  const c = Math.cos(angle),
-    s = Math.sin(angle);
-  for (const [i, p] of person.parts.entries()) {
-    // Legs (parts 0-3) swing with the stride; arms (6-7) swing against them.
-    const side = p.dz > 0 ? 1 : -1,
-      swing = i < 4 ? stride * side : i === 6 || i === 7 ? -stride * side : 0;
-    const dx = p.dx + swing;
-    p.mesh.pos[0] = person.origin.x + x + c * dx - s * p.dz;
-    p.mesh.pos[1] = p.dy + 0.2;
-    p.mesh.pos[2] = person.origin.z + z + s * dx + c * p.dz;
-    p.mesh.rotation = [0, -angle, 0];
-  }
-}
 
 function buildFootball({ b, add, sphere, origin, furniture }) {
   const green = ['#5f9a4e', '#6aa657'];
@@ -159,24 +120,26 @@ function buildFootball({ b, add, sphere, origin, furniture }) {
     for (const [i, [fx, fz]] of formation.entries()) {
       const home = [b.x + fx, b.z + (team ? -fz : fz)];
       const keeper = i === 0;
-      const person = figure(
-        add,
-        sphere,
-        origin,
-        home[0],
-        home[1],
-        keeper ? '#e0c040' : shirt,
+      const person = figure(add, sphere, origin, {
+        x: home[0],
+        z: home[1],
+        shirt: keeper ? '#e0c040' : shirt,
         shorts,
-        SKIN[(team * 5 + i) % SKIN.length],
-      );
+        skin: SKIN[(team * 5 + i) % SKIN.length],
+      });
       Object.assign(person, { home, keeper, team, phase: team * 2.3 + i * 1.7 });
-      for (const p of person.parts) furniture.push(p.mesh);
+      furniture.push(...person.meshes);
+      Object.assign(person, {
+        px: home[0],
+        pz: home[1],
+        stride: 0,
+        facing: team ? -Math.PI / 2 : Math.PI / 2,
+      });
       players.push(person);
     }
   const ball = sphere(b.x, 0.33, b.z, 0.11, '#f8f8f4', { surface: 'plain' });
   furniture.push(ball);
-  for (const p of players) placeFigure(p, ...p.home, 0, 0);
-  return { lamp, indicator, players, ball };
+  return { lamp, indicator, players, ball, lastT: 0 };
 }
 
 function buildOutdoorGym({ b, add, sphere, origin, furniture }) {
@@ -254,12 +217,21 @@ function buildOutdoorGym({ b, add, sphere, origin, furniture }) {
     [b.x - 4, b.z - 6, '#d0703f'],
     [b.x + 3, b.z + 7.4, '#5a7fb0'],
   ].map(([x, z, shirt], i) => {
-    const person = figure(add, sphere, origin, x, z, shirt, '#2c3134', SKIN[i + 2]);
-    for (const p of person.parts) furniture.push(p.mesh);
-    placeFigure(person, x, z, i ? Math.PI / 2 : -Math.PI / 2, 0);
+    const person = figure(add, sphere, origin, {
+      x,
+      z,
+      shirt,
+      shorts: '#2c3134',
+      skin: SKIN[i + 2],
+    });
+    furniture.push(...person.meshes);
+    person.facing = i ? Math.PI / 2 : -Math.PI / 2;
     return person;
   });
-  return { lamp, indicator };
+  // A squatter beside the pull-up bars and a walker on the cross trainer.
+  people[1].x = b.x + 3;
+  people[1].z = b.z + 6.5;
+  return { lamp, indicator, people };
 }
 
 function buildPostOffice({ b, add, sphere, model, furniture }) {
@@ -447,27 +419,115 @@ export function addOpenBlocks(model, { sim, origin, box, sphere }) {
   return { areas, items };
 }
 
-// Players chase the ball around their positions; keepers shuffle along their goal line.
+// A passing game: the player on the ball dribbles it at their feet, then passes along the ground
+// to a teammate; possession changes now and then. Everyone runs to a spot that follows the ball,
+// with a gait matched to their speed. Keepers stay on their line in a ready stance.
+const PASS = 3,
+  DRIBBLE = 1.8;
+function holderFor(players, k) {
+  const team = Math.floor(k / 4) % 2,
+    outfield = players.filter((p) => p.team === team && !p.keeper);
+  return outfield[(k * 7 + 3) % outfield.length];
+}
+function footOf(p) {
+  return [p.px + Math.cos(p.facing) * 0.45, p.pz + Math.sin(p.facing) * 0.45];
+}
 export function updateOpenBlocks(items, time, reduced) {
-  const t = reduced ? 0 : time;
   for (const item of items) {
-    if (item.players) {
-      const b = item.building;
-      const bx = b.x + Math.sin(t * 0.23) * 7,
-        bz = b.z + Math.sin(t * 0.17) * 9;
-      for (const p of item.players) {
-        const reach = p.keeper ? 0.15 : 0.35;
-        const x =
-          p.home[0] +
-          (bx - p.home[0]) * reach +
-          Math.sin(t * 0.9 + p.phase) * (p.keeper ? 1.2 : 1.5);
-        const z = p.keeper
-          ? p.home[1]
-          : p.home[1] + (bz - p.home[1]) * reach + Math.cos(t * 0.7 + p.phase) * 1.5;
-        const angle = Math.atan2(bz - z, bx - x);
-        placeFigure(p, x, z, angle, reduced ? 0 : Math.sin(t * 9 + p.phase) * 0.18);
-      }
-      item.ball.pos = [item.players[0].origin.x + bx, 0.33, item.players[0].origin.z + bz];
+    if (item.players) updateFootball(item, time, reduced);
+    if (item.people) {
+      const [squatter, walker] = item.people,
+        t = reduced ? 0 : time;
+      const s = (1 - Math.cos(t * 2.2)) / 2;
+      placeFigure(squatter, squatter.x, squatter.z, squatter.facing, {
+        legs: [
+          [1.15 * s, 2.1 * s],
+          [1.15 * s, 2.1 * s],
+        ],
+        arms: [
+          [1.4 * s, 0.1],
+          [1.4 * s, 0.1],
+        ],
+        lean: 0.55 * s,
+        bob: 0,
+      });
+      // The cross trainer: a steady walking stride on the spot, raised on its foot plates.
+      placeFigure(walker, walker.x, walker.z, walker.facing, gaitPose(t * 5, 0.1), 0.45);
     }
   }
+}
+function updateFootball(item, time, reduced) {
+  const { players, building: b } = item;
+  const t = reduced ? 0 : time,
+    dt = Math.max(0, Math.min(0.2, t - (item.lastT ?? t)));
+  item.lastT = t;
+  const k = Math.floor(t / PASS),
+    into = t - k * PASS,
+    holder = holderFor(players, k),
+    receiver = holderFor(players, k + 1);
+  // The ball: at the holder's feet while dribbling, then rolling to the receiver.
+  let [bx, bz] = footOf(holder);
+  if (into > DRIBBLE) {
+    const s = (into - DRIBBLE) / (PASS - DRIBBLE),
+      ease = 1 - (1 - s) * (1 - s),
+      [rx, rz] = footOf(receiver);
+    bx += (rx - bx) * ease;
+    bz += (rz - bz) * ease;
+  }
+  const attackZ = holder.team ? -1 : 1;
+  for (const p of players) {
+    let tx, tz;
+    if (p.keeper) {
+      tx = b.x + Math.max(-1.6, Math.min(1.6, (bx - b.x) * 0.25));
+      tz = p.home[1];
+    } else if (p === holder && into <= DRIBBLE) {
+      tx = p.px + Math.cos(p.facing) * 2;
+      tz = p.pz + attackZ * 2;
+    } else if (p === receiver && into > DRIBBLE) {
+      [tx, tz] = [bx, bz];
+    } else {
+      tx = p.home[0] + (bx - p.home[0]) * 0.35;
+      tz = p.home[1] + (bz - p.home[1]) * 0.35 + attackZ * 2;
+    }
+    tx = Math.max(b.x - 11.5, Math.min(b.x + 11.5, tx));
+    tz = Math.max(b.z - 13, Math.min(b.z + 13, tz));
+    const dx = tx - p.px,
+      dz = tz - p.pz,
+      dist = Math.hypot(dx, dz),
+      step = Math.min(dist, (p.keeper ? 3 : 6.5) * dt);
+    if (dist > 0.01) {
+      p.px += (dx / dist) * step;
+      p.pz += (dz / dist) * step;
+    }
+    const speed = dt > 0 ? step / dt : 0;
+    p.stride += step * 2.4;
+    // Face the run, or the ball when standing; turn smoothly.
+    const want = speed > 0.6 ? Math.atan2(dz, dx) : Math.atan2(bz - p.pz, bx - p.px);
+    const turn = Math.atan2(Math.sin(want - p.facing), Math.cos(want - p.facing));
+    p.facing += turn * Math.min(1, dt * 8);
+    let pose;
+    if (p.keeper)
+      pose = {
+        legs: [
+          [0.35, 0.7],
+          [0.35, 0.7],
+        ],
+        arms: [
+          [0.7, 0.6],
+          [0.7, 0.6],
+        ],
+        lean: 0.3,
+        bob: 0,
+      };
+    else if (speed > 0.3) pose = gaitPose(p.stride, Math.min(1, speed / 6.5));
+    else pose = standPose({ sway: Math.sin(t * 1.3 + p.phase) * 0.03 });
+    // A kick as the pass leaves: the right leg swings through.
+    if (p === holder && into > DRIBBLE - 0.25 && into < DRIBBLE + 0.25) {
+      const s = (into - (DRIBBLE - 0.25)) / 0.5;
+      pose.legs = [pose.legs[0], [-0.6 + 1.6 * s, 0.9 * (1 - s)]];
+    }
+    placeFigure(p, p.px, p.pz, p.facing, pose, 0.22);
+  }
+  const roll = into > DRIBBLE ? 0 : Math.abs(Math.sin(t * 6)) * 0.04;
+  item.ball.pos = [players[0].origin.x + bx, 0.33 + roll, players[0].origin.z + bz];
 }

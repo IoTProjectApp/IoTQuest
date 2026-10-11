@@ -196,6 +196,7 @@ const DEFAULT_SKY_SUN = [0, 1, 0];
 // Per instance: model matrix (16, with the size in three w components), colour (4), material (3).
 const INSTANCE_FLOATS = 23;
 const MIN_PIXEL_RADIUS = 1;
+const MIN_RAISED_PIXEL_RADIUS = 3;
 // Most simulated seconds one frame advances the community; 360× at 60 fps is about 6 s.
 const MAX_SIM_STEP = 10;
 const roughnessFor = (surface) => {
@@ -266,7 +267,10 @@ export function frustumTest(m, pixelScale = 0) {
     const distance = m[3] * x + m[7] * y + m[11] * z + m[15];
     if (distance <= 0) return Infinity;
     const pixels = ((r - 0.25) * pixelScale) / distance;
-    return pixels >= MIN_PIXEL_RADIUS ? pixels : 0;
+    // Flat ground markings (pavements, lane lines, crossings) read as a pattern even when each
+    // piece is tiny, so only raised objects use the larger cut-off.
+    const flat = h < 0.12 && y < 0.45;
+    return pixels >= (flat ? MIN_PIXEL_RADIUS : MIN_RAISED_PIXEL_RADIUS) ? pixels : 0;
   };
 }
 // Software WebGL (SwiftShader, llvmpipe, Microsoft's Basic Render Driver) shades every pixel on

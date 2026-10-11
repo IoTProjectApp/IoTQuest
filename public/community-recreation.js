@@ -252,16 +252,6 @@ export function buildRecreationAreas(model, { sim, origin, box }) {
         buildPoolChangingRooms({ add, prop, model });
         prop(-7, 1.2, 7, 0.12, 2, 0.12, '#d17550');
         prop(-7, 2.1, 7, 1.2, 0.18, 1.1, '#e5d9be', { surface: 'fabric' });
-        for (const z of [-4, 3]) {
-          // Swimmers remain in the water, separate from the walking simulation.
-          const head = model.sphere(origin.x + b.x + 1, 0.25, origin.z + b.z + z, 0.22, '#c79878', {
-            community: true,
-            recreation: 'pool',
-            roughness: 0.7,
-          });
-          add(1, 0.11, z + 0.5, 0.5, 0.16, 0.8, '#567da2');
-          furniture.push(head);
-        }
         b.water = water;
       } else {
         const roof = add(0, 3.8, 0, b.w + 0.4, 0.2, b.d + 0.4, '#6d858b', {
@@ -555,12 +545,6 @@ function buildOutdoorPlot(model, { b, origin, box }) {
       }
     }
     for (const z of [-5, 5]) bench(7, z);
-    const ball = model.sphere(origin.x + b.x + 2, 0.5, origin.z + b.z + 3, 0.26, '#d79052', {
-      community: true,
-      recreation: b.type,
-      roughness: 0.7,
-    });
-    furniture.push(ball);
   }
   const lamp = add(-b.w / 2 + 0.5, 2.8, 11.5, 0.3, 0.3, 0.3, '#efdfa9', { emission: 0 });
   add(-b.w / 2 + 0.5, 1.5, 11.5, 0.1, 2.8, 0.1, '#657a83', { solid: true });

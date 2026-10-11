@@ -3,6 +3,7 @@ import { connectHomeDriveway, drawHomeStreetDriveway } from './home-driveway.js'
 import { recreationLots, buildRecreationAreas } from './community-recreation.js';
 import { addOpenBlocks, updateOpenBlocks } from './open-blocks.js';
 import { addWorldSky, updateWorldSky } from './world-sky.js';
+import { addRecreationPeople, updateRecreationPeople } from './recreation-people.js';
 import { integrateRegionalNeighbours } from './regional-neighbourhood.js';
 import { buildTrafficSignals, trafficAspect } from './traffic-signals.js';
 import { connectFarmDriveway, connectFarmFootpath, drawFarmDriveway } from './farm-driveway.js';
@@ -369,6 +370,7 @@ export function addCommunityWorld(model, location) {
   const openBlocks = addOpenBlocks(model, { sim, origin, box, sphere });
   areas.push(...openBlocks.areas);
   recreation.push(...openBlocks.items);
+  const recreationPeople = addRecreationPeople(model, { recreation, origin, box, sphere });
   const sections = civic.flatMap((building) => building.sections);
   areas.push(...sections.map((section) => section.area));
   const residences = buildCommunityResidences(model, { sim, origin, location, box, objects });
@@ -556,6 +558,7 @@ export function addCommunityWorld(model, location) {
     civic,
     recreation,
     openBlocks: openBlocks.items,
+    recreationPeople,
     sections,
     furnishings,
     rain,
@@ -592,6 +595,7 @@ export function updateCommunityWorld(model, state, seconds) {
   const { sim, origin } = c;
   updateCivicBuildings([...c.civic, ...c.recreation], state);
   updateOpenBlocks(c.openBlocks || [], sim.time, state.reduced);
+  updateRecreationPeople(c.recreationPeople || [], sim.time, state.reduced);
   updateWorldSky(c.sky, state.env, state.paused ? 0 : seconds, state.reduced);
   sim.rain = state.env.rain || 0;
   sim.temperature = state.communityMission

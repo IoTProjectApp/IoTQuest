@@ -70,16 +70,23 @@ async function openHome({
   await settle(page);
   return { page, errors };
 }
-// Waits until the camera has finished moving, so labels are in their final positions.
+// Waits until the camera has finished moving, so labels are in their final positions. Readings
+// are a few rendered frames apart rather than a fixed delay: on CI's software WebGL a frame can
+// take longer than any short delay, and two readings with no frame between them look settled.
 async function settle(page) {
   const positions = () =>
-    page.$$eval('[data-area]', (els) => els.map((e) => e.style.left + e.style.top).join());
+    page.evaluate(async () => {
+      for (let i = 0; i < 3; i++) await new Promise((resolve) => requestAnimationFrame(resolve));
+      return [...document.querySelectorAll('[data-area], [data-community-building]')]
+        .map((e) => e.style.left + e.style.top + e.style.visibility)
+        .join();
+    });
+  const deadline = Date.now() + 20000;
   let last = null;
-  for (let i = 0; i < 40; i++) {
+  while (Date.now() < deadline) {
     const now = await positions();
     if (now && now === last) return;
     last = now;
-    await page.waitForTimeout(250);
   }
 }
 const modalOpen = (page) => page.evaluate(() => document.getElementById('modal').open);

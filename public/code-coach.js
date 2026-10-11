@@ -1,5 +1,6 @@
 import { Runtime } from './runtime.js';
 import { baseEnv, defaults } from './missions.js';
+import { boundaryScenarios } from './quest-boundaries.js';
 import { ADC_SIGNALS as ADC, ADC_SCALE, adcRead, isPico } from './signals.js';
 // The code coach. Students write the whole program themselves: the editor starts with only the
 // quest's title and goal as comments, and the guide walks through each part (imports, pin names,
@@ -136,7 +137,8 @@ export function readingText(env, devices) {
     .join(', ');
 }
 
-// Runs the student's program through the mission scenarios and checks one output.
+// Runs the student's program through the mission scenarios and the limit checks either side of
+// every threshold (the same ones Test your solution runs) and checks one output.
 export function checkOutput(code, language, devices, board, mission, index) {
   let runtime;
   try {
@@ -145,7 +147,10 @@ export function checkOutput(code, language, devices, board, mission, index) {
     return { done: false, message: 'The program has an error: ' + e.message };
   }
   const out = outputsOf(devices)[index];
-  for (const [name, env, expected] of mission.scenarios) {
+  for (const [name, env, expected] of [
+    ...mission.scenarios,
+    ...boundaryScenarios(mission, baseEnv),
+  ]) {
     let result;
     try {
       // As many steps as the mission tests, so a program that reads, waits and then decides

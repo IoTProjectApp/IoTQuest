@@ -33,9 +33,23 @@ if (channel) {
   if (stamped === source) throw Error('public/channel.js has no channel line to stamp');
   await writeFile('dist/client/channel.js', stamped);
   const manifest = JSON.parse(await readFile('dist/client/manifest.webmanifest', 'utf8'));
+  // An installed test copy is its own app (its own id) and looks different: the amber of the
+  // "Test version" label instead of the main site's blue.
+  const testColor = '#b45309';
+  manifest.id = './?channel=' + channel;
   manifest.name = 'IoT Quest (test version)';
   manifest.short_name = 'IoT Quest test';
+  manifest.theme_color = testColor;
   await writeFile('dist/client/manifest.webmanifest', JSON.stringify(manifest, null, 2) + '\n');
+  for (const page of ['index.html', 'game.html', 'teacher.html']) {
+    const html = await readFile('dist/client/' + page, 'utf8'),
+      recoloured = html.replace(
+        /<meta name="theme-color" content="[^"]*"/,
+        '<meta name="theme-color" content="' + testColor + '"',
+      );
+    if (recoloured === html) throw Error(page + ' has no theme-color to recolour');
+    await writeFile('dist/client/' + page, recoloured);
+  }
 }
 // Offline support: stamp the service worker with every built file and a content version, so
 // installed copies update on the next visit after a deploy.

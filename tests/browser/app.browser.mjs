@@ -482,10 +482,34 @@ test('the test copy at /dev/ runs beside the main site without touching it', asy
     await page.goto(url);
     await page.evaluate(() => navigator.serviceWorker.ready);
     await page.evaluate(() => localStorage.setItem('iotquest-v1', JSON.stringify({ xp: 77 })));
+    await page.addInitScript(() => {
+      globalThis.firstController = navigator.serviceWorker.controller?.scriptURL;
+    });
     await page.goto(url + 'dev/');
-    await page.evaluate(() => navigator.serviceWorker.ready);
+    // The main site's worker controls this first visit until the test copy's own takes over;
+    // that hand-over is not an update, so no "updated in another tab" bar appears.
+    assert.equal(await page.evaluate(() => globalThis.firstController), url + 'sw.js');
+    await page.waitForFunction(
+      (own) => navigator.serviceWorker.controller?.scriptURL === own,
+      url + 'dev/sw.js',
+    );
+    await page.waitForTimeout(500);
+    assert.equal(await page.locator('#updateBar').count(), 0, 'no update bar');
     await page.goto(url + 'dev/');
     assert.match(await page.title(), /^Test version/);
+    // An installed test copy is a separate app that looks different from the main site.
+    const manifests = await page.evaluate(async (url) => {
+      const get = (u) => fetch(u).then((r) => r.json());
+      return {
+        dev: await get(url + 'dev/manifest.webmanifest'),
+        main: await get(url + 'manifest.webmanifest'),
+      };
+    }, url);
+    assert.equal(manifests.dev.id, './?channel=dev');
+    assert.equal(manifests.dev.theme_color, '#b45309');
+    assert.equal(manifests.main.id, undefined, "the main site's manifest is unchanged");
+    assert.equal(manifests.main.theme_color, '#5260df');
+    assert.equal(await page.getAttribute('meta[name=theme-color]', 'content'), '#b45309');
     assert.equal(
       await page.evaluate(() => getComputedStyle(document.body, '::after').content),
       '"Test version"',

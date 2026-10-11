@@ -25,6 +25,8 @@ import {
   deviceState,
   deviceSpots,
   communityRoomBounds,
+  screenRay,
+  rayBox,
 } from './world-math.js';
 import { createWorldModel } from './world-model.js';
 import { createRegionalModel } from './regions.js';
@@ -208,6 +210,24 @@ export function frustumTest(m, pixelScale = 0) {
     return pixels >= MIN_PIXEL_RADIUS ? pixels : 0;
   };
 }
+// Software WebGL (SwiftShader, llvmpipe, Microsoft's Basic Render Driver) shades every pixel on
+// the CPU, so a high-density screen there costs up to four times as much for a little sharpness.
+export function isSoftwareRenderer(gl) {
+  try {
+    const info = gl.getExtension?.('WEBGL_debug_renderer_info'),
+      names = [
+        info && gl.getParameter?.(info.UNMASKED_RENDERER_WEBGL),
+        gl.getParameter?.(gl.RENDERER),
+      ];
+    return names.some(
+      (name) =>
+        typeof name === 'string' &&
+        /swiftshader|llvmpipe|softpipe|software|basic render driver/i.test(name),
+    );
+  } catch {
+    return false;
+  }
+}
 export class World3D {
   constructor(canvas, { getState, onFrame, onError, onRecover, onBuildingSelect } = {}) {
     this.canvas = canvas;
@@ -224,6 +244,7 @@ export class World3D {
     if (!this.gl)
       throw Error('WebGL is unavailable. Enable hardware acceleration to explore the 3D world.');
     this.contextRecovery = this.gl.getExtension('WEBGL_lose_context');
+    this.maxPixelRatio = isSoftwareRenderer(this.gl) ? 1 : 2;
     this.model = createRegionalModel(getState?.().locationId || 'legacy');
     addCommunityWorld(this.model, locationById(getState?.().locationId));
     prepareWorldMaterials(this.model);
@@ -357,18 +378,50 @@ export class World3D {
       this.controlListeners.push([type, handler, options]);
     };
     // Only the pointer that started a drag steers it; a second finger would otherwise take over
-    // the drag state and make the camera jump between the two touch points.
+    // the drag state and make the camera jump between the two touch points. A second finger
+    // instead pinches: the spread between the two fingers zooms, and the first finger's position
+    // keeps being tracked (without orbiting) so lifting either finger does not jump the camera.
     const other = (e) => this.drag && e.pointerId !== this.drag.id;
+    const pinching = (e) => this.pinch && e.pointerId === this.pinch.id;
+    const spread = () => Math.hypot(this.pinch.x - this.drag.x, this.pinch.y - this.drag.y) || 1;
+    const endPinch = () => {
+      this.pinch = null;
+    };
     on('pointerdown', (e) => {
       if (e.button !== 0 && e.button !== 2) return;
-      if (this.drag) return;
+      if (this.drag) {
+        if (this.pinch || e.pointerType === 'mouse') return;
+        this.pinch = { id: e.pointerId, x: e.clientX, y: e.clientY };
+        this.pinch.start = spread();
+        this.pinch.distance = this.distance;
+        this.pinch.zoom = this.skyZoom || 1;
+        // A pinch is never a click on a building.
+        this.drag.travel = Infinity;
+        c.setPointerCapture(e.pointerId);
+        return;
+      }
       this.drag = { x: e.clientX, y: e.clientY, travel: 0, button: e.button, id: e.pointerId };
       c.setPointerCapture(e.pointerId);
       c.style.cursor = 'grabbing';
       c.focus();
     });
     on('pointermove', (e) => {
-      if (!this.drag || other(e)) return;
+      if (!this.drag) return;
+      if (this.pinch && (pinching(e) || !other(e))) {
+        const finger = pinching(e) ? this.pinch : this.drag;
+        finger.x = e.clientX;
+        finger.y = e.clientY;
+        const ratio = this.pinch.start / spread();
+        if (this.skyView) this.skyZoom = clamp(this.pinch.zoom / ratio, 1, 3);
+        else
+          this.distance = clamp(
+            this.pinch.distance * ratio,
+            5,
+            this.communityView ? 220 : this.landscapeView ? 90 : 55,
+          );
+        return;
+      }
+      if (other(e)) return;
       const dx = e.clientX - this.drag.x,
         dy = e.clientY - this.drag.y;
       this.yaw -= dx * 0.007;
@@ -386,10 +439,19 @@ export class World3D {
     });
     const end = () => {
       this.drag = null;
+      this.pinch = null;
       c.style.cursor = 'grab';
     };
+    // Lifting the first finger of a pinch hands the drag to the second, from where it is now.
+    const handOver = () => {
+      const { id, x, y } = this.pinch;
+      this.drag = { ...this.drag, id, x, y };
+      endPinch();
+    };
     on('pointerup', (e) => {
+      if (pinching(e)) return endPinch();
       if (other(e)) return;
+      if (this.pinch) return handOver();
       const click = this.drag?.button === 0 && this.drag.travel < 5;
       end();
       if (click && this.communityView && this.onBuildingSelect) {
@@ -398,8 +460,12 @@ export class World3D {
         if (type) this.onBuildingSelect(type);
       }
     });
-    on('pointercancel', (e) => !other(e) && end());
-    on('lostpointercapture', (e) => this.drag && !other(e) && end());
+    const cancel = (e) => {
+      if (pinching(e)) endPinch();
+      else if (this.drag && !other(e)) this.pinch ? handOver() : end();
+    };
+    on('pointercancel', cancel);
+    on('lostpointercapture', cancel);
     on('contextmenu', (e) => e.preventDefault());
     on(
       'wheel',
@@ -585,52 +651,28 @@ export class World3D {
   findFree(player) {
     return findFree(player, this.model.colliders, this.nativeAreaBounds() || undefined);
   }
+  // The building under a click: a ray from the camera through the clicked pixel is tested against
+  // each building's solid box and the nearest hit wins. Works at any zoom and at the screen edges,
+  // where parts of a building are off screen, and leaves road and footpath space unclickable.
   pickCommunityBuilding(x, y) {
     if (!this.communityView || !this.matrix) return null;
-    const cross = (a, b, p) => (b.x - a.x) * (p.y - a.y) - (b.y - a.y) * (p.x - a.x);
-    const inside = (a, b, c) => {
-      if (Math.abs(cross(a, b, c)) < 1e-6) return false;
-      const p = { x, y },
-        signs = [cross(a, b, p), cross(b, c, p), cross(c, a, p)];
-      return signs.every((s) => s >= 0) || signs.every((s) => s <= 0);
-    };
-    const eye = [
-      this.currentTarget[0] + Math.sin(this.yaw) * Math.cos(this.pitch) * this.currentDistance,
-      this.currentTarget[2] + Math.cos(this.yaw) * Math.cos(this.pitch) * this.currentDistance,
-    ];
+    const ray = screenRay(this.matrix, x, y, this.width, this.height);
+    if (!ray) return null;
     const { origin, sim } = this.model.community;
-    // Project each solid building face, so clicking the roof or walls selects the building
-    // without making nearby road/footpath space clickable. Prefer the nearer overlapping solid.
-    const faces = [
-      [0, 1, 3, 2],
-      [4, 6, 7, 5],
-      [0, 4, 5, 1],
-      [2, 3, 7, 6],
-      [0, 2, 6, 4],
-      [1, 5, 7, 3],
-    ];
-    const hits = sim.map.buildings.filter((b) => {
-      const points = [];
+    let best = null,
+      nearest = Infinity;
+    for (const b of sim.map.buildings) {
       const height =
-        b.height ||
-        (b.type === 'parking' ? 0.18 : b.type === 'office' ? 6 : b.type === 'factory' ? 5 : 4);
-      for (const dy of [0, height])
-        for (const dz of [-b.d / 2, b.d / 2])
-          for (const dx of [-b.w / 2, b.w / 2])
-            points.push(this.project([origin.x + b.x + dx, dy, b.z + dz]));
-      return faces.some(
-        (f) =>
-          f.every((i) => points[i].visible) &&
-          (inside(points[f[0]], points[f[1]], points[f[2]]) ||
-            inside(points[f[0]], points[f[2]], points[f[3]])),
-      );
-    });
-    hits.sort(
-      (a, b) =>
-        Math.hypot(origin.x + a.x - eye[0], a.z - eye[1]) -
-        Math.hypot(origin.x + b.x - eye[0], b.z - eye[1]),
-    );
-    return hits[0]?.type || null;
+          b.height ||
+          (b.type === 'parking' ? 0.18 : b.type === 'office' ? 6 : b.type === 'factory' ? 5 : 4),
+        cx = origin.x + b.x,
+        t = rayBox(ray, [cx - b.w / 2, 0, b.z - b.d / 2], [cx + b.w / 2, height, b.z + b.d / 2]);
+      if (t < nearest) {
+        nearest = t;
+        best = b.type;
+      }
+    }
+    return best;
   }
   project(p) {
     return this.matrix
@@ -641,11 +683,9 @@ export class World3D {
     if (this.disposed || this.contextLost) return;
     // Hidden (another screen, or the Code layout leaves the canvas 0×0): skip drawing and label
     // projection, but keep the loop so the view resumes as soon as it is shown again.
-    if (
-      this.getState()?.visible === false ||
-      !this.canvas.clientWidth ||
-      !this.canvas.clientHeight
-    ) {
+    // The state is read once per frame and shared with render.
+    const state = this.getState();
+    if (state?.visible === false || !this.canvas.clientWidth || !this.canvas.clientHeight) {
       this.lastTime = time;
       this.frameId = requestAnimationFrame(this.frame);
       return;
@@ -653,7 +693,7 @@ export class World3D {
     const dt = Math.min(0.05, Math.max(0.001, (time - this.lastTime) / 1000));
     this.lastTime = time;
     try {
-      this.render(time / 1000, dt);
+      this.render(time / 1000, dt, state);
       if (this.renderFailed) {
         this.renderFailed = false;
         this.onRecover?.();
@@ -876,7 +916,7 @@ export class World3D {
       blinds = 0;
     for (const record of this.deviceObjects) {
       const d = record.device,
-        s = deviceState(d, outputs, env);
+        s = deviceState(d, outputs, env, state.outputScales);
       record.face.color = s.on ? '#f4d584' : '#a9b3a1';
       record.face.emission = s.on ? 0.4 : 0;
       if (record.light) {
@@ -971,9 +1011,15 @@ export class World3D {
     const skyDistance = this.model.skyDistance || 0;
     const skyYaw = this.model.mirrored ? -this.yaw : this.yaw;
     updateClouds(this.model.clouds || [], env, t, reduced, skyYaw, daylight, skyDistance);
+    // Clouds are a low band around the home's horizon; seen from high above the community they
+    // would sit on the ground among the buildings, so the overview leaves them out.
+    const cloudsHidden = this.communityView;
     // Clouds light up from inside during a lightning flash.
     for (const cloud of this.model.clouds || [])
-      for (const { mesh } of cloud.puffs) mesh.emission = this.flash * 0.7;
+      for (const { mesh } of cloud.puffs) {
+        mesh.emission = this.flash * 0.7;
+        if (cloudsHidden) mesh.opacity = 0;
+      }
     // Accurate celestial positions depend on the observer and an explicit clock.
     this.skyLocation ??= locationById(state.locationId) || DEFAULT_OBSERVER;
     const date = skyTime(
@@ -1065,19 +1111,19 @@ export class World3D {
     ];
     mate.rotation[1] = gate;
     this.model.dynamic.gateCollider.disabled = gate > 0.3;
-    this.model.dynamic.blinds.size[1] = Math.max(0.1, 0.83 * (1 - blinds / Math.PI));
+    // Turning the servo lowers the blind, which is what shades and cools the room.
+    this.model.dynamic.blinds.size[1] = Math.max(0.1, 0.83 * (blinds / Math.PI));
     const garageDoor = this.model.dynamic.garageDoor;
     const garageFloor =
       this.model.floorHeight?.(garageDoor.pos[0], garageDoor.pos[2] - 0.05) ?? 0.23;
     garageDoor.pos[1] = (env.door ? 2.2 : 0.38) + garageFloor - 0.23;
   }
-  render(t, dt) {
-    const gl = this.gl,
-      s = this.getState();
+  render(t, dt, s = this.getState()) {
+    const gl = this.gl;
     this.animate(s, t, dt);
     const width = Math.max(1, this.canvas.clientWidth),
       height = Math.max(1, this.canvas.clientHeight),
-      dpr = Math.min(2, globalThis.devicePixelRatio || 1);
+      dpr = Math.min(this.maxPixelRatio || 2, globalThis.devicePixelRatio || 1);
     if (
       this.canvas.width !== Math.round(width * dpr) ||
       this.canvas.height !== Math.round(height * dpr)
@@ -1218,7 +1264,9 @@ export class World3D {
     const opaque = [],
       transparent = [],
       visible = frustumTest(this.matrix, this.pixelScale);
-    this.drawKeys = new Map();
+    // Reused every frame rather than reallocated.
+    this.drawKeys ??= new Map();
+    this.drawKeys.clear();
     for (const m of this.model.objects) {
       const c = color(m.color),
         alpha = (m.opacity ?? 1) * c[3];
@@ -1239,11 +1287,16 @@ export class World3D {
       (this.instancing && !m.sky && !m.moonSurface ? instanced : single).push(m);
     if (instanced.length) this.drawInstanced(instanced);
     for (const m of single) this.draw(m);
-    transparent.sort(
-      (a, b) =>
-        Math.hypot(...b.pos.map((v, i) => v - eye[i])) -
-        Math.hypot(...a.pos.map((v, i) => v - eye[i])),
-    );
+    // Back to front by squared distance from the eye, measured once per object.
+    const depth = (this.sortDepth ??= new Map());
+    depth.clear();
+    for (const m of transparent) {
+      const dx = m.pos[0] - eye[0],
+        dy = m.pos[1] - eye[1],
+        dz = m.pos[2] - eye[2];
+      depth.set(m, dx * dx + dy * dy + dz * dz);
+    }
+    transparent.sort((a, b) => depth.get(b) - depth.get(a));
     gl.depthMask(false);
     for (const m of transparent) this.draw(m);
     gl.depthMask(true);
@@ -1251,7 +1304,12 @@ export class World3D {
   }
   // Writes one object's transform, colour and material in the instance layout.
   writeInstance(m, out, offset) {
-    const mat = modelMatrix(m.pos, m.size, m.rotation),
+    const mat = modelMatrix(
+        m.pos,
+        m.size,
+        m.rotation,
+        (this.matrixScratch ??= new Float32Array(16)),
+      ),
       c = color(m.color),
       surface = surfaceForMesh(m);
     out.set(mat, offset);

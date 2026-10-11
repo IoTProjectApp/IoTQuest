@@ -2,7 +2,7 @@
   --bg: #f4f6fb;
   --panel: #ffffff;
   --ink: #1f2a44;
-  --muted: #5d6b85;
+  --muted: #5a6780;
   --line: #dfe5f0;
   --accent: #5352d8;
   --accent-ink: #ffffff;
@@ -12,7 +12,7 @@
   --work-bg: #fbf0d6;
   --help: #a63b37;
   --help-bg: #fbe2e0;
-  --none: #8592a8;
+  --none: #636f85;
   --review: #4d4ab8;
   --review-bg: #e7e6fb;
   --code-bg: #151e30;
@@ -146,6 +146,13 @@ input {
 }
 .t-drop span {
   color: var(--muted);
+}
+.t-notice {
+  margin: 0 0 16px;
+  padding: 10px 14px;
+  border-radius: 8px;
+  background: var(--work-bg);
+  color: var(--work);
 }
 .t-errors {
   margin: 0 0 16px;
@@ -337,6 +344,7 @@ input {
   color: var(--muted);
 }
 .t-link {
+  overflow-wrap: anywhere;
   padding: 0;
   border: 0;
   background: none;
@@ -423,9 +431,11 @@ input {
   clip: rect(0 0 0 0);
 }
 @media (max-width: 900px) {
+  /* minmax(0, …), not 1fr: a plain 1fr column grows to fit the wide grid table and widens the
+     whole page; this way the table scrolls inside .t-grid-wrap. */
   .t-intro,
   .t-layout {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
   .t-detail {
     position: static;

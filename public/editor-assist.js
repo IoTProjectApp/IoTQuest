@@ -1,8 +1,9 @@
 import { esc } from './html.js';
 import { completions, applyCompletion, signatureAt, declaredSymbols } from './intellisense.js';
 // The editor's suggestion list and parameter hints (see intellisense.js for what is suggested).
-// Keys while the list is open: ↑/↓ choose, Enter or Tab accept, Escape closes. Ctrl+Space opens
-// it on demand. Keys it handles are marked `assistHandled` so the editor's own Tab/Enter
+// Keys while the list is open: ↑/↓ choose, Tab accepts, Escape closes. Enter accepts only once
+// the student has picked from the list (with ↑/↓, or by opening it with Ctrl+Space); otherwise it
+// closes the list and starts a new line, so finishing a line never swaps the word just typed. Keys it handles are marked `assistHandled` so the editor's own Tab/Enter
 // handling leaves them alone.
 
 const KIND_ICON = { function: 'ƒ', keyword: 'K', constant: 'C', variable: 'x', pin: '⌁' };
@@ -60,7 +61,8 @@ export function attachAssist(input, host, getContext) {
   input.setAttribute('aria-expanded', 'false');
 
   let items = [],
-    active = 0;
+    active = 0,
+    picked = false; // the student has picked from the list, so Enter accepts
   const open = () => !pop.hidden;
   function close() {
     items = [];
@@ -168,6 +170,7 @@ export function attachAssist(input, host, getContext) {
       e.assistHandled = true;
       active = 0;
       update({ manual: true });
+      picked = open();
       return;
     }
     if (!open()) return;
@@ -175,7 +178,11 @@ export function attachAssist(input, host, getContext) {
       e.preventDefault();
       e.assistHandled = true;
       active = (active + (e.key === 'ArrowDown' ? 1 : items.length - 1)) % items.length;
+      picked = true;
       render();
+    } else if (e.key === 'Enter' && !picked) {
+      // Not picked: the editor's own Enter makes the new line.
+      close();
     } else if ((e.key === 'Enter' || e.key === 'Tab') && !e.shiftKey) {
       e.preventDefault();
       e.assistHandled = true;
@@ -188,6 +195,7 @@ export function attachAssist(input, host, getContext) {
   };
   const onInput = () => {
     active = 0;
+    picked = false;
     update();
     showSignature();
   };

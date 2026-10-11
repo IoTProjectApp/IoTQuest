@@ -250,13 +250,14 @@ export function completions(source, caret, language, devices = [], { manual = fa
         .map((c) => ({ ...c, rank: 2 })),
     ];
   const typed = ctx.prefix.toLowerCase();
-  // Exact-start matches first, then names containing what was typed; the student's own names
-  // before the installed pins before the built-in catalogue; shorter names first.
+  // Exact-start matches first, then names containing what was typed (from three letters on: one
+  // or two letters are inside too many names to help); the student's own names before the
+  // installed pins before the built-in catalogue; shorter names first.
   const score = (c) => {
     const name = (c.insert ?? c.label).toLowerCase();
     if (!typed) return 1;
     if (name.startsWith(typed)) return name === typed ? 0 : 1;
-    return name.includes(typed) ? 2 : 9;
+    return typed.length > 2 && name.includes(typed) ? 2 : 9;
   };
   return pool
     .map((c) => ({ ...c, insert: c.insert ?? c.label, score: score(c) }))

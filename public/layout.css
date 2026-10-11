@@ -191,8 +191,11 @@
   .split-handle.dragging::after {
     background: #6575dd;
   }
+  /* A clear ring around the whole handle, not just the recoloured grip, for keyboard users. */
   .split-handle:focus-visible {
-    outline: none;
+    outline: 2px solid #5260df;
+    outline-offset: -2px;
+    border-radius: 6px;
   }
   #adventureScreen[data-layout='world'] .split-handle,
   #adventureScreen[data-layout='code'] .split-handle {

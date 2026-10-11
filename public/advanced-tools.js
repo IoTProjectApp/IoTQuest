@@ -114,10 +114,15 @@ function networkPanel(ctx) {
   };
 }
 function teacherPanel(ctx) {
-  const all = [['Original home', ctx.state], ...Object.entries(ctx.state.locationProgress || {})],
-    rows = [];
-  for (const [location, p] of all)
-    for (const [key, project] of Object.entries(p.projects || {}))
+  const all = [
+      ['Original home', ctx.state, 'legacy'],
+      ...Object.entries(ctx.state.locationProgress || {}).map(([id, p]) => [id, p, id]),
+    ],
+    rows = [],
+    places = [];
+  for (const [location, p, id] of all)
+    for (const [key, project] of Object.entries(p.projects || {})) {
+      places.push(id);
       rows.push({
         location,
         project: key,
@@ -126,6 +131,7 @@ function teacherPanel(ctx) {
         lab: project.lab,
         completion: p.completed?.[key] || null,
       });
+    }
   ctx.modal(
     'Teacher dashboard · local demonstration',
     '<p class="local-mode-note">This dashboard reviews this browser’s projects only. There are no student accounts, shared submissions, or classroom storage. Assignments and reports are local demonstrations.</p><div class="advanced-form"><label>Mission<select id="teacherMission">' +
@@ -165,18 +171,28 @@ function teacherPanel(ctx) {
     );
     $('modal').close();
   };
-  document
-    .querySelectorAll('[data-review]')
-    .forEach(
-      (btn) =>
-        (btn.onclick = () =>
-          ctx.modal(
-            'Local submitted evidence',
+  document.querySelectorAll('[data-review]').forEach(
+    (btn) =>
+      (btn.onclick = () => {
+        const index = Number(btn.dataset.review),
+          row = rows[index],
+          // Imports keep the work they replaced as "<quest>~backup-<time>".
+          backup = row.project.includes('~backup-');
+        ctx.modal(
+          'Local submitted evidence',
+          (backup
+            ? '<div class="bench-actions"><p>A backup kept when this quest’s work was replaced. Restoring it keeps the current work as a new backup.</p><button class="primary" id="restoreBackup">Restore this backup</button></div>'
+            : '') +
             '<div class="guide"><pre>' +
-              esc(JSON.stringify(rows[Number(btn.dataset.review)], null, 2)) +
-              '</pre></div>',
-          )),
-    );
+            esc(JSON.stringify(row, null, 2)) +
+            '</pre></div>',
+        );
+        if (backup)
+          $('restoreBackup').onclick = () => {
+            if (ctx.restoreBackup(places[index], row.project)) $('modal').close();
+          };
+      }),
+  );
   $('downloadAssessment').onclick = () =>
     ctx.download(
       'iot-quest-local-assessment.json',

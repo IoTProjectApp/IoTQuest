@@ -26,3 +26,27 @@ export function outputLevel(value, scale) {
   if (scale > 0) return Math.min(1, v / scale);
   return v === 1 ? 1 : Math.min(1, v / (v > 255 ? 65535 : 255));
 }
+// Sensor levels on an ordinary day; quest scenarios override only the signals they test.
+export const baseEnv = {
+  vibration: 5,
+  bay: 0,
+  pedRequest: 0,
+  spaces: 1,
+  light: 70,
+  motion: 0,
+  soil: 32,
+  tank: 80,
+  temp: 24,
+  rain: 0,
+  door: 0,
+  armed: 1,
+  distance: 100,
+  pot: 50,
+  humidity: 50,
+  occupied: 1,
+  appliance: 0,
+  pond: 60,
+  outdoorTemp: 24,
+  wind: 12,
+  cloud: 20,
+};

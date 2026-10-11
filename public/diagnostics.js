@@ -1,4 +1,5 @@
 import { analyzeCode } from './code-analysis.js';
+import { Runtime } from './runtime.js';
 import { ADC_SIGNALS as ADC_LIST } from './signals.js';
 // Editor diagnostics: advisory checks of the program against the installed wiring.
 // Warnings predict a runtime error or a condition that can never change; tips flag
@@ -47,6 +48,26 @@ function rangeVerdict(op, v, lo, hi, digital) {
   return never ? 'never' : always ? 'always' : null;
 }
 
+// The first error the simulator finds while reading the program, with its line's source range.
+function syntaxError(code, language) {
+  try {
+    new Runtime(code, language, []);
+    return null;
+  } catch (e) {
+    const lines = code.split('\n');
+    if (!e.line || e.line > lines.length) return null;
+    const before = lines.slice(0, e.line - 1).join('\n').length + (e.line > 1 ? 1 : 0),
+      text = lines[e.line - 1],
+      indent = text.length - text.trimStart().length;
+    return {
+      line: e.line,
+      start: before + indent,
+      end: before + Math.max(indent + 1, text.trimEnd().length),
+      message: e.message,
+    };
+  }
+}
+
 export function diagnose(code, language, devices = []) {
   const { uses, comparisons } = analyzeCode(code, language),
     out = [],
@@ -61,6 +82,10 @@ export function diagnose(code, language, devices = []) {
     seen.add(key);
     out.push({ severity, rule, line: at.line, start: at.start, end: at.end, message });
   };
+  // A program the simulator cannot read (a missing indented block, a stray symbol) is reported
+  // on its line before it is run.
+  const syntax = syntaxError(code, language);
+  if (syntax) add('warning', 'syntax', syntax, syntax.message);
   for (const use of uses) {
     const device = byPin.get(use.pin);
     if (!device) {

@@ -518,7 +518,7 @@ kbd {
   background: #ffffffe6;
   border-radius: 4px;
   height: 25px;
-  color: #78885c;
+  color: #5f6d48;
   font-size: 14px;
   touch-action: none;
 }
@@ -2054,6 +2054,17 @@ body.reduced-motion #rainEffect {
   touch-action: none;
   background: #c5d5b3;
   outline: none;
+}
+/* The canvas fills a clipped box, so its keyboard focus ring is drawn over its edge by the world
+   box: a blue ring lined with white, visible on sky, grass and night scenes alike. */
+.world:has(#worldCanvas:focus-visible)::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 50;
+  border: 3px solid #3443c4;
+  box-shadow: inset 0 0 0 2px #fff;
+  pointer-events: none;
 }
 .world.is-3d .map-layer {
   transform: none !important;

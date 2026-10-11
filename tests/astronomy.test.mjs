@@ -63,3 +63,27 @@ test('horizontal sky directions have consistent geographic orientation', () => {
   assert.equal(east[0], 1);
   assert.equal(zenith[1], 1);
 });
+
+test('the simulated sky clock runs on smoothly through daylight-saving changeovers', () => {
+  const melbourne = { latitude: -37.8136, longitude: 144.9631, timezone: 'Australia/Melbourne' },
+    clock = new Intl.DateTimeFormat('en-GB', { timeZone: melbourne.timezone, timeStyle: 'short' });
+  // 4 Oct 2026: clocks go forward 2:00 → 3:00. 5 Apr 2026: clocks go back 3:00 → 2:00.
+  for (const date of ['2026-10-04', '2026-04-05']) {
+    const at = (elapsedMs) =>
+      skyTime({ mode: 'simulated', date, startHour: 0, elapsedMs }, melbourne).getTime();
+    // Every simulated minute through the night is exactly one real minute: no hour jump.
+    for (let minute = 1; minute < 6 * 60; minute++)
+      assert.equal(at(minute * 60000) - at((minute - 1) * 60000), 60000, `${date} ${minute}`);
+    // The start is local midnight; three simulated hours are three hours of sky.
+    assert.equal(clock.format(at(0)), '00:00');
+    assert.equal(at(3 * 3600000) - at(0), 3 * 3600000);
+  }
+  // From 1:00 on the spring-forward day, local clocks read 5:00 three hours later...
+  const later = (date) =>
+    skyTime({ mode: 'simulated', date, startHour: 1, elapsedMs: 3 * 3600000 }, melbourne);
+  assert.equal(later('2026-10-04').toISOString(), '2026-10-03T18:00:00.000Z');
+  assert.equal(clock.format(later('2026-10-04')), '05:00');
+  // ...and 3:00 on the fall-back day, when 2:00 comes around twice.
+  assert.equal(later('2026-04-05').toISOString(), '2026-04-04T17:00:00.000Z');
+  assert.equal(clock.format(later('2026-04-05')), '03:00');
+});

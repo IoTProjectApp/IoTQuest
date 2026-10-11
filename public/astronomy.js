@@ -29,10 +29,10 @@ export function skyTime(
   const selected = /^\d{4}-\d{2}-\d{2}$/.test(date || '') ? date : localSkyDate(now, timezone);
   let midnight = Date.parse(selected + 'T00:00:00Z');
   if (!Number.isFinite(midnight)) midnight = Date.parse(localSkyDate(now, timezone) + 'T00:00:00Z');
-  const target =
-    midnight +
-    (Number.isFinite(startHour) ? startHour : 8) * 3600000 +
-    (Number.isFinite(elapsedMs) ? elapsedMs : 0);
+  // The start is a local wall-clock time, converted to UTC once; elapsed simulation time is then
+  // added as absolute time, so the clock runs on smoothly through a daylight-saving changeover
+  // (local clocks jump an hour, the sky does not).
+  const target = midnight + (Number.isFinite(startHour) ? startHour : 8) * 3600000;
   const formatter = new Intl.DateTimeFormat('en-US', {
     timeZone: timezone,
     year: 'numeric',
@@ -53,7 +53,7 @@ export function skyTime(
       (((utc % 1000) + 1000) % 1000);
     utc += target - local;
   }
-  return new Date(utc);
+  return new Date(utc + (Number.isFinite(elapsedMs) ? elapsedMs : 0));
 }
 
 export function horizonDirection(altitude, azimuth) {

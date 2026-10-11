@@ -32,10 +32,20 @@ after(async () => {
   server?.kill();
 });
 // A failed test never reaches its page.close(); a page left open keeps rendering the 3D world and
-// slows every later test, so close whatever openHome opened.
+// slows every later test, so close whatever openHome opened. A failed test leaves a screenshot
+// and a Playwright trace (DOM snapshots of every step) in test-results/, which CI uploads.
 const openPages = [];
-afterEach(async () => {
-  for (const page of openPages.splice(0)) await page.close().catch(() => {});
+afterEach(async (t) => {
+  const name = t.name.replace(/[^a-z0-9]+/gi, '-').slice(0, 80);
+  for (const [i, page] of openPages.splice(0).entries()) {
+    const path = t.passed === false ? `test-results/${name}-${i}` : null;
+    if (path) await page.screenshot({ path: path + '.png' }).catch(() => {});
+    await page
+      .context()
+      .tracing.stop(path ? { path: path + '.zip' } : {})
+      .catch(() => {});
+    await page.close().catch(() => {});
+  }
 });
 
 async function openHome({
@@ -49,6 +59,7 @@ async function openHome({
     reducedMotion,
   });
   openPages.push(page);
+  await page.context().tracing.start({ snapshots: true });
   const errors = [];
   page.on('pageerror', (e) => errors.push(e.message));
   // Keep tests offline and deterministic: live weather and web fonts are not needed.

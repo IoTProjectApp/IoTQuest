@@ -48,6 +48,15 @@ jobs:
       - run: npx playwright install --with-deps chromium
       - name: Run browser tests
         run: npm run test:browser
+      # Screenshots and traces of failed tests; open a trace with `npx playwright show-trace`.
+      - name: Upload failure traces
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: browser-test-failures
+          path: test-results/
+          retention-days: 7
+          if-no-files-found: ignore
 
   # Pages holds one site, so every deploy rebuilds both branches from their latest commits (each
   # passed these checks before it could be merged). One deploy at a time, so a main deploy and a

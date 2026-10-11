@@ -157,32 +157,49 @@ export function geometry(shape, { low = false } = {}) {
         face.map((v) => v / length),
       );
     }
-  } else if (shape === 'roundedBox') {
-    // A shared bevelled cube: flat face centres, three curved bands at each edge.
-    // Project a subdivided cube onto its inset core plus a spherical bevel.
-    const core = 0.445,
-      radius = 0.5 - core,
-      steps = [-0.5, -0.484, -core, core, 0.484, 0.5];
+  } else if (shape === 'roundedBox' || shape.startsWith('roundedBox:')) {
+    // A bevelled cube: flat face centres, curved bands at each edge. Project a subdivided cube
+    // onto its inset core plus an ellipsoidal bevel. 'roundedBox:fx:fy:fz' gives each axis its
+    // own bevel (a fraction of the unit cube), so a scaled object can have true round corners.
+    const custom = shape !== 'roundedBox';
+    const bevel = custom ? shape.split(':').slice(1).map(Number) : [0.055, 0.055, 0.055];
+    const core = bevel.map((f) => 0.5 - f);
+    // The shared box keeps its original two bands; a custom bevel uses three, 15° apart.
+    const stepsFor = (f) => {
+      const edge = custom ? [0, 0.423, 0.732].map((t) => -0.5 + t * f) : [-0.5, -0.484];
+      return [...edge, f - 0.5, 0.5 - f, ...edge.map((v) => -v).reverse()];
+    };
+    const steps = [stepsFor(bevel[0]), stepsFor(bevel[1]), stepsFor(bevel[2])];
     const vertex = (axis, side, u, v) => {
       const q = [0, 0, 0];
       q[axis] = side * 0.5;
       q[(axis + 1) % 3] = u;
       q[(axis + 2) % 3] = v;
-      const base = q.map((x) => Math.max(-core, Math.min(core, x))),
-        delta = q.map((x, i) => x - base[i]),
-        length = Math.hypot(...delta),
-        normal = delta.map((x) => x / length);
-      return { point: base.map((x, i) => x + normal[i] * radius), normal };
+      const base = q.map((x, i) => Math.max(-core[i], Math.min(core[i], x))),
+        unit = q.map((x, i) => (x - base[i]) / bevel[i]),
+        length = Math.hypot(...unit),
+        u2 = unit.map((x) => x / length),
+        // The ellipsoid's normal; the shader's inverse-transpose scaling makes it round in world space.
+        normal = u2.map((x, i) => x / bevel[i]),
+        nl = Math.hypot(...normal);
+      return {
+        point: base.map((x, i) => x + u2[i] * bevel[i]),
+        normal: normal.map((x) => x / nl),
+      };
     };
     for (let axis = 0; axis < 3; axis++)
       for (const side of [-1, 1])
-        for (let i = 0; i < steps.length - 1; i++)
-          for (let j = 0; j < steps.length - 1; j++) {
+        for (
+          let i = 0, su = steps[(axis + 1) % 3], sv = steps[(axis + 2) % 3];
+          i < su.length - 1;
+          i++
+        )
+          for (let j = 0; j < sv.length - 1; j++) {
             const quad = [
-              vertex(axis, side, steps[i], steps[j]),
-              vertex(axis, side, steps[i + 1], steps[j]),
-              vertex(axis, side, steps[i + 1], steps[j + 1]),
-              vertex(axis, side, steps[i], steps[j + 1]),
+              vertex(axis, side, su[i], sv[j]),
+              vertex(axis, side, su[i + 1], sv[j]),
+              vertex(axis, side, su[i + 1], sv[j + 1]),
+              vertex(axis, side, su[i], sv[j + 1]),
             ];
             for (const indices of side > 0
               ? [
@@ -394,6 +411,17 @@ export function geometry(shape, { low = false } = {}) {
     }
   }
   return { positions: new Float32Array(p), normals: new Float32Array(n), count: p.length / 3 };
+}
+
+// A box with `bevel` (metres, or [x, y, z] metres) gets its own rounded geometry, quantised so
+// similar sizes share one buffer. Returns its geometry key, or null.
+export function bevelKey(m) {
+  if (m.shape !== 'box' || !m.bevel) return null;
+  const r = Array.isArray(m.bevel) ? m.bevel : [m.bevel, m.bevel, m.bevel];
+  const f = m.size.map((size, i) =>
+    (Math.round(Math.min(0.45, Math.max(0.02, r[i] / Math.max(size, 1e-6))) * 50) / 50).toFixed(2),
+  );
+  return 'roundedBox:' + f.join(':');
 }
 
 export function roundedObject(m) {

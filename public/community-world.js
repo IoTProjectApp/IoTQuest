@@ -628,6 +628,20 @@ export function updateCommunityWorld(model, state, seconds) {
     parts.roof.color = parts.body.color;
     place(parts.roof, truck ? v.length * 0.32 : -0.1, car ? 1.53 : 2.25, 0);
     place(parts.grille, v.length / 2 + 0.01, 0.73, 0);
+    // Buses: a rounded body, a wrap-around window band and a rounded roof cap.
+    const bus = v.kind === 'bus';
+    parts.body.bevel = parts.glass.bevel = parts.roof.bevel = null;
+    if (bus) {
+      parts.body.size = [v.length, 1.5, v.width];
+      parts.body.bevel = [0.35, 0.25, 0.3];
+      place(parts.body, 0, 1.12, 0);
+      parts.glass.size = [v.length * 0.94, 0.75, v.width * 1.01];
+      parts.glass.bevel = [0.3, 0.08, 0.28];
+      place(parts.glass, 0.02, 2.2, 0);
+      parts.roof.size = [v.length, 0.3, v.width];
+      parts.roof.bevel = [0.35, 0.13, 0.3];
+      place(parts.roof, 0, 2.7, 0);
+    }
     parts.cargo.opacity = truck ? 1 : 0;
     parts.cargo.size = [v.length * 0.62, 1.7, v.width * 0.98];
     place(parts.cargo, -v.length * 0.16, 1.3, 0);
@@ -690,7 +704,10 @@ export function updateCommunityWorld(model, state, seconds) {
     activeColor(s.amber, aspect.amber, '#ffc247', '#76531e');
     activeColor(s.green, aspect.green, '#5bef82', '#285c3c');
   }
-  for (const light of c.lights) light.emission = sim.outputs[3] ? 1 : 0;
+  // A program driving the street-light output controls the lamps (the street-light quest);
+  // otherwise they switch on by themselves once the light level falls below 40 (dusk).
+  const lampsOn = 3 in sim.outputs ? !!sim.outputs[3] : (sim.light ?? 70) < 40;
+  for (const light of c.lights) light.emission = lampsOn ? 1 : 0;
   for (const m of c.machinery) {
     m.mesh.pos[0] =
       origin.x +

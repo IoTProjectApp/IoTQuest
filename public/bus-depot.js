@@ -48,12 +48,10 @@ export function buildBusDepot(model, { b, origin, box }) {
     prop(x, 1.2, 14, 0.35, 2.2, 0.35, '#596d72', { solid: true });
     prop(x, 2.34, 14, 0.7, 0.14, 0.7, '#e4c675');
   }
-  // Roofed entrance marker and a two-part gate held open beside the bus lane.
+  // Roofed entrance marker over the open bus lane.
   prop(-7.1, 2.85, 14, 0.18, 0.18, 0.18, '#455b62');
   prop(7.1, 2.85, 14, 0.18, 0.18, 0.18, '#455b62');
   prop(0, 3.05, 14, 14.2, 0.22, 0.28, '#526a71');
-  prop(-8.3, 1.2, 10.5, 0.1, 1.9, 4.8, '#b7a16e', { solid: true });
-  prop(8.3, 1.2, 10.5, 0.1, 1.9, 4.8, '#b7a16e', { solid: true });
 
   // Three pull-through bays leave the wide middle aisle open to the street gate.
   const bays = [
@@ -72,23 +70,47 @@ export function buildBusDepot(model, { b, origin, box }) {
     const bodyY = 1.55;
     const busPart = (dx, y, dz, w, h, d, shade, extra = {}) =>
       prop(x + dx, y, z + dz, w, h, d, shade, { busNumber: number, ...extra });
-    busPart(0, bodyY, 0, 2.85, 2.65, 8, color, { solid: true, surface: 'fabric' });
-    busPart(0, 2.96, -0.1, 2.55, 0.16, 6.9, '#d9d7c9', { surface: 'steel' });
+    // Rounded body with a wrap-around window band, deep windscreen and wheel arches.
+    busPart(0, bodyY, 0, 2.85, 2.65, 8, color, {
+      solid: true,
+      surface: 'fabric',
+      bevel: [0.32, 0.3, 0.55],
+    });
+    busPart(0, 2.96, -0.4, 2.3, 0.2, 4.6, '#d9d7c9', { surface: 'steel', bevel: 0.1 });
+    busPart(0, 2.02, -0.25, 2.89, 0.92, 7.1, '#3f5c66', {
+      surface: 'glass',
+      opacity: 0.92,
+      bevel: [0.3, 0.08, 0.5],
+    });
     // Forward facing destination display and windscreen face the depot exit.
-    busPart(0, 2.12, 4.035, 2.25, 0.86, 0.035, '#50717a', { surface: 'glass', opacity: 0.92 });
-    busPart(0, 2.58, 4.07, 1.25, 0.24, 0.04, '#eedc9e', { surface: 'plain' });
-    busPart(0, 1.45, 4.08, 1.9, 0.12, 0.06, '#e5d7ab', { surface: 'plain' });
-    busPart(-1.47, 1.85, 0, 0.035, 0.88, 6.45, '#67909a', { surface: 'glass', opacity: 0.88 });
-    busPart(1.47, 1.85, 0, 0.035, 0.88, 6.45, '#67909a', { surface: 'glass', opacity: 0.88 });
+    busPart(0, 1.95, 3.88, 2.4, 1.3, 0.3, '#3f5c66', {
+      surface: 'glass',
+      opacity: 0.92,
+      bevel: [0.25, 0.12, 0.1],
+    });
+    busPart(0, 2.72, 4.0, 1.4, 0.24, 0.04, '#eedc9e', { surface: 'plain', emission: 0.25 });
+    busPart(0, 1.1, 4.0, 1.9, 0.1, 0.04, '#e5d7ab', { surface: 'plain' });
+    busPart(0, 0.42, 3.98, 2.6, 0.28, 0.14, '#2c3538', { bevel: 0.1 });
+    busPart(0, 0.42, -3.98, 2.6, 0.28, 0.14, '#2c3538', { bevel: 0.1 });
+    busPart(0, 2.15, -4.0, 2.1, 0.7, 0.04, '#3f5c66', { surface: 'glass', opacity: 0.92 });
     for (const side of [-1, 1]) {
-      for (const wz of [-2.55, 0.3, 2.95])
-        busPart(side * 1.505, 1.88, wz, 0.04, 0.96, 0.12, '#c8d0c7');
-      for (const wz of [-2.65, 2.65])
-        busPart(side * 1.42, 0.52, wz, 0.26, 0.66, 0.96, '#344146', { surface: 'rubber' });
+      for (const wz of [-2.55, -0.3, 1.95]) busPart(side * 1.45, 2.02, wz, 0.03, 0.92, 0.1, color);
+      busPart(side * 1.43, 1.12, -0.1, 0.03, 0.1, 7.3, '#f0ead6', { surface: 'plain' });
+      for (const wz of [-2.65, 2.65]) {
+        busPart(side * 1.43, 0.62, wz, 0.03, 0.78, 1.15, '#2a3236', { bevel: [0.01, 0.3, 0.4] });
+        for (const [d, shade, surface] of [
+          [0.84, '#262d30', 'rubber'],
+          [0.46, '#b9bdb8', 'steel'],
+        ])
+          busPart(side * (1.3 + (surface === 'steel' ? 0.02 : 0)), 0.53, wz, d, 0.28, d, shade, {
+            shape: 'cylinder',
+            rotation: [0, 0, Math.PI / 2],
+            surface,
+          });
+      }
+      busPart(side * 0.95, 0.85, 4.0, 0.34, 0.2, 0.05, '#f1ead0', { surface: 'plain' });
+      busPart(side * 1.15, 0.9, -4.0, 0.2, 0.42, 0.05, '#c4473c', { surface: 'plain' });
     }
-    for (const side of [-1, 1])
-      busPart(side * 0.88, 1.18, 4.08, 0.32, 0.22, 0.06, '#eedc9e', { surface: 'plain' });
-    busPart(0, 0.45, -3.98, 1.3, 0.38, 0.08, '#ce6854', { surface: 'plain' });
     busPart(0, 0.15, 0, 2.2, 0.06, 7.2, '#253337', { opacity: 0.25 });
     const vehicle = { x: x0 + x, z: z0 + z, w: 3.1, d: 8.2, number };
     buses.push(vehicle);

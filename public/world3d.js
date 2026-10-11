@@ -10,7 +10,7 @@ import { updateLandscape } from './landscape.js';
 import { addDeviceDetails } from './device-objects.js';
 import { locationById } from './locations.js';
 import { skyTime, DEFAULT_OBSERVER } from './astronomy.js';
-import { geometry, roundedObject, LOW_DETAIL_SHAPES } from './world-geometry.js';
+import { geometry, roundedObject, bevelKey, LOW_DETAIL_SHAPES } from './world-geometry.js';
 import {
   multiply,
   perspective,
@@ -238,6 +238,7 @@ const roughnessFor = (surface) => {
 const LOW_DETAIL_PIXELS = 16;
 const geometryKey = (m, pixels = Infinity) => {
   const low = pixels < LOW_DETAIL_PIXELS;
+  if (m.bevel && m.shape === 'box') return low ? 'box' : bevelKey(m);
   if (roundedObject(m)) return low ? 'box' : 'roundedBox';
   return low && LOW_DETAIL_SHAPES.includes(m.shape) ? m.shape + ':low' : m.shape;
 };
@@ -1469,11 +1470,27 @@ export class World3D {
       this.instancing?.vertexAttribDivisorANGLE(a.location, on ? 1 : 0);
     }
   }
+  // Bevelled boxes ('roundedBox:fx:fy:fz') are built the first time one is drawn.
+  createGeometry(key) {
+    const gl = this.gl,
+      g = geometry(key),
+      buffer = (data) => {
+        const b = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, b);
+        gl.bufferData(gl.ARRAY_BUFFER, data, gl.STATIC_DRAW);
+        return b;
+      };
+    return (this.geometries[key] = {
+      positions: buffer(g.positions),
+      normals: buffer(g.normals),
+      count: g.count,
+    });
+  }
   bindGeometry(key) {
     if (this.drawState.geometry === key) return this.geometries[key];
     this.drawState.geometry = key;
     const gl = this.gl,
-      g = this.geometries[key];
+      g = this.geometries[key] || this.createGeometry(key);
     gl.bindBuffer(gl.ARRAY_BUFFER, g.positions);
     gl.vertexAttribPointer(this.position, 3, gl.FLOAT, false, 0, 0);
     gl.bindBuffer(gl.ARRAY_BUFFER, g.normals);

@@ -2,7 +2,7 @@ import { Runtime } from '../public/runtime.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createWorldModel } from '../public/world-model.js';
-import { World3D, frustumTest } from '../public/world3d.js';
+import { World3D, frustumTest, isSoftwareRenderer } from '../public/world3d.js';
 import { locations } from '../public/locations.js';
 import {
   multiply,
@@ -1086,11 +1086,299 @@ test('a second finger cannot take over a camera drag', () => {
   assert.equal(world.drag, null);
 });
 
-test('edge-on projected building faces cannot select an unrelated point on their extended line', () => {
-  const { world } = renderer();
+test('a click between buildings selects nothing, and a wall in front of another building selects the nearer one', () => {
+  const { world, state } = renderer();
+  state.reduced = true;
   world.render(0, 0.016);
-  world.project = (p) => ({ x: p[0], y: 100, visible: true });
+  const { origin, sim } = world.model.community;
+  const factory = sim.map.buildings.find((b) => b.type === 'factory');
+  // The road beside the factory (between it and the next block) is not a building.
+  const road = world.project([origin.x + factory.x + factory.w / 2 + 3, 0, factory.z]);
+  assert.ok(road.visible);
+  assert.equal(world.pickCommunityBuilding(road.x, road.y), null);
   assert.equal(world.pickCommunityBuilding(-1000, 100), null);
+  // Where the factory's front wall covers ground behind it on screen, the factory wins.
+  const wall = world.project([origin.x + factory.x, 4.5, factory.z + factory.d / 2]);
+  assert.equal(world.pickCommunityBuilding(wall.x, wall.y), 'factory');
+});
+
+const roofHeight = (b) =>
+  b.height ||
+  (b.type === 'parking' ? 0.18 : b.type === 'office' ? 6 : b.type === 'factory' ? 5 : 4);
+test('community buildings can be clicked when zoomed in and when partly off the screen edge', () => {
+  const { world, state, canvas } = renderer();
+  canvas.clientWidth = 951;
+  canvas.clientHeight = 356;
+  state.reduced = true;
+  const { origin, sim } = world.model.community;
+  const onScreen = (p) => p.visible && p.x > 0 && p.y > 0 && p.x < 951 && p.y < 356;
+  for (const zoom of [1, 1.5, 2, 2.5, 3]) {
+    world.setView('world', null, zoom);
+    world.render(0, 0.016);
+    world.render(0, 0.016);
+    let checked = 0;
+    for (const b of sim.map.buildings) {
+      const p = world.project([origin.x + b.x, roofHeight(b), b.z]);
+      if (!onScreen(p)) continue;
+      checked++;
+      assert.equal(world.pickCommunityBuilding(p.x, p.y), b.type, `${b.type} at zoom ${zoom}`);
+    }
+    assert.ok(checked >= 3, `zoom ${zoom} shows buildings`);
+  }
+  // Close up on the factory: its corners are off screen, but its roof fills the view.
+  const factory = sim.map.buildings.find((b) => b.type === 'factory');
+  for (const distance of [30, 15, 8, 5]) {
+    world.target = [origin.x + factory.x, 0.5, factory.z];
+    world.distance = distance;
+    world.render(0, 0.016);
+    const corner = world.project([
+      origin.x + factory.x - factory.w / 2,
+      5,
+      factory.z - factory.d / 2,
+    ]);
+    if (distance <= 15) assert.ok(!onScreen(corner), 'a corner is off screen');
+    for (const [x, y] of distance > 8
+      ? [[475, 178]]
+      : [
+          [475, 178],
+          [8, 178],
+          [943, 178],
+          [475, 8],
+          [475, 348],
+        ])
+      assert.equal(world.pickCommunityBuilding(x, y), 'factory', `${distance}: ${x},${y}`);
+  }
+  // Buildings cut by the edge of the view are picked from their visible part.
+  let cut = 0;
+  for (const zoom of [2, 3]) {
+    world.setView('world', null, zoom);
+    world.render(0, 0.016);
+    for (const b of sim.map.buildings) {
+      const samples = [];
+      for (let i = -3; i <= 3; i++)
+        for (let j = -3; j <= 3; j++)
+          samples.push(
+            world.project([origin.x + b.x + (i * b.w) / 7, roofHeight(b), b.z + (j * b.d) / 7]),
+          );
+      const shown = samples.filter(onScreen);
+      if (!shown.length || shown.length === samples.length) continue;
+      cut++;
+      for (const p of shown) assert.equal(world.pickCommunityBuilding(p.x, p.y), b.type, b.type);
+    }
+  }
+  assert.ok(cut >= 2, 'some buildings cross the edge of the view');
+});
+
+test('the parking lot selects where it is drawn, from the same footprint as the simulation', () => {
+  const { world, state } = renderer();
+  state.reduced = true;
+  world.setView('world');
+  const { origin, sim, objects } = world.model.community;
+  const lot = sim.map.buildings.find((b) => b.type === 'parking');
+  world.target = [origin.x + lot.x, 0.5, origin.z + lot.z];
+  world.distance = 40;
+  world.render(0, 0.016);
+  const paving = objects.find((o) => o.color === '#89958d' && o.size[1] === 0.08);
+  assert.deepEqual(paving.pos, [origin.x + lot.x, 0.11, origin.z + lot.z]);
+  assert.deepEqual(paving.size, [lot.w, 0.08, lot.d]);
+  // Cars park at the parking node, inside the lot.
+  const node = sim.map.roads.nodes.parking;
+  assert.ok(Math.abs(node.x - lot.x) < lot.w / 2 && Math.abs(node.z - lot.z) < lot.d / 2);
+  // Every part of the drawn paving selects the parking lot.
+  for (const fx of [-0.45, 0, 0.45])
+    for (const fz of [-0.4, 0, 0.4]) {
+      const p = world.project([paving.pos[0] + fx * lot.w, 0.18, paving.pos[2] + fz * lot.d]);
+      assert.ok(p.visible);
+      assert.equal(world.pickCommunityBuilding(p.x, p.y), 'parking', `${fx},${fz}`);
+    }
+});
+
+test('3D lamp glow, light pools and fan speed follow the PWM scale the program wrote with', () => {
+  const led = { id: 'led', pin: 2 },
+    level = (value, scale) => deviceState(led, { 2: value }, baseEnv, { 2: scale }).brightness;
+  // duty(512) of 1023 is half brightness; analogWrite(1) is the faintest glow, not full on.
+  assert.equal(level(512, 1023), 512 / 1023);
+  assert.equal(level(1023, 1023), 1);
+  assert.equal(level(1, 255), 1 / 255);
+  assert.equal(level(32768, 65535), 32768 / 65535);
+  assert.equal(level(200, 1023), 200 / 1023);
+  assert.equal(level(1, 1), 1);
+  // Without a known scale, 1 is HIGH and larger values 8-bit PWM, as before.
+  assert.equal(deviceState(led, { 2: 1 }, baseEnv).brightness, 1);
+  assert.equal(deviceState(led, { 2: 128 }, baseEnv).brightness, 128 / 255);
+
+  const { world, state } = renderer();
+  state.devices = defaults(['led', 'fan'], 'ESP32').map((d, i) => ({ ...d, pin: [2, 4][i] }));
+  state.outputs = { 2: 512, 4: 512 };
+  state.outputScales = { 2: 1023, 4: 1023 };
+  state.simClockMs = 0;
+  world.render(0, 0.016);
+  const lamp = world.deviceObjects.find((o) => o.device.id === 'led');
+  assert.equal(lamp.light.emission, 512 / 1023);
+  assert.ok(Math.abs(lamp.pool.opacity - (0.16 * 512) / 1023) < 1e-9);
+  const blade = () =>
+    world.deviceObjects.find((o) => o.device.id === 'fan').parts.find((p) => p.blade === 0);
+  const turn = () => {
+    const before = blade().rotation[2];
+    state.simClockMs += 100;
+    world.render(0, 0.016);
+    return blade().rotation[2] - before;
+  };
+  turn();
+  const half = turn();
+  state.outputScales = { 2: 512, 4: 512 };
+  turn();
+  const full = turn();
+  assert.ok(half > 0 && Math.abs(full / half - 1023 / 512) < 1e-6, 'half duty turns half as fast');
+  assert.equal(lamp.light.emission, 1);
+});
+
+test('clouds stay out of the community overview and return in the home views', () => {
+  const { world, state } = renderer();
+  state.env.cloud = 90;
+  state.reduced = true;
+  const shown = () =>
+    world.model.clouds.flatMap((c) => c.puffs).filter(({ mesh }) => mesh.opacity > 0.01).length;
+  world.setView('world');
+  world.render(0, 0.016);
+  assert.equal(shown(), 0, 'No clouds lying among the community buildings');
+  world.setView('house');
+  world.render(1, 0.016);
+  assert.ok(shown() > 0);
+});
+
+test('each frame reads the game state once and hands it to render', () => {
+  const frames = animationFrames();
+  try {
+    let reads = 0;
+    const state = {
+      devices: [],
+      env: { ...baseEnv },
+      outputs: {},
+      player: { x: 48, y: 77 },
+      color: '#547b5b',
+      reduced: false,
+      speed: 1,
+      areas,
+    };
+    const world = new World3D(eventCanvas(fakeGL()), { getState: () => (reads++, state) });
+    frames.step(16);
+    reads = 0;
+    frames.step(32);
+    assert.equal(reads, 1);
+    world.dispose();
+  } finally {
+    frames.restore();
+  }
+});
+
+test('software WebGL renders one pixel per CSS pixel; hardware keeps the sharper cap', () => {
+  const UNMASKED = 0x9246,
+    RENDERER = 0x1f01;
+  const gl = (name, debug = true) =>
+    new Proxy(
+      {
+        getShaderParameter: () => true,
+        getProgramParameter: () => true,
+        getAttribLocation: () => 0,
+        getUniformLocation: (_, uniform) => uniform,
+        RENDERER,
+        getExtension: (ext) =>
+          ext === 'WEBGL_debug_renderer_info' && debug
+            ? { UNMASKED_RENDERER_WEBGL: UNMASKED }
+            : null,
+        getParameter: (p) =>
+          p === UNMASKED ? name : p === RENDERER ? (debug ? 'WebKit WebGL' : name) : null,
+      },
+      { get: (obj, key) => (key in obj ? obj[key] : () => {}) },
+    );
+  for (const name of [
+    'ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero)), SwiftShader driver)',
+    'llvmpipe (LLVM 15.0.7, 256 bits)',
+    'ANGLE (Microsoft, Microsoft Basic Render Driver Direct3D11 vs_5_0 ps_5_0)',
+    'Software Rasterizer',
+  ])
+    assert.equal(isSoftwareRenderer(gl(name)), true, name);
+  assert.equal(isSoftwareRenderer(gl('Google SwiftShader', false)), true, 'From RENDERER');
+  assert.equal(isSoftwareRenderer(gl('ANGLE (Apple, ANGLE Metal Renderer: Apple M2)')), false);
+  assert.equal(isSoftwareRenderer({}), false);
+  const oldRAF = globalThis.requestAnimationFrame,
+    oldDpr = globalThis.devicePixelRatio;
+  globalThis.requestAnimationFrame = () => 1;
+  globalThis.devicePixelRatio = 2;
+  try {
+    const width = (name) => {
+      const canvas = eventCanvas(gl(name));
+      const world = new World3D(canvas, {
+        getState: () => ({
+          devices: [],
+          env: { ...baseEnv },
+          outputs: {},
+          player: { x: 48, y: 77 },
+          color: '#547b5b',
+          speed: 1,
+          areas,
+        }),
+      });
+      world.render(0, 0.016);
+      return canvas.width;
+    };
+    assert.equal(width('Google SwiftShader'), 960);
+    assert.equal(width('ANGLE (Apple, ANGLE Metal Renderer: Apple M2)'), 1920);
+  } finally {
+    globalThis.requestAnimationFrame = oldRAF;
+    globalThis.devicePixelRatio = oldDpr;
+  }
+});
+
+test('two fingers pinch to zoom without orbiting, clicking or jumping the camera', () => {
+  const { world, canvas, state } = renderer(),
+    selected = [];
+  canvas.setPointerCapture = () => {};
+  canvas.focus = () => {};
+  canvas.getBoundingClientRect = () => ({ left: 0, top: 0 });
+  world.onBuildingSelect = (type) => selected.push(type);
+  state.reduced = true;
+  world.render(0, 0.016);
+  const fire = (type, e) => canvas.listeners.get(type)({ button: 0, pointerType: 'touch', ...e });
+  const distance = world.distance,
+    yaw = world.yaw,
+    pitch = world.pitch;
+  fire('pointerdown', { pointerId: 1, clientX: 400, clientY: 200 });
+  fire('pointerdown', { pointerId: 2, clientX: 500, clientY: 200 });
+  // Spreading the fingers to twice the gap halves the camera distance (zooms in).
+  fire('pointermove', { pointerId: 2, clientX: 600, clientY: 200 });
+  assert.ok(Math.abs(world.distance - distance / 2) < 1e-9);
+  fire('pointermove', { pointerId: 1, clientX: 300, clientY: 200 });
+  assert.ok(Math.abs(world.distance - distance / 3) < 1e-9);
+  assert.equal(world.yaw, yaw, 'A pinch does not orbit');
+  assert.equal(world.pitch, pitch);
+  // Pinching in zooms back out, within the view's limits.
+  fire('pointermove', { pointerId: 2, clientX: 301, clientY: 200 });
+  assert.equal(world.distance, 220);
+  // Lifting the first finger hands the drag to the second, from where it is: no jump.
+  fire('pointerup', { pointerId: 1, clientX: 300, clientY: 200 });
+  assert.equal(world.drag.id, 2);
+  assert.equal(world.pinch, null);
+  fire('pointermove', { pointerId: 2, clientX: 311, clientY: 200 });
+  assert.ok(Math.abs(world.yaw - (yaw - 0.07)) < 1e-9);
+  fire('pointerup', { pointerId: 2, clientX: 311, clientY: 200 });
+  assert.equal(world.drag, null);
+  assert.deepEqual(selected, [], 'A pinch never selects a building');
+  // The Sky view pinches its zoom instead of the orbit distance.
+  world.setView('sky');
+  fire('pointerdown', { pointerId: 3, clientX: 400, clientY: 200 });
+  fire('pointerdown', { pointerId: 4, clientX: 450, clientY: 200 });
+  fire('pointermove', { pointerId: 4, clientX: 500, clientY: 200 });
+  assert.equal(world.skyZoom, 2);
+  fire('pointercancel', { pointerId: 4 });
+  assert.equal(world.pinch, null);
+  fire('lostpointercapture', { pointerId: 3 });
+  assert.equal(world.drag, null);
+  // A mouse cannot start a pinch.
+  fire('pointerdown', { pointerId: 5, clientX: 0, clientY: 0, pointerType: 'mouse' });
+  fire('pointerdown', { pointerId: 6, clientX: 10, clientY: 0, pointerType: 'mouse' });
+  assert.equal(world.pinch, null);
 });
 
 test('procedural water and reflections share the simulation clock and freeze on pause or reduced motion', () => {

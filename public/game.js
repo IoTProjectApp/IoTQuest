@@ -4526,6 +4526,7 @@ if (typeof $('worldCanvas')?.getContext === 'function') {
         devices: project().devices,
         env: state.env,
         outputs,
+        outputScales,
         player: state.player,
         color: state.color,
         appearance: state.appearance,

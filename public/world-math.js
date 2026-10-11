@@ -326,7 +326,13 @@ export function deviceState(device, outputs, env, scales = {}) {
     raw,
     on,
     brightness: outputLevel(raw, scales?.[device.pin]),
-    angle: device.id === 'gate' ? (on ? Math.PI / 2 : 0) : (clamp(raw, 0, 180) * Math.PI) / 180,
+    // Servos: 0–180° from servoWrite, or digital HIGH as fully turned (weather.js servoLevel).
+    angle:
+      device.id === 'gate'
+        ? on
+          ? Math.PI / 2
+          : 0
+        : outputLevel(raw, scales?.[device.pin] ?? (raw === 1 ? 1 : 180)) * Math.PI,
     flow: ['pump', 'valve'].includes(device.id) && on && env.tank > 0,
     water: clamp(env.tank / 100, 0, 1),
     plant: env.soil < 30 ? 'dry' : env.soil > 85 ? 'wet' : 'healthy',

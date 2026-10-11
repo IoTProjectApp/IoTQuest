@@ -1111,7 +1111,8 @@ export class World3D {
     ];
     mate.rotation[1] = gate;
     this.model.dynamic.gateCollider.disabled = gate > 0.3;
-    this.model.dynamic.blinds.size[1] = Math.max(0.1, 0.83 * (1 - blinds / Math.PI));
+    // Turning the servo lowers the blind, which is what shades and cools the room.
+    this.model.dynamic.blinds.size[1] = Math.max(0.1, 0.83 * (blinds / Math.PI));
     const garageDoor = this.model.dynamic.garageDoor;
     const garageFloor =
       this.model.floorHeight?.(garageDoor.pos[0], garageDoor.pos[2] - 0.05) ?? 0.23;

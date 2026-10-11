@@ -1398,3 +1398,13 @@ test('procedural water and reflections share the simulation clock and freeze on 
   world.render(9, 0.016);
   assert.equal(world.surfaceTime, 9);
 });
+test('a servo turned toward 180° or set HIGH lowers the 3D blind, matching the room it shades', async () => {
+  const { deviceState } = await import('../public/world-math.js');
+  const servo = { id: 'servo', pin: 18 },
+    angle = (value, scales) => deviceState(servo, { 18: value }, { tank: 0 }, scales).angle;
+  assert.equal(angle(0), 0);
+  assert.equal(angle(1), Math.PI, 'digitalWrite(HIGH) lowers the blind fully');
+  assert.equal(angle(90, { 18: 180 }), Math.PI / 2);
+  assert.equal(angle(180, { 18: 180 }), Math.PI);
+  assert.ok(Math.abs(angle(512, { 18: 1023 }) - Math.PI / 2) < 0.01, 'PWM duty follows its scale');
+});

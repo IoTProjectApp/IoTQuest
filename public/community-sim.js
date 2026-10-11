@@ -243,10 +243,11 @@ export function createCommunity(location = {}) {
     {
       id: 'parking',
       name: 'Parking & bus stop',
-      x: 35,
-      z: 39,
-      w: 10,
-      d: 8,
+      // The paved lot drawn in 3D (and the area clicks select): around the parking road node.
+      x: 32,
+      z: 37,
+      w: 16,
+      d: 10,
       node: '2:2/-1/-1',
       district: 'Logistics',
       type: 'parking',

@@ -1,5 +1,5 @@
 // Shapes with a simpler version for objects far from the camera (see LOW_DETAIL_SHAPES).
-export const LOW_DETAIL_SHAPES = ['sphere', 'foliage', 'wool', 'cylinder', 'cone', 'leaf'];
+export const LOW_DETAIL_SHAPES = ['sphere', 'foliage', 'wool', 'cylinder', 'cone', 'leaf', 'torus'];
 // low: far fewer vertices for objects only a few pixels across. A rounded box far away is
 // drawn as a plain box instead (its bevel is under a pixel).
 export function geometry(shape, { low = false } = {}) {
@@ -148,8 +148,8 @@ export function geometry(shape, { low = false } = {}) {
               );
           }
   } else if (shape === 'torus') {
-    const segments = 32,
-      rings = 12;
+    const segments = low ? 10 : 32,
+      rings = low ? 6 : 12;
     const vertex = (i, j) => {
       const a = (i / segments) * Math.PI * 2,
         b = (j / rings) * Math.PI * 2,

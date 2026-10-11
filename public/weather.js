@@ -1,4 +1,9 @@
 import { clamp } from './world-math.js';
+import { outputLevel } from './signals.js';
+// How far a servo has turned, 0–1 (1 is 180°, or digital HIGH). Without a known scale a value of 1
+// is HIGH and anything larger an angle, as servoWrite takes 0–180.
+export const servoLevel = (value, scale) =>
+  outputLevel(value, scale ?? (Number(value) === 1 ? 1 : 180));
 export const WEATHER_CACHE_MS = 15 * 60 * 1000;
 const fields =
   'temperature_2m,relative_humidity_2m,precipitation,weather_code,cloud_cover,wind_speed_10m,wind_direction_10m,is_day';
@@ -302,6 +307,8 @@ export function advanceEnvironment(
     location = null,
     tankCapacity = 100,
     collectionFactor = 1,
+    // Full scale of each output's last write (Runtime#outputScales), for PWM fan speeds.
+    scales = {},
   } = {},
 ) {
   dt = clamp(dt, 0, 2);
@@ -354,10 +361,7 @@ export function advanceEnvironment(
   const cooling = devices
     .filter((d) => ['fan', 'ac'].includes(d.id) && (outputs[d.pin] || 0) > 0)
     .reduce(
-      (sum, d) =>
-        sum +
-        (d.id === 'ac' ? 0.23 : 0.12) *
-          ((outputs[d.pin] || 0) === 1 ? 1 : clamp(outputs[d.pin] / 255, 0, 1)),
+      (sum, d) => sum + (d.id === 'ac' ? 0.23 : 0.12) * outputLevel(outputs[d.pin], scales[d.pin]),
       0,
     );
   // On the horse farm, misting sprinklers cool the paddock shelters.
@@ -365,8 +369,10 @@ export function advanceEnvironment(
     location?.farm && location.style === 'horse'
       ? devices.some((d) => d.id === 'valve' && (outputs[d.pin] || 0) > 0) && next.tank > 0
       : false;
+  // The bedroom blind comes down as its servo turns on (digital HIGH, or toward 180°), which
+  // shades the room. The level uses the scale of the call that wrote it (servoWrite is 0–180).
   const blind = devices.find((d) => d.id === 'servo'),
-    blindShade = blind ? 0.2 * (1 - clamp((outputs[blind.pin] || 0) / 180, 0, 1)) : 0;
+    blindShade = blind ? 0.2 * servoLevel(outputs[blind.pin], scales[blind.pin]) : 0;
   const shade = (location?.shade ?? 0.2) + blindShade,
     insulation = location?.insulation ?? 1;
   const equilibrium = next.outdoorTemp + sun * (1 - shade) * 1.5;

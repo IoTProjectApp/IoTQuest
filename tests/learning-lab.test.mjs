@@ -143,7 +143,8 @@ test('runtime errors carry meaningful source lines', () => {
   assert.throws(() => rt.step(baseEnv), /Unknown variable/);
   assert.equal(rt.currentLine, 3);
   assert.throws(
-    () => pythonToC('while True:\n  x = 1'),
+    // Any consistent indentation width is valid; a line indented with no block above is not.
+    () => pythonToC('x = 1\n  y = 2'),
     (e) => e.line === 2,
   );
 });

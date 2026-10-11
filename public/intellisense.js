@@ -36,9 +36,23 @@ const CPP = [
   fn('abs', ['x'], 'The value without its sign: abs(-3) is 3.'),
   fn('min', ['a', 'b'], 'The smaller of two values.'),
   fn('max', ['a', 'b'], 'The larger of two values.'),
+  fn(
+    'map',
+    ['value', 'fromLow', 'fromHigh', 'toLow', 'toHigh'],
+    'Rescales a whole number: map(reading, 0, 4095, 0, 100) turns a reading into a percentage.',
+  ),
+  fn('constrain', ['x', 'low', 'high'], 'Keeps a value inside a range: constrain(speed, 0, 255).'),
   fn('Serial.begin', ['baud'], 'Starts the serial monitor. Use 115200 in setup().'),
-  fn('Serial.print', ['value'], 'Prints to the serial monitor and stays on the same line.'),
-  fn('Serial.println', ['value'], 'Prints to the serial monitor and ends the line.'),
+  fn(
+    'Serial.print',
+    ['value', 'format'],
+    'Prints and stays on the same line. Floats show 2 decimals; print(x, 1) shows 1, print(n, HEX) hexadecimal.',
+  ),
+  fn(
+    'Serial.println',
+    ['value', 'format'],
+    'Prints and ends the line. Floats show 2 decimals; println(x, 1) shows 1, println(n, BIN) binary.',
+  ),
   word('HIGH', 'constant', 'On: 1, the pin is at 3.3 V.'),
   word('LOW', 'constant', 'Off: 0, the pin is at 0 V.'),
   word('INPUT', 'constant', 'pinMode: the pin reads a sensor.'),
@@ -50,11 +64,15 @@ const CPP = [
   word('OUTPUT', 'constant', 'pinMode: the pin drives an output such as a light or motor.'),
   word('true', 'constant', 'Boolean true.'),
   word('false', 'constant', 'Boolean false.'),
+  word('HEX', 'constant', 'Serial.print(n, HEX) prints a whole number in hexadecimal.'),
+  word('BIN', 'constant', 'Serial.print(n, BIN) prints a whole number in binary.'),
   ...[
     ['void', 'A function that returns nothing, like setup() and loop().'],
     ['int', 'A whole number, such as a pin number or a 0–4095 reading.'],
     ['float', 'A number with decimals, such as 23.5 °C.'],
     ['bool', 'true or false.'],
+    ['boolean', 'Arduino’s other name for bool: true or false.'],
+    ['byte', 'A whole number from 0 to 255.'],
     ['long', 'A large whole number.'],
     ['unsigned', 'A number that is never negative, as in unsigned long for millis().'],
     ['const', 'A value that never changes, such as a pin number.'],
@@ -71,19 +89,35 @@ const PYTHON = [
     ['pin', 'mode'],
     'A GPIO pin: Pin(26, Pin.OUT) for an output, Pin(27, Pin.IN) for an input.',
   ),
-  fn('ADC', ['pin'], 'An analogue input: ADC(Pin(34)). Read it with .read().'),
-  fn('PWM', ['pin'], 'A variable-level output: PWM(Pin(26)). Set it with .duty() or .duty_u16().'),
+  fn(
+    'ADC',
+    ['pin'],
+    'An analogue input: ADC(Pin(34)). Read it with .read() on ESP32, or .read_u16() >> 4 on a Pico.',
+  ),
+  fn(
+    'PWM',
+    ['pin'],
+    'A variable-level output: PWM(Pin(26)). Set it with .duty_u16() (or .duty() on ESP32).',
+  ),
   fn('print', ['value'], 'Prints to the serial monitor.'),
   fn('abs', ['x'], 'The value without its sign: abs(-3) is 3.'),
   fn('min', ['a', 'b'], 'The smaller of two values.'),
   fn('max', ['a', 'b'], 'The larger of two values.'),
   fn('int', ['x'], 'Turns a value into a whole number.'),
+  fn('float', ['x'], 'Turns a value into a number with decimals: float("2.5") is 2.5.'),
+  fn('str', ['x'], 'Turns a value into text: "Temp: " + str(temp).'),
+  fn('round', ['x', 'digits'], 'Rounds a number: round(2.7) is 3, round(3.14159, 2) is 3.14.'),
   fn('time.sleep', ['seconds'], 'Waits for a number of seconds.'),
   fn('time.sleep_ms', ['ms'], 'Waits for a number of milliseconds (1000 ms = 1 second).'),
   fn(
     'time.ticks_ms',
     [],
     'Milliseconds since the program started. Use it to time things without waiting.',
+  ),
+  fn(
+    'time.ticks_diff',
+    ['new', 'old'],
+    'Milliseconds between two ticks_ms() readings: time.ticks_diff(time.ticks_ms(), start).',
   ),
   fn('sleep_ms', ['ms'], 'Waits for a number of milliseconds (after from time import sleep_ms).'),
   fn('ticks_ms', [], 'Milliseconds since start (after from time import ticks_ms).'),
@@ -119,11 +153,16 @@ const PYTHON_METHODS = [
   }),
   fn('on', [], 'Sets an output pin to 1.', { method: true }),
   fn('off', [], 'Sets an output pin to 0.', { method: true }),
-  fn('read', [], 'Reads an ADC: 0–4095, or calibrated units for weather and climate sensors.', {
+  fn(
+    'read',
+    [],
+    'ESP32 only: reads an ADC as 0–4095, or calibrated units for weather and climate sensors.',
+    { method: true },
+  ),
+  fn('read_u16', [], 'Reads an ADC as 0–65535. On a Pico, read_u16() >> 4 gives 0–4095.', {
     method: true,
   }),
-  fn('read_u16', [], 'Reads an ADC as 0–65535.', { method: true }),
-  fn('duty', ['level'], 'Sets a PWM level from 0 to 1023.', { method: true }),
+  fn('duty', ['level'], 'ESP32 only: sets a PWM level from 0 to 1023.', { method: true }),
   fn('duty_u16', ['level'], 'Sets a PWM level from 0 to 65535.', { method: true }),
   fn('freq', ['hz'], 'Sets the PWM frequency.', { method: true }),
 ];
@@ -211,13 +250,14 @@ export function completions(source, caret, language, devices = [], { manual = fa
         .map((c) => ({ ...c, rank: 2 })),
     ];
   const typed = ctx.prefix.toLowerCase();
-  // Exact-start matches first, then names containing what was typed; the student's own names
-  // before the installed pins before the built-in catalogue; shorter names first.
+  // Exact-start matches first, then names containing what was typed (from three letters on: one
+  // or two letters are inside too many names to help); the student's own names before the
+  // installed pins before the built-in catalogue; shorter names first.
   const score = (c) => {
     const name = (c.insert ?? c.label).toLowerCase();
     if (!typed) return 1;
     if (name.startsWith(typed)) return name === typed ? 0 : 1;
-    return name.includes(typed) ? 2 : 9;
+    return typed.length > 2 && name.includes(typed) ? 2 : 9;
   };
   return pool
     .map((c) => ({ ...c, insert: c.insert ?? c.label, score: score(c) }))

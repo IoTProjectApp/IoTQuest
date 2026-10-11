@@ -66,8 +66,13 @@ function render() {
   const has = reports.length > 0;
   $('view').hidden = !has;
   if (!has) return;
-  const codes = [...new Set(reports.map((r) => r.classCode).filter(Boolean))].sort();
-  if (classCode && !codes.some((c) => c.toLowerCase() === classCode)) classCode = '';
+  // One entry per class, whatever the case each student typed the code in (7a and 7A are one class).
+  const byCode = new Map();
+  for (const r of reports)
+    if (r.classCode && !byCode.has(r.classCode.toLowerCase()))
+      byCode.set(r.classCode.toLowerCase(), r.classCode);
+  const codes = [...byCode.values()].sort((a, b) => a.localeCompare(b));
+  if (classCode && !byCode.has(classCode)) classCode = '';
   $('classSelect').innerHTML =
     '<option value="">All classes</option>' +
     codes
@@ -82,6 +87,7 @@ function render() {
           '</option>',
       )
       .join('');
+  renderDuplicates();
   const shown = inClass(),
     views = reportViews(shown);
   if (!views.some((v) => v.id === view)) view = views[0]?.id || '';
@@ -176,8 +182,7 @@ function render() {
   document.querySelectorAll('.t-cell').forEach(
     (b) =>
       (b.onclick = () => {
-        selected = { row: Number(b.dataset.row), index: Number(b.dataset.index) };
-        render();
+        select(b);
         $('detail').scrollIntoView?.({ block: 'nearest', behavior: 'smooth' });
       }),
   );
@@ -224,14 +229,53 @@ function render() {
           .join('') +
         '</ul>'
       : '<p class="t-muted">Nobody needs help on these quests: no one has 3 or more test attempts or hints on a quest they have not passed, and no one has passed with fewer than half of the understanding questions right first time.</p>');
-  document.querySelectorAll('.t-link').forEach(
-    (b) =>
-      (b.onclick = () => {
-        selected = { row: Number(b.dataset.row), index: Number(b.dataset.index) };
-        render();
-      }),
-  );
+  document.querySelectorAll('.t-link').forEach((b) => (b.onclick = () => select(b)));
   renderDetail(grid);
+}
+
+// Shows a student's quest from a grid cell or a "Who needs help" link. Rendering replaces those
+// buttons, so keyboard focus goes back to the matching new button rather than being lost, and a
+// short message tells screen reader users what the details panel now shows.
+function select(button) {
+  const { row, index } = button.dataset,
+    kind = button.classList.contains('t-link') ? '.t-link' : '.t-cell';
+  selected = { row: Number(row), index: Number(index) };
+  render();
+  document.querySelector(kind + '[data-row="' + row + '"][data-index="' + index + '"]')?.focus();
+  const parts = ['h2', '.t-detail-quest', '.t-status'].map((s) => {
+    const shown = $('detail').querySelector(s)?.cloneNode(true);
+    shown?.querySelectorAll('[aria-hidden]').forEach((icon) => icon.remove());
+    return shown?.textContent.trim();
+  });
+  $('announce').textContent = parts[0] ? 'Details: ' + parts.filter(Boolean).join(', ') : '';
+}
+
+// A student who handed in more than once is shown from their newest report. Say so, so a teacher
+// does not wonder where the earlier one went (two students with the same name and class code are
+// merged the same way, and this shows it).
+function renderDuplicates() {
+  const groups = new Map();
+  for (const r of reports) {
+    const key = r.student.toLowerCase() + '\u0000' + r.classCode.toLowerCase();
+    groups.set(key, [...(groups.get(key) || []), r]);
+  }
+  const repeated = [...groups.values()].filter((g) => g.length > 1);
+  $('duplicates').hidden = !repeated.length;
+  $('duplicates').innerHTML = repeated.length
+    ? '<strong>Some students handed in more than one report.</strong> Only the newest is shown for: ' +
+      repeated
+        .map(
+          (g) =>
+            esc(g[0].student) +
+            (g[0].classCode ? ' (' + esc(g[0].classCode) + ')' : '') +
+            ' · ' +
+            g.length +
+            ' reports, newest from ' +
+            esc(when(g.reduce((a, b) => (b.createdAt > a.createdAt ? b : a)).createdAt)),
+        )
+        .join('; ') +
+      '. If these are different students, ask them to add a class code or a surname.'
+    : '';
 }
 
 const tile = (value, label) =>
@@ -335,16 +379,24 @@ if (typeof document !== 'undefined' && $('files')) {
     selected = null;
     render();
   };
+  // One file with every destination (the grid shows one at a time); the button says so too.
   $('csvBtn').onclick = () =>
     download(
-      'iotquest-class-progress-' + new Date().toISOString().slice(0, 10) + '.csv',
+      'iotquest-class-progress-all-destinations-' + new Date().toISOString().slice(0, 10) + '.csv',
       progressCSV(latestReports(inClass())),
-      'text/csv',
+      'text/csv;charset=utf-8',
     );
   $('clearBtn').onclick = () => {
     reports = [];
     selected = null;
     $('fileErrors').hidden = true;
+    $('duplicates').hidden = true;
     render();
   };
+  // Reports live only in this page, so leaving it loses them: ask first.
+  addEventListener('beforeunload', (e) => {
+    if (!reports.length) return;
+    e.preventDefault();
+    e.returnValue = '';
+  });
 }

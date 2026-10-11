@@ -1,4 +1,7 @@
 import { tokenize } from './code-tokens.js';
+// A number token's value without its C++ suffix (34U, 1000UL, 1.5f, 0x1Fu).
+const numberValue = (text) =>
+  Number(text.replace(/^0x/i.test(text) ? /[uUlL]+$/ : /[uUlLfF]+$/, ''));
 // Static pin analysis shared by the serial plotter (thresholds) and editor diagnostics.
 // It resolves pin numbers through constants, reading variables and MicroPython pin objects,
 // and reports where each pin is set up, read or written, with source ranges for the editor.
@@ -25,13 +28,28 @@ export function analyzeCode(code, language = 'cpp') {
   // A numeric value at token i: a literal, a known constant, or a negated literal.
   const value = (i) => {
     const t = tokens[i];
-    if (t?.type === 'number') return { value: Number(t.text), end: i };
+    if (t?.type === 'number') return { value: numberValue(t.text), end: i };
     if (t?.type === 'word' && constants.has(t.text))
       return { value: constants.get(t.text), end: i, name: t.text };
     if (t?.text === '-' && tokens[i + 1]?.type === 'number')
-      return { value: -Number(tokens[i + 1].text), end: i + 1 };
+      return { value: -numberValue(tokens[i + 1].text), end: i + 1 };
     return null;
   };
+  // The reading a variable holds at token i: the one from its latest assignment before i
+  // (null once it is assigned anything else), or its first assignment when used earlier.
+  const held = (name, i) => {
+    const history = readings.get(name);
+    if (!history) return null;
+    let latest = history[0];
+    for (const entry of history) if (entry.at < i) latest = entry;
+    return latest.reading;
+  };
+  // The end of the statement starting at token i: true when token i ends it (a `;`, a block,
+  // or a new line in MicroPython).
+  const ends = (i, line) =>
+    !tokens[i] ||
+    /^[;{}]$/.test(tokens[i].text) ||
+    (language === 'python' && lineOf(tokens[i]) !== line);
   // A reading source starting at token i: analogRead(p), digitalRead(p), obj.read(), or a
   // variable previously assigned from one of those.
   const source = (i) => {
@@ -46,22 +64,35 @@ export function analyzeCode(code, language = 'cpp') {
       tokens[i + 1]?.text === '.' &&
       /^(read|read_u16|value)$/.test(tokens[i + 2]?.text) &&
       tokens[i + 3]?.text === '('
-    )
-      return {
-        pin: pinObjects.get(t.text).pin,
-        scale: tokens[i + 2].text === 'read_u16' ? 16 : 1,
-        end: i + 4,
-      };
-    if (readings.has(t.text)) return { ...readings.get(t.text), end: i };
-    return null;
+    ) {
+      // read_u16() >> 4 and read_u16() / 16 scale a 16-bit reading back to 0–4095.
+      let scale = tokens[i + 2].text === 'read_u16' ? 16 : 1,
+        end = i + 4;
+      const by = tokens[end + 2];
+      if (scale > 1 && by?.type === 'number' && /^(>>|\/|\/\/)$/.test(tokens[end + 1].text)) {
+        scale /= tokens[end + 1].text === '>>' ? 2 ** numberValue(by.text) : numberValue(by.text);
+        end += 2;
+      }
+      return { pin: pinObjects.get(t.text).pin, scale, end };
+    }
+    const reading = held(t.text, i);
+    return reading ? { ...reading, end: i } : null;
   };
-  // Pass 1: assignments define constants, pin objects and reading variables.
+  // Pass 1: assignments define constants, pin objects and reading variables. A variable holds
+  // a reading only while its value is exactly the read call (or another reading variable):
+  // after `f = analogRead(35) * 9.0 / 5 + 32` or a later `f = 0`, comparing f is not a threshold.
   for (let i = 0; i + 2 < tokens.length; i++) {
     const [name, eq] = [tokens[i], tokens[i + 1]];
-    if (name.type !== 'word' || eq.text !== '=') continue;
+    if (name.type !== 'word') continue;
+    if (/^([-+*/%&|^]|<<|>>|\/\/)?=$|^(\+\+|--)$/.test(eq.text) && eq.text !== '=') {
+      if (readings.has(name.text)) readings.get(name.text).push({ at: i, reading: null });
+      continue;
+    }
+    if (eq.text !== '=') continue;
     const v = value(i + 2);
     if (v && !/^[(.]$/.test(tokens[v.end + 1]?.text || '')) {
       if (!constants.has(name.text)) constants.set(name.text, v.value);
+      if (readings.has(name.text)) readings.get(name.text).push({ at: i, reading: null });
       continue;
     }
     let j = i + 2,
@@ -91,8 +122,10 @@ export function analyzeCode(code, language = 'cpp') {
       });
       continue;
     }
-    const s = source(i + 2);
-    if (s && !readings.has(name.text)) readings.set(name.text, { pin: s.pin, scale: s.scale });
+    const s = source(i + 2),
+      reading = s && ends(s.end + 1, lineOf(name)) ? { pin: s.pin, scale: s.scale } : null;
+    if (reading || readings.has(name.text))
+      readings.set(name.text, [...(readings.get(name.text) || []), { at: i, reading }]);
   }
   // Pass 2: calls and method uses.
   for (let i = 0; i < tokens.length; i++) {

@@ -111,7 +111,7 @@ export const componentQuests = [
     xp: 180,
     badge: 'Water steward',
     learn: ['Three inputs', 'Two outputs', 'Shared reserve'],
-    hint: 'Each output has its own condition, and both must check tank > 400. Give each output its own if/else.',
+    hint: 'Both conditions must check tank > 400. Give the pump and the valve separate if/else blocks.',
     scenarios: [
       ['Dry soil, low pond, full tank', { soil: 10, pond: 10, tank: 80 }, [1, 1]],
       ['Wet soil, full pond', { soil: 80, pond: 80, tank: 80 }, [0, 0]],
@@ -128,8 +128,8 @@ export const componentQuests = [
     resident: 'Eden',
     role: 'Garden path resident',
     quote:
-      'Strong wind can slam the garden gate, and heavy rain floods the path. Keep the gate open in calm weather, and sound a warning in heavy rain.',
-    goal: 'Gate open when the wind is below 40 km/h. Buzzer on when the rain reading is 2000 or more.',
+      'Strong wind slams the garden gate, and heavy rain floods the path. Leave the gate open when it’s calm, and give me a warning when the rain gets heavy.',
+    goal: 'Gate open when the wind is below 40 km/h, closed at 40 km/h or more. Buzzer on when the rain reading is 2000 or more.',
     ids: ['wind', 'rain', 'gate', 'buzzer'],
     conditions: ['wind < 40', 'rain >= 2000'],
     xp: 170,
@@ -159,7 +159,7 @@ export const componentQuests = [
     xp: 180,
     badge: 'Climate keeper',
     learn: ['Three inputs', 'Safety interlock', 'Calibrated units'],
-    hint: 'The fan needs humidity > 70 and outdoorTemp > 5. The lights only depend on cloud >= 70.',
+    hint: 'The fan needs humidity > 70 and outdoorTemp > 5. The lights depend only on cloud >= 70.',
     scenarios: [
       ['Muggy and mild', { humidity: 85, outdoorTemp: 18, cloud: 20 }, [1, 0]],
       ['Muggy but freezing outside', { humidity: 85, outdoorTemp: 2, cloud: 20 }, [0, 0]],

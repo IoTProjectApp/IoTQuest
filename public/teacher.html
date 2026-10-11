@@ -4,6 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <title>Class Progress · IoT Quest</title>
+    <script src="./channel.js"></script>
     <script src="./theme-init.js"></script>
     <link rel="stylesheet" href="./teacher.css" />
     <link rel="icon" href="./favicon.svg" />
@@ -81,9 +82,11 @@
             <select id="viewSelect"></select>
           </label>
           <span class="t-spacer"></span>
-          <button class="t-button" id="csvBtn">Download CSV</button>
+          <button class="t-button" id="csvBtn">Download CSV (all destinations)</button>
           <button class="t-button t-quiet" id="clearBtn">Clear reports</button>
         </div>
+        <p class="t-notice" id="duplicates" role="status" hidden></p>
+        <p class="t-sr" id="announce" aria-live="polite"></p>
         <div class="t-tiles" id="tiles"></div>
         <div class="t-layout">
           <div>
@@ -99,7 +102,7 @@
             </p>
             <section class="t-help" id="helpList"></section>
           </div>
-          <aside class="t-detail" id="detail" aria-live="polite">
+          <aside class="t-detail" id="detail" aria-label="Selected student">
             <p class="t-muted">Select a cell to see the student’s progress and code.</p>
           </aside>
         </div>

@@ -1,6 +1,6 @@
 import { Runtime } from './runtime.js';
 import { baseEnv } from './missions.js';
-import { ADC_SCALE } from './signals.js';
+import { ADC_SCALE, adcRead, picoWiring } from './signals.js';
 // Connected challenges that run over the simulated MQTT broker:
 // - security repairs: a working-but-unsafe program to fix (Fault finding tab);
 // - dashboard quests: the student writes a program a phone-style dashboard talks to (Dashboard tab).
@@ -82,7 +82,7 @@ export const securityCases = [
     type: 'Security · Spoofed command',
     ids: ['gate'],
     goal: `Open the gate only when the household dashboard sends the gate code ${GATE_CODE} on home/gate. Ignore every other message.`,
-    explain: `Anyone on the network can publish to home/gate. Checking for the shared code ${GATE_CODE}, not just "any command", means a stranger's message is ignored. Real systems also use broker passwords and encryption, but the device must still validate what it receives.`,
+    explain: `Anyone on the network can publish to home/gate. If the device checks for the shared code ${GATE_CODE} instead of accepting any command, it ignores a stranger's message. Real systems also use broker passwords and encryption, but the device should still check what it receives.`,
     hints: [
       'Send different messages from the Dashboard tab and watch the gate.',
       'The program opens the gate for any non-zero message.',
@@ -161,7 +161,7 @@ export const securityCases = [
             'Publishes the temperature for the dashboard.',
           ]) +
             pyImports(['mqttConnect', 'mqttPublish'], true) +
-            `\ntemp_sensor = ADC(Pin(${pin}))\ndoor_code = ${DOOR_CODE}\nmqttConnect("thermometer")\n\nwhile True:\n    temp = temp_sensor.read()\n    mqttPublish("home/temperature", temp)\n` +
+            `\ntemp_sensor = ADC(Pin(${pin}))\ndoor_code = ${DOOR_CODE}\nmqttConnect("thermometer")\n\nwhile True:\n    temp = temp_sensor.${adcRead(picoWiring(devices), 'temp')}\n    mqttPublish("home/temperature", temp)\n` +
             (fixed ? '' : '    mqttPublish("home/debug", door_code)\n') +
             '    time.sleep(1)\n'
         : header(language, [
@@ -271,7 +271,7 @@ export const securityCases = [
     ids: ['soil'],
     goal: 'Publish the soil reading on garden/soil about once a second, not on every loop.',
     explain:
-      'Publishing on every loop sends hundreds of messages a second, wasting battery and network capacity and drowning out other devices: a denial of service by accident. Publishing on a timer keeps the dashboard up to date without the flood.',
+      'Publishing on every loop sends hundreds of messages a second. That wastes battery and network capacity and can drown out other devices, which is an accidental denial of service. Publishing on a timer keeps the dashboard up to date without flooding the network.',
     hints: [
       'Count how quickly messages arrive in the Dashboard tab.',
       'The loop has almost no delay, and it publishes every time round.',
@@ -285,7 +285,7 @@ export const securityCases = [
             'Publishes the soil reading for the dashboard.',
           ]) +
             'from machine import Pin, ADC\nfrom iotquest import mqttConnect, mqttPublish\nfrom time import sleep_ms, ticks_ms\n' +
-            `\nsoil_sensor = ADC(Pin(${pin}))\nmqttConnect("soil")\nlast = 0\n\nwhile True:\n    soil = soil_sensor.read()\n` +
+            `\nsoil_sensor = ADC(Pin(${pin}))\nmqttConnect("soil")\nlast = 0\n\nwhile True:\n    soil = soil_sensor.${adcRead(picoWiring(devices), 'soil')}\n` +
             (fixed
               ? '    if ticks_ms() - last >= 1000:\n        last = ticks_ms()\n        mqttPublish("garden/soil", soil)\n'
               : '    mqttPublish("garden/soil", soil)\n') +
@@ -376,7 +376,7 @@ export const dashboardQuests = [
       const pin = pinOf(devices, 'temp');
       return py(language)
         ? pyImports(['mqttConnect', 'mqttPublish'], true) +
-            `\ntemp_sensor = ADC(Pin(${pin}))\nmqttConnect("house")\n\nwhile True:\n    mqttPublish("home/temperature", temp_sensor.read())\n    time.sleep(1)\n`
+            `\ntemp_sensor = ADC(Pin(${pin}))\nmqttConnect("house")\n\nwhile True:\n    mqttPublish("home/temperature", temp_sensor.${adcRead(picoWiring(devices), 'temp')})\n    time.sleep(1)\n`
         : `const int tempPin = ${pin};\n\nvoid setup() {\n  mqttConnect("house");\n}\n\nvoid loop() {\n  float temp = analogRead(tempPin);\n  mqttPublish("home/temperature", temp);\n  delay(1000);\n}\n`;
     },
     tests: guarded((runtime) => {
@@ -418,7 +418,7 @@ export const dashboardQuests = [
     ids: ['fan'],
     goal: 'Subscribe to home/fan/set: 1 turns the fan on, 0 turns it off. Confirm by publishing the fan state (1 or 0) on home/fan/state.',
     explain:
-      'Now the device is a subscriber: the dashboard publishes commands and the device acts on them. Publishing the real state back lets the dashboard show what actually happened, not just what was asked.',
+      'Now the device is a subscriber: the dashboard publishes commands and the device acts on them. When the device publishes its real state back, the dashboard can show what the fan is actually doing, which may differ from what was requested.',
     hints: [
       'Connect, then mqttSubscribe("home/fan/set") once at the start.',
       'Each loop, read the command with mqttRead("home/fan/set") and write it to the fan.',
@@ -475,7 +475,7 @@ export const dashboardQuests = [
     ids: ['soil'],
     goal: 'Publish 1 on garden/alert once when the soil reading drops below 1500, and 0 once when it is back at 1500 or above. Do not repeat the alert while nothing changes.',
     explain:
-      'An alert is an event, not a reading: it should be sent once when something changes, not on every loop. Remembering the previous state and publishing only on a change is how real devices avoid alert spam.',
+      'An alert is an event rather than a reading, so send it once when something changes instead of on every loop. Real devices remember the previous state and publish only when it changes, so they do not repeat the same alert.',
     hints: [
       'Keep a variable that remembers whether the plant was dry last time round.',
       'Work out dry = soil < 1500 each loop.',
@@ -500,7 +500,7 @@ export const dashboardQuests = [
       const pin = pinOf(devices, 'soil');
       return py(language)
         ? pyImports(['mqttConnect', 'mqttPublish'], true) +
-            `\nsoil_sensor = ADC(Pin(${pin}))\nmqttConnect("garden")\nwas_dry = 0\n\nwhile True:\n    dry = 0\n    if soil_sensor.read() < 1500:\n        dry = 1\n    if dry != was_dry:\n        mqttPublish("garden/alert", dry)\n        was_dry = dry\n    time.sleep_ms(200)\n`
+            `\nsoil_sensor = ADC(Pin(${pin}))\nmqttConnect("garden")\nwas_dry = 0\n\nwhile True:\n    dry = 0\n    if soil_sensor.${adcRead(picoWiring(devices), 'soil')} < 1500:\n        dry = 1\n    if dry != was_dry:\n        mqttPublish("garden/alert", dry)\n        was_dry = dry\n    time.sleep_ms(200)\n`
         : `const int soilPin = ${pin};\nint wasDry = 0;\n\nvoid setup() {\n  mqttConnect("garden");\n}\n\nvoid loop() {\n  int dry = 0;\n  if (analogRead(soilPin) < 1500) {\n    dry = 1;\n  }\n  if (dry != wasDry) {\n    mqttPublish("garden/alert", dry);\n    wasDry = dry;\n  }\n  delay(200);\n}\n`;
     },
     tests: guarded((runtime) => {

@@ -20,9 +20,9 @@ import { localSkyDate, DEFAULT_OBSERVER } from './astronomy.js';
 import { Runtime } from './runtime.js';
 import { World3D } from './world3d.js';
 import { toWorld, fromWorld } from './world-math.js';
-import { ADC_SIGNALS, ADC_SCALE } from './signals.js';
+import { ADC_SIGNALS, ADC_SCALE, outputLevel } from './signals.js';
 import { locations, locationById, adaptMissions, progressForLocation } from './locations.js';
-import { WeatherService, advanceEnvironment } from './weather.js';
+import { WeatherService, advanceEnvironment, servoLevel } from './weather.js';
 import { advancedMenu } from './advanced-tools.js';
 import {
   createLabState,
@@ -53,6 +53,7 @@ import { formatCode as formatSource, FormatError, INDENT } from './code-format.j
 import { coachSteps, readingText } from './code-coach.js';
 import { checkPredictions } from './weather-quests.js';
 import { neededNow, situationReason } from './situation.js';
+import { boundaryScenarios } from './quest-boundaries.js';
 import { conversationHTML } from './conversation-view.js';
 import { predictionHTML } from './prediction-view.js';
 import { declutterLabels } from './world-labels.js';
@@ -73,10 +74,16 @@ import {
 import { buildProgressReport, progressFileName } from './progress-report.js';
 import { understandingQuestions, answerQuestion, understandingScore } from './understanding.js';
 const $ = (id) => document.getElementById(id);
-const STORAGE_KEY = 'iotquest-v1',
+// The test copy at /dev/ (channel.js) saves separately so trying it never changes the main site's
+// progress. It starts from a copy of the main site's progress until it first saves.
+const CHANNEL = globalThis.IOTQUEST_CHANNEL || '',
+  MAIN_STORAGE_KEY = 'iotquest-v1',
+  STORAGE_KEY = CHANNEL ? 'iotquest-' + CHANNEL + '-v1' : MAIN_STORAGE_KEY,
   TICK_MS = 200,
   ADVANCED_COMPONENT_XP = 150,
-  EVIDENCE_LIMIT = 50;
+  EVIDENCE_LIMIT = 50,
+  FULL_TEST_EVIDENCE = 5,
+  IMPORT_BACKUPS = 3;
 const areas = [
   ['Bedroom', 19, 17],
   ['Bathroom', 30, 15],
@@ -93,7 +100,13 @@ const areas = [
 const baseAreas = areas.map((a) => [...a]);
 let saved = {};
 try {
-  saved = sanitizeSaved(JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}'));
+  saved = sanitizeSaved(
+    JSON.parse(
+      localStorage.getItem(STORAGE_KEY) ||
+        (CHANNEL && localStorage.getItem(MAIN_STORAGE_KEY)) ||
+        '{}',
+    ),
+  );
 } catch {}
 let state = {
   mission: 0,
@@ -151,11 +164,24 @@ function locationProfile() {
   });
 }
 const currentCompletions = () => locationProfile().completed;
-const activeMissions = () => adaptMissions(missions, currentLocation(), state.difficulty);
+// Adapting all quests copies each one, and mission() runs many times every 200 ms tick, so the
+// list is kept until the destination or difficulty changes (quests are not modified once built).
+let adaptedFor = null,
+  adaptedMissions = null;
+const activeMissions = () => {
+  const key = state.activeLocation + '|' + state.difficulty;
+  if (adaptedFor !== key) {
+    adaptedMissions = adaptMissions(missions, currentLocation(), state.difficulty);
+    adaptedFor = key;
+  }
+  return adaptedMissions;
+};
 let activeFault = null,
   selectedDevice = null,
   lastInputs = {},
   outputKinds = {},
+  // The full scale of each output's last write (1 digital, 255 analogWrite, 1023 duty, ...).
+  outputScales = {},
   inFlight = false,
   requestEnv = null,
   inspectionVariables = {};
@@ -282,11 +308,72 @@ const completionKey = () => activeFault?.rewardKey ?? activeKey();
 const project = () => {
   const key = !activeFault && free ? 'free' : activeKey();
   const projects = locationProfile().projects;
-  if (!projects[key]) projects[key] = { devices: [], code: {} };
+  if (!projects[key]) projects[key] = { devices: [], code: {}, board: state.board };
   return projects[key];
 };
+// Each project records the controller its pins and code are for. Older saves did not: their
+// board is worked out from the pins (ESP32 and Pico pin sets differ), else taken as the current one.
+function projectBoard(p) {
+  if (p.board) return p.board;
+  const ds = (p.devices || []).filter((d) => components.some((c) => c.id === d.id));
+  if (!ds.length) return state.board;
+  const family = (b) => (b === 'ESP32' ? 'esp' : 'pico'),
+    misfit = (b) => {
+      const wired = ds.map((d) => ({ ...d, power: true, ground: true, resistorConnected: true })),
+        planned = defaults(
+          ds.map((d) => d.id),
+          b,
+        );
+      return validate(wired, b).length * 10 - ds.filter((d, i) => d.pin === planned[i].pin).length;
+    },
+    other = state.board === 'ESP32' ? 'Raspberry Pi Pico' : 'ESP32';
+  if (misfit(other) >= misfit(state.board)) return state.board;
+  // Pico and Pico W share pins; the one whose code is not stored aside is the one in use.
+  if (family(other) === 'pico')
+    return ['Raspberry Pi Pico', 'Raspberry Pi Pico W'].find((b) => !p.codeByBoard?.[b]) || other;
+  return other;
+}
+// Moves a project to another controller: pins are remapped and each board keeps its own code
+// (its pin numbers differ), so switching back restores it. Returns the restored code, if any.
+function remapProject(p, board, previous = projectBoard(p)) {
+  const plannedDevices = defaults(
+    p.devices.map((d) => d.id),
+    board,
+  );
+  p.devices = p.devices.map((d, i) => ({ ...d, pin: plannedDevices[i].pin }));
+  p.codeByBoard = { ...p.codeByBoard, [previous]: p.code };
+  const kept = p.codeByBoard[board];
+  delete p.codeByBoard[board];
+  // A challenge starts again from its own program (the unsafe one to repair), not a blank one.
+  const source = activeFault?.source || activeFault?.starter,
+    rebuilt = (lang) => source(lang, plannedDevices);
+  p.code = kept || (source ? { cpp: rebuilt('cpp'), python: rebuilt('python') } : {});
+  p.board = board;
+  return kept;
+}
+// The controller is chosen per place, so a quest last worked on before the board was changed in
+// another quest still has the old board's pins and code: it is moved over as changeBoard would.
+// Bug hunts are left alone (each board has its own hunt).
+function adaptProjectToBoard() {
+  if (activeFault?.kind === 'hunt') return;
+  const p = project(),
+    from = projectBoard(p);
+  if (from === state.board) {
+    p.board = state.board;
+    return;
+  }
+  if (!p.devices.length && !Object.keys(p.code || {}).length) {
+    p.board = state.board;
+    return;
+  }
+  remapProject(p, state.board, from);
+  for (const key of Object.keys(coachStep))
+    if (key.startsWith(state.activeLocation + ':' + activeKey() + ':')) delete coachStep[key];
+}
 const planned = () => defaults(mission().ids.length ? mission().ids : ['ldr', 'led'], state.board);
-const code = () => project().code[state.language] ?? program(mission(), state.language, planned());
+const code = () =>
+  project().code[state.language] ??
+  program(mission(), state.language, planned(), false, state.board);
 let saveTimer = null;
 // Coalesce saves during rapid input such as typing; flushed when the page is hidden.
 function saveSoon() {
@@ -294,6 +381,57 @@ function saveSoon() {
   saveTimer = setTimeout(save, 600);
 }
 window.addEventListener('pagehide', () => saveTimer && save());
+// All progress is one saved copy. When another tab (or the installed app) saves, this tab's copy
+// is out of date: saving it would write older progress back over the newer one (a forgotten tab
+// saves live weather every minute). So this tab stops saving and offers a reload instead.
+let staleTab = false;
+const RECOVERY_KEY = STORAGE_KEY + '-unsaved';
+function keepUnsavedCode() {
+  const unsaved = {
+    at: new Date().toISOString(),
+    location: state.activeLocation,
+    project: !activeFault && free ? 'free' : activeKey(),
+    language: state.language,
+    code: code(),
+  };
+  try {
+    localStorage.setItem(RECOVERY_KEY, JSON.stringify(unsaved));
+  } catch {}
+  return unsaved;
+}
+window.addEventListener('storage', (e) => {
+  if (e.key !== STORAGE_KEY || staleTab) return;
+  staleTab = true;
+  // Typing saves 600 ms after the last key. Those edits cannot go into the shared copy without
+  // overwriting the other tab's newer progress, so the code is kept in its own recovery entry
+  // (never read back automatically) and offered here to copy.
+  const unsaved = saveTimer ? keepUnsavedCode() : null;
+  clearTimeout(saveTimer);
+  saveTimer = null;
+  stop(false);
+  $('saved').textContent = 'Not saved: progress changed in another tab';
+  document.getElementById('updateBar')?.remove();
+  const bar = document.createElement('div');
+  bar.id = 'updateBar';
+  bar.className = 'update-bar';
+  bar.setAttribute('role', 'status');
+  bar.innerHTML =
+    '<span>Your progress changed in another tab.' +
+    (unsaved ? ' Your latest typing was not saved.' : '') +
+    '</span>' +
+    (unsaved ? '<button type="button" id="showUnsaved">Show unsaved code</button>' : '') +
+    '<button type="button" id="reloadStale">Reload</button>';
+  document.body.append(bar);
+  $('reloadStale').onclick = () => location.reload();
+  if (unsaved)
+    $('showUnsaved').onclick = () =>
+      modal(
+        'Unsaved code',
+        '<div class="guide"><p>Copy this before you reload: it was typed just before another tab saved, so it is not in your saved progress.</p></div><pre class="unsaved-code">' +
+          esc(unsaved.code) +
+          '</pre>',
+      );
+});
 // Adopt simulation-owned fields from a worker/batch result without replacing the lab object,
 // so panels holding a reference keep writing to the saved state.
 function adoptSimulatedLab(next) {
@@ -305,8 +443,11 @@ function adoptSimulatedLab(next) {
 // Record evidence; consecutive edits merge into one session entry, and test evidence
 // is capped separately so editing cannot evict it.
 function recordEvidence(entry) {
-  const lab = labState(),
-    last = lab.evidence.at(-1);
+  const lab = labState();
+  lab.evidence = (Array.isArray(lab.evidence) ? lab.evidence : []).filter(
+    (e) => e && typeof e === 'object',
+  );
+  const last = lab.evidence.at(-1);
   if (
     entry.type === 'edit' &&
     last?.type === 'edit' &&
@@ -319,13 +460,28 @@ function recordEvidence(entry) {
     return;
   }
   lab.evidence.push(entry);
+  trimEvidence(lab);
+}
+function trimEvidence(lab) {
   const tests = lab.evidence.filter((e) => e.type === 'test').slice(-EVIDENCE_LIMIT),
     other = lab.evidence.filter((e) => e.type !== 'test').slice(-EVIDENCE_LIMIT);
   lab.evidence = lab.evidence.filter((e) => tests.includes(e) || other.includes(e));
+  // Every saved test run held a full copy of the code, wiring and results (about 2 KB each), and
+  // all progress shares one browser store of about 5 MB. Older runs keep a short summary.
+  for (const e of tests.slice(0, -FULL_TEST_EVIDENCE)) {
+    delete e.code;
+    delete e.devices;
+    // Defensive: imported or old records may hold anything here.
+    if (e.results)
+      e.results = (Array.isArray(e.results) ? e.results : [])
+        .filter((r) => r && typeof r === 'object')
+        .map(({ name, pass }) => ({ name: String(name ?? ''), pass: pass === true }));
+  }
 }
 function save() {
   clearTimeout(saveTimer);
   saveTimer = null;
+  if (staleTab) return;
   if (state.activeLocation !== 'legacy') {
     const p = locationProfile();
     p.mission = state.mission;
@@ -341,6 +497,14 @@ function save() {
     $('saved').textContent = '✓ Progress saved locally';
   } catch {
     $('saved').textContent = 'Local saving unavailable';
+    // Usually the browser's storage is full (or blocked): say so once, clearly, so the student
+    // can download their progress before closing the page.
+    if (!save.warned) {
+      save.warned = true;
+      toast(
+        'Your progress could not be saved in this browser. Download your progress or project before closing this page.',
+      );
+    }
   }
 }
 function toast(text) {
@@ -382,7 +546,30 @@ function markEdited({ typing = false } = {}) {
   if (typing) saveSoon();
   else save();
 }
+// Badge icons repeat in order once every icon has been used (there are more quests than icons).
+const BADGE_ICONS = [
+  '☾',
+  '⌂',
+  '♧',
+  '❄',
+  '◈',
+  '≋',
+  '☀',
+  '✧',
+  '⚑',
+  '✦',
+  '♨',
+  '☂',
+  '⚙',
+  '✪',
+  '❖',
+  '☘',
+];
 function renderMission() {
+  // Pausing belongs to the clock the student sees (speed 0, or a program held in the debugger),
+  // not to each quest's saved lab: otherwise a quest paused earlier stays frozen at 1×.
+  labState().paused = speed === 0 || (!!state.debugPaused && running);
+  adaptProjectToBoard();
   syncSkyControls();
   let m = mission();
   $('missionTitle').textContent = m.title;
@@ -626,7 +813,8 @@ function renderEnvironment() {
         sensorOverrides[el.dataset.env] = state.env[el.dataset.env];
       updateReadings();
       renderEffects();
-      save();
+      // A slider fires on every step it moves; save once it settles.
+      saveSoon();
     }),
   );
 }
@@ -651,8 +839,14 @@ function renderAreas() {
     .join('');
   document
     .querySelectorAll('[data-area]')
-    .forEach((b) => (b.onclick = () => enterArea(b.dataset.area)));
+    .forEach(
+      (b) => (b.onclick = () => enterArea(b.dataset.area, { keepProject: keepCurrentProject() })),
+    );
 }
+// Visiting a building by its area marker, the overview or E beside it keeps a free build, a
+// teacher quest or other challenge, and a running program; otherwise it starts that building's
+// quest.
+const keepCurrentProject = () => free || !!activeFault || running;
 function enterArea(name, { keepProject = false } = {}) {
   let a = allAreas().find((a) => a[0] === name);
   if (!a) return;
@@ -698,6 +892,12 @@ function setMapView() {
     ? 'none'
     : 'translate(' + tx + '%,' + ty + '%) scale(' + zoom + ')';
   world3d?.setView(view, a, zoom);
+  // The minimap matches the 3D view, which draws the community (and its buildings close up)
+  // unflipped even when the home is mirrored.
+  $('minimap')?.classList.toggle(
+    'mirrored',
+    !!world3d?.model.mirrored && !world3d.communityView && !world3d.indoorArea,
+  );
   if ($('followCamera')) $('followCamera').setAttribute?.('aria-pressed', 'false');
   $('location').innerHTML =
     '<span>⌖</span> ' +
@@ -943,7 +1143,7 @@ function interact() {
     toast('Walk closer to a room, garden bed, or installation point.');
     return;
   }
-  enterArea(near[0]);
+  enterArea(near[0], { keepProject: keepCurrentProject() });
   switchTab('inventory');
   toast('You’re at ' + near[0] + '. Choose a component to install.');
 }
@@ -1055,8 +1255,9 @@ const boardLink = new BoardLink({
 const boardStatusHTML = () =>
   (boardLink.port ? '● Connected' : '○ Not connected') +
   (boardLink.port && boardLink.lastLine ? ' · <code>' + esc(boardLink.lastLine) + '</code>' : '');
-function sendBoardOutputs(current = outputs) {
-  if (boardLink.port && boardSendOutputs) boardLink.send(outputLine(current, project().devices));
+function sendBoardOutputs(current = outputs, scales = outputScales) {
+  if (boardLink.port && boardSendOutputs)
+    boardLink.send(outputLine(current, project().devices, scales));
 }
 function renderBoardPanel() {
   if (!$('boardPanel')) return;
@@ -1365,12 +1566,14 @@ function renderCode() {
   updateHighlight();
   updateReadings();
   $('codeInput').addEventListener('input', () => {
-    if (!canEdit('Programmer')) {
+    if (!canEdit('Programmer') || huntPhase() === 'spot') {
       $('codeInput').value = code();
       return;
     }
     project().code[state.language] = $('codeInput').value;
-    stop(false);
+    // Stopping re-renders the readings and effects, so it is skipped on keystrokes when nothing
+    // is running (or held in the debugger).
+    if (worker || running) stop(false);
     markEdited({ typing: true });
     if (huntPhase() === 'fix') renderHunt();
     updateHighlight();
@@ -1394,7 +1597,9 @@ function renderCode() {
     }
     if (e.key === 'Tab' && (tabReleased || e.ctrlKey || e.metaKey || e.altKey)) return;
     if (e.key !== 'Tab' && e.key !== 'Shift') tabReleased = false;
-    if (e.isComposing) return;
+    // Read-only code (Spot the bugs, another role's turn) must not change: browsers let
+    // setRangeText edit a read-only field, so the editing keys below are skipped.
+    if (e.isComposing || (e.target.readOnly && e.key !== 'F8')) return;
     const el = e.target,
       unit = INDENT[state.language] || '    ',
       start = el.selectionStart,
@@ -1482,7 +1687,13 @@ function renderCode() {
   $('resetCode').onclick = () => {
     if (!canEdit('Programmer') || blockedByHunt('Reset')) return;
     stop(false);
-    project().code[state.language] = program(mission(), state.language, planned());
+    project().code[state.language] = program(
+      mission(),
+      state.language,
+      planned(),
+      false,
+      state.board,
+    );
     // Start the Guide again from the first unfinished step.
     delete coachStep[state.activeLocation + ':' + activeKey() + ':' + state.language];
     markEdited();
@@ -1527,6 +1738,7 @@ function recordPlot(data) {
         t: data.time,
         inputs: data.inputs || {},
         outputs: data.outputs || {},
+        scales: data.outputScales || {},
         lines: fresh > 0 ? data.logs.slice(-fresh) : [],
       },
     ];
@@ -1689,7 +1901,7 @@ function loadExample() {
     ? activeFault.solution(state.language, ds)
     : activeFault?.source
       ? activeFault.source(state.language, ds, true)
-      : program(mission(), state.language, ds, true);
+      : program(mission(), state.language, ds, true, state.board);
   stop(false);
   markEdited();
   renderCode();
@@ -1726,19 +1938,24 @@ function changeBoard(board) {
     return;
   }
   stop(false);
+  const p = project(),
+    previous = state.board;
   state.board = board;
-  const plannedDevices = defaults(
-    project().devices.map((d) => d.id),
-    board,
-  );
-  project().devices = project().devices.map((d, i) => ({ ...d, pin: plannedDevices[i].pin }));
-  project().code = {};
-  // The editor is empty again, so the Guide starts from its first unfinished step.
+  const kept = remapProject(p, board, previous);
+  // The editor shows different code now, so the Guide starts from its first unfinished step.
   for (const key of Object.keys(coachStep))
     if (key.startsWith(state.activeLocation + ':' + activeKey() + ':')) delete coachStep[key];
   markEdited();
   renderBench();
-  toast('Controller changed. Pins were remapped and starter code reloaded for ' + board + '.');
+  toast(
+    kept
+      ? 'Controller changed. Pins were remapped and your ' + board + ' code is back.'
+      : 'Controller changed. Pins were remapped and starter code loaded for ' +
+          board +
+          '. Your ' +
+          previous +
+          ' code is kept: switch back to get it.',
+  );
 }
 function renderInventory() {
   let required = mission().ids,
@@ -2017,6 +2234,8 @@ function run() {
       return;
     }
     outputs = data.outputs;
+    // The board line converts each value with the scale of the call that wrote it.
+    outputScales = data.outputScales || {};
     sendBoardOutputs();
     if (data.messages) {
       mqttMessages = data.messages;
@@ -2047,9 +2266,11 @@ function run() {
         state.env,
         0.2,
         lab.upgrades,
+        outputScales,
       );
       state.env = withBoard(
         advanceEnvironment(state.env, project().devices, outputs, 0.2, {
+          scales: outputScales,
           mode: state.weatherMode,
           weather: state.weatherByLocation[state.activeLocation],
           location: currentLocation(),
@@ -2166,6 +2387,11 @@ function stop(notify = false) {
   outputs = {};
   lastInputs = {};
   outputKinds = {};
+  outputScales = {};
+  // A stopped program cannot stay held in the debugger: the world clock runs again (unless the
+  // clock itself is paused at speed 0).
+  state.debugPaused = false;
+  labState().paused = speed === 0;
   sendBoardOutputs({});
   renderEffects();
   renderSteps();
@@ -2376,14 +2602,14 @@ function renderEffects() {
           ? 'background:radial-gradient(circle,' + esc(state.color) + 'bb,transparent 68%);'
           : '') +
         'opacity:' +
-        (outputs[d.pin] === 1 ? 1 : Math.min(1, outputs[d.pin] / 255)) +
+        outputLevel(outputs[d.pin], outputScales[d.pin]) +
         '"></div>';
     if (d.id === 'fan')
       effect =
         '<span class="fan-rotor ' +
         (on ? 'spinning' : '') +
         '" style="animation-duration:' +
-        Math.max(0.15, 1 / Math.max(1, outputs[d.pin] / 50)) +
+        Math.max(0.15, 1 / Math.max(1, 5.1 * outputLevel(outputs[d.pin], outputScales[d.pin]))) +
         's">✣</span>';
     if (['pump', 'valve'].includes(d.id) && on && state.env.tank > 0)
       effect = '<div class="water-flow"></div>';
@@ -2391,7 +2617,12 @@ function renderEffects() {
     if (['servo', 'gate'].includes(d.id))
       effect =
         '<span class="servo-door" style="transform:rotate(' +
-        (d.id === 'gate' && on ? 90 : Math.min(180, outputs[d.pin] || 0)) +
+        (d.id === 'gate'
+          ? on
+            ? 90
+            : 0
+          : // The blind turns toward 180° (lowered) as the servo's level rises, as in weather.js.
+            Math.round(180 * servoLevel(outputs[d.pin], outputScales[d.pin]))) +
         'deg)"></span>';
     if (d.id === 'level')
       effect = '<div class="tank-meter"><i style="height:' + state.env.tank + '%"></i></div>';
@@ -2487,12 +2718,25 @@ function testSolution() {
   else {
     let assessment = createLabState().resources;
     try {
-      const runtime = new Runtime(code(), state.language, ds, state.board);
-      for (const [name, env, expected] of m.scenarios) {
+      const runtime = new Runtime(code(), state.language, ds, state.board),
+        // Limit checks test every threshold from both sides; they are not part of the
+        // energy and water budget, which is measured over the quest's own scenarios.
+        limitChecks = boundaryScenarios(m, baseEnv);
+      for (const [name, env, expected] of [...m.scenarios, ...limitChecks]) {
         let result;
+        const budgeted = !limitChecks.some((c) => c[0] === name);
         for (let i = 0; i < 25; i++) {
           result = runtime.step({ ...baseEnv, ...env });
-          assessment = updateResources(assessment, ds, result.outputs, { ...baseEnv, ...env }, 0.2);
+          if (budgeted)
+            assessment = updateResources(
+              assessment,
+              ds,
+              result.outputs,
+              { ...baseEnv, ...env },
+              0.2,
+              undefined,
+              result.outputScales,
+            );
         }
         let actual = m.ids
           .map((id) => ds.find((d) => d.id === id))
@@ -2519,7 +2763,15 @@ function testSolution() {
         const pump = ds.find((d) => d.id === 'pump');
         for (let i = 0; i < 220; i++) {
           let r = dynamic.step(env);
-          assessment = updateResources(assessment, ds, r.outputs, env, 0.2);
+          assessment = updateResources(
+            assessment,
+            ds,
+            r.outputs,
+            env,
+            0.2,
+            undefined,
+            r.outputScales,
+          );
           let on = (r.outputs[pump.pin] || 0) > 0;
           if (i === 0) first = on;
           if (on && env.tank > 0) {
@@ -2647,7 +2899,7 @@ function renderTests() {
     '<div class="bench-heading"><button class="outline" id="backCode">Back to code</button>' +
     (currentPassed && !activeFault && state.mission < activeMissions().length - 1
       ? '<button class="primary" id="nextMission">Next quest</button>'
-      : solvedOwnCode(state.mission)
+      : !activeFault && solvedOwnCode(state.mission)
         ? '<button class="outline" id="debugBtn">Try a debugging challenge</button>'
         : '') +
     (free || activeFault ? '' : '<button class="outline" id="huntBtn">Spot the bugs</button>') +
@@ -2657,7 +2909,7 @@ function renderTests() {
   $('backCode').onclick = () => switchTab('code');
   if ($('nextMission')) $('nextMission').onclick = () => selectMission(state.mission + 1);
   if ($('debugBtn')) $('debugBtn').onclick = debugChallenge;
-  if ($('huntBtn')) $('huntBtn').onclick = () => ownCodeFirst(state.mission) && startBugHunt();
+  if ($('huntBtn')) $('huntBtn').onclick = tryBugHunt;
 }
 // "Check your understanding": questions about the passed quest. Answers are saved with the
 // quest's completion record (and appear in progress reports); a right first try earns XP.
@@ -2787,6 +3039,7 @@ function debugChallenge() {
     state.language,
     project().devices.length ? project().devices : planned(),
     true,
+    state.board,
   ).replace(
     state.language === 'cpp' ? 'HIGH' : 'value(1)',
     state.language === 'cpp' ? 'LOW' : 'value(0)',
@@ -2801,7 +3054,7 @@ function selectMission(index) {
   sensorOverrides = {};
   // Opening the destination restores its 3D graphics and starts the player at home.
   if (state.travelScreen) showLocation();
-  free = false;
+  setFree(false);
   // A quest chosen because the situation needs it keeps that situation (at sunset the path is
   // still dark); any other quest starts from fresh practice conditions.
   const needed = !!situationReason(activeMissions()[index], state.env);
@@ -2913,13 +3166,17 @@ $('questList').onclick = questList;
 $('hintBtn').onclick = () => {
   $('hint').hidden = !$('hint').hidden;
 };
+// Every change to Free build goes through here so the button always names the way back.
+function setFree(on) {
+  free = !!on;
+  $('freeBtn').textContent = free ? '⚑ Back to quests' : '◇ Free build';
+}
 $('freeBtn').onclick = () => {
   stop(false);
   activeFault = null;
-  free = !free;
+  setFree(!free);
   currentPassed = false;
   testResults = [];
-  $('freeBtn').textContent = free ? '⚑ Back to quests' : '◇ Free build';
   renderMission();
   toast(free ? 'Free build unlocked: every component is available.' : 'Back to your active quest.');
 };
@@ -2941,7 +3198,7 @@ function progress() {
             '<div class="badge ' +
             (currentCompletions()[missionKey(i)] ? '' : 'locked') +
             '"><span class="badge-icon">' +
-            ['☾', '⌂', '♧', '❄', '◈', '≋', '☀', '✧'][i] +
+            BADGE_ICONS[i % BADGE_ICONS.length] +
             '</span><strong>' +
             esc(m.badge) +
             '</strong><small>' +
@@ -3001,7 +3258,9 @@ function settings() {
   $('resetProgress').onclick = () => {
     if (!confirm('Delete all saved progress, projects and badges in this browser?')) return;
     try {
-      localStorage.removeItem(STORAGE_KEY);
+      // The test copy keeps an empty save, or the reload would copy the main site's back in.
+      if (CHANNEL) localStorage.setItem(STORAGE_KEY, '{}');
+      else localStorage.removeItem(STORAGE_KEY);
     } catch {}
     window.location.reload();
   };
@@ -3064,7 +3323,7 @@ $('characterBtn').onclick = () => {
 function languageGuide() {
   modal(
     'Your programming field guide',
-    '<div class="guide"><h3>Two languages. One connected world.</h3><p>Arduino runs <code>setup()</code> once and <code>loop()</code> every simulation tick. MicroPython creates its pin objects once, then runs a <code>while True:</code> loop. Switch languages to load its starter without losing devices or wires.</p><h3>Supported language subset</h3><p>Numbers, booleans, strings, variables, arithmetic (+ − * / %), comparisons, logical operators, assignments, if/else (and Python elif), while loops, functions with parameters and return values. Use <code>delay(ms)</code> or <code>time.sleep_ms(ms)</code> to pause until the next tick. Integer C variables drop decimals, so <code>7 / 2</code> is 3; Python has <code>//</code> and <code>global</code>. Blocks use braces in Arduino and exactly four spaces per level in Python.</p><p>Arduino: <code>pinMode</code>, <code>digitalRead</code>, <code>digitalWrite</code>, <code>analogRead</code>, <code>analogWrite</code>, <code>servoWrite</code>, <code>millis</code>, <code>delay</code>, <code>Serial.begin/print/println</code> (<code>print</code> continues a line; <code>println</code> ends it). Print <code>label:value</code> pairs, e.g. <code>Serial.print("light:"); Serial.println(light);</code>, to graph them in the Serial plotter.</p><p>MicroPython: <code>Pin</code>, <code>ADC</code>, <code>PWM</code>; <code>value</code>, <code>on/off</code>, <code>read</code>, <code>read_u16</code>, <code>duty/duty_u16</code>, <code>freq</code>; <code>time.ticks_ms</code>, <code>time.sleep/sleep_ms</code>, <code>print</code>. Helpers: <code>abs/min/max/int</code>.</p><h3>Virtual device readings</h3><p>Light, moisture, rain, tank and potentiometer: 0–4095, or 0–65520 with <code>read_u16()</code>. Temperature is a calibrated Celsius channel; distance is centimetres. These virtual channels replace physical sensor libraries for beginner exercises. <code>digitalWrite</code> values are 0/1. PWM uses 0–255 or 0–65535; <code>servoWrite</code> uses 0–180 degrees.</p><h3>Timing & sandbox limits</h3><p>One tick is 200 ms at 1× speed. A delay suspends the program until the next tick and resumes on the following line; its argument does not schedule a real sleep. Use <code>millis()</code> or <code>time.ticks_ms()</code> for accurate simulated timing. Every tick has a 20,000-operation budget and runs in an isolated worker. Infinite loops produce a useful error.</p><h3>Unsupported features</h3><p>This is a teaching interpreter, not a complete compiler. Arrays, lists, dictionaries, classes, pointers, for loops, comprehensions, external libraries, #include, hardware interrupts, network access, dynamic code, and file access are unsupported. Unsupported syntax stops the program with an error. Motors and pumps use virtual driver modules.</p></div>',
+    '<div class="guide"><h3>Two languages. One connected world.</h3><p>Arduino runs <code>setup()</code> once and <code>loop()</code> every simulation tick. MicroPython creates its pin objects once, then runs a <code>while True:</code> loop. Switch languages to load its starter without losing devices or wires.</p><h3>Supported language subset</h3><p>Numbers (including hex such as <code>0xFF</code> and <code>1000UL</code>), booleans, strings, variables, arithmetic (+ − * / %), bit operators (&amp; | ^ ~ &lt;&lt; &gt;&gt;), comparisons, logical operators, assignments including <code>+=</code>, <code>-=</code>, <code>*=</code>, <code>/=</code> and <code>%=</code>, if/else (and Python elif), while loops with <code>break</code> and <code>continue</code>, functions with parameters and return values. Arduino also has casts such as <code>(float)x</code>, the <code>?:</code> operator, <code>static</code> local variables and several declarations on one line (<code>int a, b = 2;</code>); Python has chained comparisons such as <code>18 &lt;= temp &lt;= 26</code>. Use <code>delay(ms)</code> or <code>time.sleep_ms(ms)</code> to pause until the next tick. Integer C variables drop decimals, so <code>7 / 2</code> is 3, and whole numbers wrap at 32 bits like on the board; Python has <code>//</code> and <code>global</code>. Blocks use braces in Arduino and consistent indentation in Python (four spaces per level is usual). Variables must be declared with a type in Arduino before you assign to them. Joining text and a number needs <code>str(x)</code> in Python; in Arduino print the parts separately, e.g. <code>Serial.print("T: "); Serial.println(t);</code>.</p><p>Arduino: <code>pinMode</code>, <code>digitalRead</code>, <code>digitalWrite</code>, <code>analogRead</code>, <code>analogWrite</code>, <code>servoWrite</code>, <code>millis</code>, <code>delay</code>, <code>map</code>, <code>constrain</code>, <code>abs/min/max</code>, <code>Serial.begin/print/println</code> (<code>print</code> continues a line; <code>println</code> ends it; decimals print with 2 places, or <code>println(x, 3)</code> for 3). Print <code>label:value</code> pairs, e.g. <code>Serial.print("light:"); Serial.println(light);</code>, to graph them in the Serial plotter.</p><p>MicroPython: <code>Pin</code>, <code>ADC</code>, <code>PWM</code>; <code>value</code>, <code>on/off</code>, <code>read</code>, <code>read_u16</code>, <code>duty/duty_u16</code>, <code>freq</code>; <code>time.ticks_ms</code>, <code>time.ticks_diff</code>, <code>time.sleep/sleep_ms</code>, <code>print</code>. Helpers: <code>abs/min/max/int/float/round/str</code>. On the Raspberry Pi Pico, analogue pins only have <code>read_u16()</code> (use <code>read_u16() &gt;&gt; 4</code> for 0–4095) and PWM only <code>duty_u16()</code>; <code>read()</code> and <code>duty()</code> are ESP32 only.</p><h3>Virtual device readings</h3><p>Light, moisture, rain, tank and potentiometer: 0–4095, or 0–65520 with <code>read_u16()</code>. Temperature is a calibrated Celsius channel; distance is centimetres. These virtual channels replace physical sensor libraries for beginner exercises. <code>digitalWrite</code> values are 0/1. PWM uses 0–255 (<code>analogWrite</code>), 0–1023 (<code>duty</code>) or 0–65535 (<code>duty_u16</code>); <code>servoWrite</code> uses 0–180 degrees.</p><h3>Timing & sandbox limits</h3><p>One tick is 200 ms at 1× speed. A delay suspends the program until the next tick and resumes on the following line; its argument does not schedule a real sleep. Use <code>millis()</code> or <code>time.ticks_ms()</code> for accurate simulated timing. Every tick has a 20,000-operation budget and runs in an isolated worker. Infinite loops produce a useful error.</p><h3>Unsupported features</h3><p>This is a teaching interpreter, not a complete compiler. Arrays, lists, dictionaries, classes, pointers, for loops, comprehensions, external libraries, #include, hardware interrupts, network access, dynamic code, and file access are unsupported. Unsupported syntax stops the program with an error. Motors and pumps use virtual driver modules.</p></div>',
   );
 }
 function help() {
@@ -3127,8 +3386,10 @@ function toggleExplanations() {
 // Activities that start from finished code (the debugging challenge, Spot the bugs and the
 // fault workshop) open only after the student has passed that quest with their own program.
 const solvedOwnCode = (index) => !!currentCompletions()[missionKey(index)];
+// The gate depends only on that quest: being in Free build or another challenge (a dashboard
+// quest needs no solved quest) does not open it.
 function ownCodeFirst(index) {
-  if (free || activeFault || solvedOwnCode(index)) return true;
+  if (solvedOwnCode(index)) return true;
   toast(
     'First write and pass “' +
       activeMissions()[index].title +
@@ -3139,19 +3400,52 @@ function ownCodeFirst(index) {
 // ---- Spot the bugs ------------------------------------------------------------
 const huntState = () => (activeFault?.kind === 'hunt' ? project().hunt : null);
 const huntPhase = () => huntState()?.phase || null;
+// The quest a hunt started now would plant bugs in: a teacher quest while one is open (its hunt
+// and reward are kept under its own id), the hunt's own quest during a hunt, otherwise the current
+// quest. `solved` is the completion record that shows it was passed with the student's own code.
+function huntTarget() {
+  if (free) return null;
+  if (activeFault?.kind === 'hunt') return activeFault.target;
+  if (activeFault?.track === 'custom')
+    return {
+      mission: activeFault.mission,
+      slot: 'custom:' + activeFault.id,
+      solved: 'fault:' + activeFault.id,
+    };
+  const m = activeMissions()[state.mission];
+  return m && { mission: m, slot: missionKey(), solved: missionKey() };
+}
+const huntAvailable = (target = huntTarget()) => !!target && !!currentCompletions()[target.solved];
+// The Spot the bugs buttons: a hunt shows that quest's worked solution once it is checked.
+function tryBugHunt() {
+  const target = huntTarget();
+  if (!target) toast('Choose a quest first: bug hunts use the current mission.');
+  else if (!huntAvailable(target))
+    toast(
+      'First write and pass “' +
+        target.mission.title +
+        '” with your own code. This activity starts from finished code.',
+    );
+  else startBugHunt();
+}
 function startBugHunt(fresh = false) {
   if (fresh && !canEdit('Programmer')) return;
-  if (free) {
+  const target = huntTarget();
+  if (!target) {
     toast('Choose a quest first: bug hunts use the current mission.');
     return;
   }
-  const base = activeFault?.mission ?? activeMissions()[state.mission],
-    id = 'hunt:' + state.board.replace(/\s+/g, '-') + ':' + state.language + ':' + missionKey(),
+  const base = target.mission,
+    id = 'hunt:' + state.board.replace(/\s+/g, '-') + ':' + state.language + ':' + target.slot,
     key = 'fault:' + id,
     profile = locationProfile();
   stop(false);
   let saved = profile.projects[key];
-  if (!saved?.hunt || fresh) {
+  // Hunts started during a teacher quest used to be saved in the quest's own slot: one whose
+  // components are not this quest's is replaced by a new hunt.
+  const sameParts = (devices) =>
+    [...devices.map((d) => d.id)].sort().join() === [...base.ids].sort().join();
+  if (!saved?.hunt || fresh || !sameParts(saved.devices || [])) {
     const devices = defaults(base.ids, state.board).map((d) => ({
         ...d,
         power: true,
@@ -3165,12 +3459,14 @@ function startBugHunt(fresh = false) {
       code: { [state.language]: hunt.code },
       lab: saved?.lab,
       hunt: { seed, bugs: hunt.bugs, flagged: [], phase: 'spot' },
+      board: state.board,
     };
   }
   activeFault = {
     id,
     kind: 'hunt',
-    rewardKey: 'fault:hunt:' + missionKey(),
+    rewardKey: 'fault:hunt:' + target.slot,
+    target,
     mission: base,
     title: 'Spot the bugs · ' + base.title,
     hints: saved.hunt.bugs.map((b) => b.fix),
@@ -3425,7 +3721,7 @@ async function previewImport(bytes, fileName) {
         : '') +
       '<div class="guide"><p>' +
       (occupied
-        ? 'This replaces your current work on this mission. Your version is kept as a backup in the Teacher dashboard.'
+        ? 'This replaces your current work on this mission. Your version is kept as a backup in the Teacher dashboard, where you can restore it.'
         : 'The project opens in its mission slot.') +
       ' Badges and XP are not imported: run the tests here to earn them.</p></div>' +
       '<div class="bench-actions"><button class="outline" id="cancelImport">Cancel</button><button class="primary" id="confirmImport">Open project</button></div>',
@@ -3449,40 +3745,12 @@ const targetProfile = (plan) =>
   plan.locationId === 'legacy' ? state : state.locationProgress[plan.locationId];
 function applyImport(plan) {
   stop(false);
-  state.difficulty = plan.difficulty;
-  $('difficultySelect').value = state.difficulty;
-  // Imported work opens its destination even if it is still locked for this player.
-  if (plan.locationId === 'legacy') {
-    state.legacyMission = plan.missionIndex ?? state.legacyMission;
-    state.legacyBoard = plan.board;
-    resumeLegacy();
-  } else {
-    const profile = (state.locationProgress[plan.locationId] ??= {
-      projects: {},
-      completed: {},
-      mission: 0,
-      board: plan.board,
-      env: { ...baseEnv },
-    });
-    if (plan.missionIndex !== null) profile.mission = plan.missionIndex;
-    profile.board = plan.board;
-    enterLocation(plan.locationId);
-  }
-  free = plan.slot === 'free';
-  $('freeBtn').textContent = free ? '⚑ Back to quests' : '◇ Free build';
-  const projects = locationProfile().projects,
-    key = free ? 'free' : missionKey(),
-    existing = projects[key];
-  if (existing && (existing.devices?.length || Object.keys(existing.code || {}).length))
-    projects[key + '~backup-' + new Date().toISOString().slice(0, 19)] = existing;
-  projects[key] = {
-    devices: plan.devices,
-    code: plan.code,
-    lab: { ...createLabState(), evidence: plan.evidence },
-  };
-  state.board = plan.board;
-  state.language = plan.language;
-  recordEvidence({
+  // Save the current place first: opening a destination saves the current quest into it, which
+  // would otherwise replace the imported project's quest when importing into the same place.
+  save();
+  // The imported project is built completely before anything changes.
+  const lab = { ...createLabState(), evidence: [...plan.evidence] };
+  lab.evidence.push({
     at: new Date().toISOString(),
     type: 'import',
     file: plan.fileName,
@@ -3491,12 +3759,105 @@ function applyImport(plan) {
     mission: plan.missionTitle,
     exportedResults: plan.results,
   });
-  currentPassed = false;
-  testResults = [];
-  renderMission();
-  switchTab('code');
+  trimEvidence(lab);
+  const imported = { devices: plan.devices, code: plan.code, lab, board: plan.board };
+  // If anything still fails, the game goes back to exactly where it was rather than leaving a
+  // quest half replaced by the import.
+  const snapshot = structuredClone(state),
+    before = { free, activeFault };
+  try {
+    state.difficulty = plan.difficulty;
+    $('difficultySelect').value = state.difficulty;
+    const here = state.activeLocation === plan.locationId;
+    // Imported work opens its destination even if it is still locked for this player.
+    if (plan.locationId === 'legacy') {
+      state.legacyMission = plan.missionIndex ?? state.legacyMission;
+      state.legacyBoard = plan.board;
+      if (here) [state.mission, state.board] = [state.legacyMission, plan.board];
+      resumeLegacy();
+    } else {
+      const profile = (state.locationProgress[plan.locationId] ??= {
+        projects: {},
+        completed: {},
+        mission: 0,
+        board: plan.board,
+        env: { ...baseEnv },
+      });
+      if (plan.missionIndex !== null) profile.mission = plan.missionIndex;
+      profile.board = plan.board;
+      if (here) [state.mission, state.board] = [profile.mission, plan.board];
+      enterLocation(plan.locationId);
+    }
+    setFree(plan.slot === 'free');
+    const projects = locationProfile().projects,
+      key = free ? 'free' : missionKey();
+    keepBackup(projects, key);
+    projects[key] = imported;
+    state.board = plan.board;
+    state.language = plan.language;
+    currentPassed = false;
+    testResults = [];
+    renderMission();
+    switchTab('code');
+  } catch (e) {
+    for (const key of Object.keys(state)) delete state[key];
+    Object.assign(state, snapshot);
+    activeFault = before.activeFault;
+    setFree(before.free);
+    currentPassed = false;
+    testResults = [];
+    if (!state.travelScreen) showLocation();
+    modal(
+      'Project not imported',
+      '<div class="guide"><p>' +
+        esc('Something in this project could not be opened, so nothing was changed. ' + e.message) +
+        '</p></div>',
+    );
+    return;
+  }
   save();
   toast('Imported ' + plan.fileName + '. Run the tests to check it here.');
+}
+// Keeps the project in `key` (if it holds any work) as a timestamped backup, and only the newest
+// few backups of that slot (each is a whole project).
+function keepBackup(projects, key) {
+  const existing = projects[key];
+  if (existing && (existing.devices?.length || Object.keys(existing.code || {}).length)) {
+    const stamp = key + '~backup-' + new Date().toISOString().slice(0, 19);
+    // Two backups in the same second (a restore straight after an import) must not collide.
+    let name = stamp;
+    for (let i = 2; projects[name]; i++) name = stamp + '-' + i;
+    projects[name] = existing;
+  }
+  for (const old of Object.keys(projects)
+    .filter((k) => k.startsWith(key + '~backup-'))
+    .sort()
+    .slice(0, -IMPORT_BACKUPS))
+    delete projects[old];
+}
+// Teacher dashboard: put a backup (made by an import or an earlier restore) back in its slot.
+// The current work is backed up first, so a restore can itself be undone.
+function restoreBackup(locationId, backupKey) {
+  const profile = locationId === 'legacy' ? state : state.locationProgress[locationId],
+    backup = profile?.projects?.[backupKey],
+    key = String(backupKey).split('~backup-')[0];
+  if (!backup || !String(backupKey).includes('~backup-')) return false;
+  stop(false);
+  delete profile.projects[backupKey];
+  keepBackup(profile.projects, key);
+  profile.projects[key] = backup;
+  const lab = (backup.lab ??= createLabState());
+  lab.evidence = [
+    ...(Array.isArray(lab.evidence) ? lab.evidence : []),
+    { at: new Date().toISOString(), type: 'restore', from: backupKey },
+  ];
+  trimEvidence(lab);
+  currentPassed = false;
+  testResults = [];
+  if (!state.travelScreen) renderMission();
+  save();
+  toast('Backup restored. The version it replaced is kept as a new backup.');
+  return true;
 }
 
 $('exportBtn').onclick = exportProject;
@@ -3712,7 +4073,9 @@ function pauseExecution() {
   if (!state.debugPaused) {
     labState().debugAttempts = (labState().debugAttempts || 0) + 1;
   }
+  // Nothing to pause when the program could not start (run() explained why).
   if (!worker) run();
+  if (!worker) return;
   state.debugPaused = true;
   labState().paused = true;
   save();
@@ -3732,7 +4095,7 @@ function stepExecution() {
   }
   if (!worker) {
     run();
-    pauseExecution();
+    if (worker) pauseExecution();
     return;
   }
   state.debugPaused = true;
@@ -3769,6 +4132,7 @@ $('advancedTools').onclick = () =>
     refreshDebug: refreshDebugView,
     refresh: renderBench,
     download,
+    restoreBackup,
     applyAssignment: (index, difficulty, scenario) => {
       setDifficulty(difficulty);
       selectMission(index);
@@ -3800,8 +4164,9 @@ function labContext() {
     selectDevice,
     startFault: (id) => ownCodeFirst(0) && startFault(id),
     exitFault,
-    startBugHunt: () => ownCodeFirst(state.mission) && startBugHunt(),
-    huntTitle: free ? null : activeMissions()[state.mission]?.title,
+    startBugHunt: tryBugHunt,
+    // The card shows only while a hunt applies (its quest passed with the student's own code).
+    huntTitle: huntAvailable() ? huntTarget().mission.title : null,
     test: testSolution,
     save,
     modal,
@@ -3856,6 +4221,7 @@ function startFault(id) {
       // Teacher quests are full quests: students install and wire the components themselves.
       devices: activeFault.track === 'custom' ? [] : devices,
       code: { cpp: make('cpp'), python: make('python') },
+      board: state.board,
     };
   } else if (!profile.projects[key]) {
     const devices = defaults(missions[0].ids, state.board),
@@ -3869,7 +4235,7 @@ function startFault(id) {
     if (id === 'code')
       for (const lang of ['cpp', 'python'])
         source[lang] = source[lang].replace('light < 1800', 'light > 1800');
-    profile.projects[key] = { devices, code: source };
+    profile.projects[key] = { devices, code: source, board: state.board };
   }
   currentPassed = false;
   testResults = [];
@@ -4051,8 +4417,6 @@ function showLocation() {
   const location = currentLocation();
   world3d?.setRegion(state.activeLocation);
   setCommunityDensity();
-  // The minimap matches mirrored homes.
-  $('minimap')?.classList.toggle('mirrored', !!world3d?.model.mirrored);
   for (let i = 0; i < areas.length; i++) {
     const base = baseAreas[i],
       override = world3d?.model.areaOverrides?.[base[0]] || location?.areaOverrides?.[base[0]];
@@ -4094,7 +4458,7 @@ async function enterLocation(id, weather = null) {
   stop(false);
   weatherRevision++;
   weatherLoading = false;
-  free = false;
+  setFree(false);
   activeFault = null;
   sensorOverrides = {};
   state.activeLocation = id;
@@ -4124,7 +4488,7 @@ async function enterLocation(id, weather = null) {
 function resumeLegacy() {
   save();
   stop(false);
-  free = false;
+  setFree(false);
   activeFault = null;
   state.activeLocation = 'legacy';
   state.mission = state.legacyMission || 0;
@@ -4233,6 +4597,9 @@ function projectWorldLabels(engine) {
         visible: v.visible,
         priority,
         movable: el.id === 'player' && !!engine.indoorArea,
+        // Community building (and crossing) buttons stay reachable by keyboard even when there
+        // is no room to show them.
+        essential: !!el.classList?.contains('community-building-target'),
       });
   };
   for (const el of document.querySelectorAll('[data-area]')) {
@@ -4324,7 +4691,12 @@ function projectWorldLabels(engine) {
     );
     communityTargets.querySelectorAll('[data-community-building]').forEach((button) => {
       const b = sim.map.buildings.find((b) => b.type === button.dataset.communityBuilding);
-      place(button, [engine.model.community.origin.x + b.x, b.type === 'factory' ? 8 : 5, b.z], 2);
+      // Placed before resident tags (2) so the buttons get first choice of the free space.
+      place(
+        button,
+        [engine.model.community.origin.x + b.x, b.type === 'factory' ? 8 : 5, b.z],
+        1.5,
+      );
     });
   }
   const { rect, blocked } = worldControlBoxes(engine);
@@ -4360,6 +4732,7 @@ if (typeof $('worldCanvas')?.getContext === 'function') {
         devices: project().devices,
         env: state.env,
         outputs,
+        outputScales,
         player: state.player,
         color: state.color,
         appearance: state.appearance,
@@ -4447,11 +4820,10 @@ if (navigator.modelContext?.registerTool) {
   });
 }
 
-// A click in the overview only visits the building while a free build, teacher quest or program
-// is under way; otherwise it starts that building's quest.
+// A click in the overview follows the same rule as the area markers (keepCurrentProject).
 function selectCommunityBuilding(type) {
   enterArea(type === 'home' ? 'Living room' : communityAreaNames[type], {
-    keepProject: free || !!activeFault || running,
+    keepProject: keepCurrentProject(),
   });
 }
 function openWorldCommunityProgramming() {

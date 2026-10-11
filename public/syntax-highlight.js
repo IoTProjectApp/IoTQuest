@@ -9,7 +9,7 @@ const vocabulary = {
     ),
     constant: words('true false'),
     builtin: words(
-      'pinMode digitalWrite digitalRead analogRead analogWrite ledcWrite servoWrite millis delay Serial begin print println abs min max mqttConnect mqttPublish mqttSubscribe mqttRead mqttConnected mqttReconnect',
+      'pinMode digitalWrite digitalRead analogRead analogWrite ledcWrite servoWrite millis delay Serial begin print println abs min max map constrain mqttConnect mqttPublish mqttSubscribe mqttRead mqttConnected mqttReconnect',
     ),
   },
   python: {
@@ -19,7 +19,7 @@ const vocabulary = {
     type: words(''),
     constant: words('True False None'),
     builtin: words(
-      'machine time Pin ADC PWM sleep sleep_ms ticks_ms print int abs min max value on off read read_u16 duty duty_u16 freq iotquest mqttConnect mqttPublish mqttSubscribe mqttRead mqttConnected mqttReconnect',
+      'machine time Pin ADC PWM sleep sleep_ms ticks_ms ticks_diff print int float str round abs min max value on off read read_u16 duty duty_u16 freq iotquest mqttConnect mqttPublish mqttSubscribe mqttRead mqttConnected mqttReconnect',
     ),
   },
 };

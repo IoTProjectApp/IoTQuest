@@ -1,4 +1,5 @@
 // Column-major WebGL matrices. Pure functions shared by the renderer and tests.
+import { outputLevel } from './signals.js';
 export const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
 export function multiply(a, b) {
   const r = new Float32Array(16);
@@ -47,32 +48,112 @@ export function lookAt(eye, target) {
     1,
   ]);
 }
-export function modelMatrix(pos, size = [1, 1, 1], rotation = [0, 0, 0]) {
+// `out` (16 floats) is reused when given, so the renderer does not allocate per object per frame.
+export function modelMatrix(
+  pos,
+  size = [1, 1, 1],
+  rotation = [0, 0, 0],
+  out = new Float32Array(16),
+) {
   const [rx, ry, rz] = rotation,
     cx = Math.cos(rx),
     sx = Math.sin(rx),
     cy = Math.cos(ry),
     sy = Math.sin(ry),
     cz = Math.cos(rz),
-    sz = Math.sin(rz);
-  const r = new Float32Array([
-    cy * cz,
-    cy * sz,
-    -sy,
-    0,
-    sx * sy * cz - cx * sz,
-    sx * sy * sz + cx * cz,
-    sx * cy,
-    0,
-    cx * sy * cz + sx * sz,
-    cx * sy * sz - sx * cz,
-    cx * cy,
-    0,
-    ...pos,
-    1,
+    sz = Math.sin(rz),
+    [w, h, d] = size;
+  out[0] = cy * cz * w;
+  out[1] = cy * sz * w;
+  out[2] = -sy * w;
+  out[3] = 0;
+  out[4] = (sx * sy * cz - cx * sz) * h;
+  out[5] = (sx * sy * sz + cx * cz) * h;
+  out[6] = sx * cy * h;
+  out[7] = 0;
+  out[8] = (cx * sy * cz + sx * sz) * d;
+  out[9] = (cx * sy * sz - sx * cz) * d;
+  out[10] = cx * cy * d;
+  out[11] = 0;
+  out[12] = pos[0];
+  out[13] = pos[1];
+  out[14] = pos[2];
+  out[15] = 1;
+  return out;
+}
+// Inverse of a 4×4 matrix (cofactor expansion), or null when it is singular.
+export function invert(m) {
+  const [a00, a01, a02, a03, a10, a11, a12, a13, a20, a21, a22, a23, a30, a31, a32, a33] = m,
+    b00 = a00 * a11 - a01 * a10,
+    b01 = a00 * a12 - a02 * a10,
+    b02 = a00 * a13 - a03 * a10,
+    b03 = a01 * a12 - a02 * a11,
+    b04 = a01 * a13 - a03 * a11,
+    b05 = a02 * a13 - a03 * a12,
+    b06 = a20 * a31 - a21 * a30,
+    b07 = a20 * a32 - a22 * a30,
+    b08 = a20 * a33 - a23 * a30,
+    b09 = a21 * a32 - a22 * a31,
+    b10 = a21 * a33 - a23 * a31,
+    b11 = a22 * a33 - a23 * a32,
+    det = b00 * b11 - b01 * b10 + b02 * b09 + b03 * b08 - b04 * b07 + b05 * b06;
+  if (!det) return null;
+  const k = 1 / det;
+  return new Float64Array([
+    (a11 * b11 - a12 * b10 + a13 * b09) * k,
+    (a02 * b10 - a01 * b11 - a03 * b09) * k,
+    (a31 * b05 - a32 * b04 + a33 * b03) * k,
+    (a22 * b04 - a21 * b05 - a23 * b03) * k,
+    (a12 * b08 - a10 * b11 - a13 * b07) * k,
+    (a00 * b11 - a02 * b08 + a03 * b07) * k,
+    (a32 * b02 - a30 * b05 - a33 * b01) * k,
+    (a20 * b05 - a22 * b02 + a23 * b01) * k,
+    (a10 * b10 - a11 * b08 + a13 * b06) * k,
+    (a01 * b08 - a00 * b10 - a03 * b06) * k,
+    (a30 * b04 - a31 * b02 + a33 * b00) * k,
+    (a21 * b02 - a20 * b04 - a23 * b00) * k,
+    (a11 * b07 - a10 * b09 - a12 * b06) * k,
+    (a00 * b09 - a01 * b07 + a02 * b06) * k,
+    (a31 * b01 - a30 * b03 - a32 * b00) * k,
+    (a20 * b03 - a21 * b01 + a22 * b00) * k,
   ]);
-  for (let c = 0; c < 3; c++) for (let row = 0; row < 3; row++) r[c * 4 + row] *= size[c];
-  return r;
+}
+// The world-space ray under a screen point (CSS pixels): from the near plane towards the far plane
+// through the inverse view-projection. Returns { origin, dir } or null.
+export function screenRay(matrix, x, y, width, height) {
+  const inverse = invert(matrix);
+  if (!inverse) return null;
+  const nx = (x / width) * 2 - 1,
+    ny = 1 - (y / height) * 2,
+    unproject = (z) => {
+      const r = [0, 0, 0, 0];
+      for (let i = 0; i < 4; i++)
+        r[i] = inverse[i] * nx + inverse[4 + i] * ny + inverse[8 + i] * z + inverse[12 + i];
+      return [r[0] / r[3], r[1] / r[3], r[2] / r[3]];
+    },
+    near = unproject(-1),
+    far = unproject(1);
+  return { origin: near, dir: far.map((v, i) => v - near[i]) };
+}
+// Distance along the ray (in units of `dir`) to where it enters an axis-aligned box given by its
+// min and max corners, by the slab method; Infinity when it misses or the box is behind the ray.
+export function rayBox({ origin, dir }, min, max) {
+  let near = -Infinity,
+    far = Infinity;
+  for (let i = 0; i < 3; i++) {
+    if (Math.abs(dir[i]) < 1e-12) {
+      if (origin[i] < min[i] || origin[i] > max[i]) return Infinity;
+      continue;
+    }
+    let t0 = (min[i] - origin[i]) / dir[i],
+      t1 = (max[i] - origin[i]) / dir[i];
+    if (t0 > t1) [t0, t1] = [t1, t0];
+    near = Math.max(near, t0);
+    far = Math.min(far, t1);
+    if (near > far) return Infinity;
+  }
+  if (far < 0) return Infinity;
+  return Math.max(0, near);
 }
 export function projectPoint(matrix, p, width, height) {
   const v = [...p, 1],
@@ -123,6 +204,8 @@ export function resolveMove(
     dz = Math.cos(yaw) * f - Math.sin(yaw) * r;
   let nx = clamp(x + dx, bounds.minX, bounds.maxX),
     nz = clamp(z + dz, bounds.minZ, bounds.maxZ);
+  // Someone already inside an obstacle (an upgrade installed where they stand) can walk out.
+  if (collides(x, z, colliders)) return fromWorld(nx, nz);
   if (collides(nx, z, colliders)) nx = x;
   if (collides(nx, nz, colliders)) nz = z;
   return fromWorld(nx, nz);
@@ -161,6 +244,9 @@ export const DEVICE_GAP = 1;
 const DEVICE_RADIUS = 0.3,
   ROOM_HALF = [4.58 / 2, 4.8 / 2],
   WALL_MARGIN = 0.25;
+// Half the floor size of a home room: the standard bay, or a regional layout's own [w, d] size
+// (rooms are [name, x, z, colour, size?]).
+export const roomHalf = (room) => (room[4] ? [room[4][0] / 2, room[4][1] / 2] : ROOM_HALF);
 // The floor a student can stand on at a community workstation (rooms are [name, x, z, ...]).
 export function communityRoomBounds(room) {
   return { minX: room[1] - 2.29, maxX: room[1] + 2.29, minZ: room[2] - 2.4, maxZ: room[2] + 2.4 };
@@ -180,14 +266,15 @@ export function deviceSpots(devices, areas, colliders = [], rooms = []) {
     const [cx, , cz] = toWorld(findFree({ x: a[1], y: a[2] }, colliders, roomBounds)),
       [lx, , lz] = toWorld(findFree({ x: a[1], y: a[2] + 5 }, colliders, roomBounds)),
       room = rooms.find(
-        ([, rx, rz]) => Math.abs(cx - rx) <= ROOM_HALF[0] && Math.abs(cz - rz) <= ROOM_HALF[1],
+        (r) => Math.abs(cx - r[1]) <= roomHalf(r)[0] && Math.abs(cz - r[2]) <= roomHalf(r)[1],
       ),
+      [hw, hd] = room ? roomHalf(room) : [0, 0],
       [x0, x1, z0, z1] = room
         ? [
-            room[1] - ROOM_HALF[0] + WALL_MARGIN,
-            room[1] + ROOM_HALF[0] - WALL_MARGIN,
-            room[2] - ROOM_HALF[1] + WALL_MARGIN,
-            room[2] + ROOM_HALF[1] - WALL_MARGIN,
+            room[1] - hw + WALL_MARGIN,
+            room[1] + hw - WALL_MARGIN,
+            room[2] - hd + WALL_MARGIN,
+            room[2] + hd - WALL_MARGIN,
           ]
         : [cx - 2.5, cx + 2.5, cz - 2.5, cz + 2.5],
       points = [];
@@ -230,14 +317,22 @@ export function deviceSpots(devices, areas, colliders = [], rooms = []) {
   }
   return spots;
 }
-export function deviceState(device, outputs, env) {
+// `scales` is the full scale of each output's last write (Runtime#outputScales), so a lamp driven
+// by duty(512) glows at half brightness exactly as the 2D view shows it.
+export function deviceState(device, outputs, env, scales = {}) {
   const raw = Number(outputs[device.pin] || 0),
     on = raw > 0;
   return {
     raw,
     on,
-    brightness: raw === 1 ? 1 : clamp(raw / (raw > 255 ? 65535 : 255), 0, 1),
-    angle: device.id === 'gate' ? (on ? Math.PI / 2 : 0) : (clamp(raw, 0, 180) * Math.PI) / 180,
+    brightness: outputLevel(raw, scales?.[device.pin]),
+    // Servos: 0–180° from servoWrite, or digital HIGH as fully turned (weather.js servoLevel).
+    angle:
+      device.id === 'gate'
+        ? on
+          ? Math.PI / 2
+          : 0
+        : outputLevel(raw, scales?.[device.pin] ?? (raw === 1 ? 1 : 180)) * Math.PI,
     flow: ['pump', 'valve'].includes(device.id) && on && env.tank > 0,
     water: clamp(env.tank / 100, 0, 1),
     plant: env.soil < 30 ? 'dry' : env.soil > 85 ? 'wet' : 'healthy',

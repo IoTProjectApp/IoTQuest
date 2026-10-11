@@ -446,6 +446,97 @@ test('pages on the earlier offline code move to a new deploy on their next visit
   }
 });
 
+// GitHub Pages serves the dev branch at /dev/ beside the main site, on the same address. Each copy
+// keeps its own offline files and saved progress, and the test copy says so on screen.
+test('the test copy at /dev/ runs beside the main site without touching it', async () => {
+  const { mkdtemp, cp, readFile } = await import('node:fs/promises');
+  const { tmpdir } = await import('node:os');
+  const { join, extname } = await import('node:path');
+  const http = await import('node:http');
+  const root = await mkdtemp(join(tmpdir(), 'iotquest-channels-'));
+  execFileSync(process.execPath, ['scripts/build.mjs', '--channel=dev']);
+  await cp('dist/client', join(root, 'dev'), { recursive: true });
+  execFileSync(process.execPath, ['scripts/build.mjs']);
+  await cp('dist/client', root, { recursive: true });
+  const server = http.createServer(async (req, res) => {
+    let path = decodeURIComponent(new URL(req.url, 'http://x').pathname);
+    if (path.endsWith('/')) path += 'index.html';
+    try {
+      const body = await readFile(join(root, path));
+      res.writeHead(200, {
+        'Content-Type':
+          { '.js': 'text/javascript', '.html': 'text/html', '.css': 'text/css' }[extname(path)] ||
+          'application/octet-stream',
+      });
+      res.end(body);
+    } catch {
+      res.writeHead(404).end();
+    }
+  });
+  await new Promise((r) => server.listen(0, '127.0.0.1', r));
+  const url = 'http://127.0.0.1:' + server.address().port + '/';
+  const context = await browser.newContext();
+  try {
+    await context.route(/^https?:\/\/(?!127\.0\.0\.1)/, (route) => route.abort());
+    const page = await context.newPage();
+    await page.goto(url);
+    await page.evaluate(() => navigator.serviceWorker.ready);
+    await page.evaluate(() => localStorage.setItem('iotquest-v1', JSON.stringify({ xp: 77 })));
+    await page.addInitScript(() => {
+      globalThis.firstController = navigator.serviceWorker.controller?.scriptURL;
+    });
+    await page.goto(url + 'dev/');
+    // The main site's worker controls this first visit until the test copy's own takes over;
+    // that hand-over is not an update, so no "updated in another tab" bar appears.
+    assert.equal(await page.evaluate(() => globalThis.firstController), url + 'sw.js');
+    await page.waitForFunction(
+      (own) => navigator.serviceWorker.controller?.scriptURL === own,
+      url + 'dev/sw.js',
+    );
+    await page.waitForTimeout(500);
+    assert.equal(await page.locator('#updateBar').count(), 0, 'no update bar');
+    await page.goto(url + 'dev/');
+    assert.match(await page.title(), /^Test version/);
+    // An installed test copy is a separate app that looks different from the main site.
+    const manifests = await page.evaluate(async (url) => {
+      const get = (u) => fetch(u).then((r) => r.json());
+      return {
+        dev: await get(url + 'dev/manifest.webmanifest'),
+        main: await get(url + 'manifest.webmanifest'),
+      };
+    }, url);
+    assert.equal(manifests.dev.id, './?channel=dev');
+    assert.equal(manifests.dev.theme_color, '#b45309');
+    assert.equal(manifests.main.id, undefined, "the main site's manifest is unchanged");
+    assert.equal(manifests.main.theme_color, '#5260df');
+    assert.equal(await page.getAttribute('meta[name=theme-color]', 'content'), '#b45309');
+    assert.equal(
+      await page.evaluate(() => getComputedStyle(document.body, '::after').content),
+      '"Test version"',
+    );
+    const state = await page.evaluate(async () => ({
+      scopes: (await navigator.serviceWorker.getRegistrations()).map((r) => r.scope).sort(),
+      caches: (await caches.keys()).sort(),
+    }));
+    assert.deepEqual(state.scopes, [url, url + 'dev/']);
+    assert.equal(state.caches.filter((k) => k.startsWith('iotquest-')).length, 1);
+    assert.equal(state.caches.filter((k) => k.startsWith('iotquest.dev-')).length, 1);
+    // The main site is unchanged and still has its offline copy after the test copy installed.
+    await page.goto(url);
+    assert.doesNotMatch(await page.title(), /Test version/);
+    assert.deepEqual(
+      await page.evaluate(async () => ({
+        saved: JSON.parse(localStorage.getItem('iotquest-v1')).xp,
+        caches: (await caches.keys()).filter((k) => k.startsWith('iotquest-')).length,
+      })),
+      { saved: 77, caches: 1 },
+    );
+  } finally {
+    await context.close();
+    server.close();
+  }
+});
+
 test('every new building label opens its project and the technician remains visible', async () => {
   const { page, errors } = await openHome();
   for (const [type, area] of Object.entries({

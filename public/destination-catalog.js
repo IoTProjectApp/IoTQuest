@@ -485,8 +485,10 @@ export const extraLocations = rows.map((r, index) => {
     description:
       architecture +
       ' in ' +
+      city +
+      ' (' +
       region +
-      '. This playable study uses ' +
+      '). The game version has ' +
       (style === 'round'
         ? 'a circular earthen enclosure and conical thatch form'
         : style === 'compound'

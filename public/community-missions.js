@@ -21,7 +21,7 @@ export const communityMissions = {
   ],
   shop: [
     'Automatic door & refrigeration',
-    'Presence GPIO 20 opens the door GPIO 2. Monitor calibrated refrigeration temperature GPIO 21 and use warning GPIO 4 above 28°C.',
+    'Presence GPIO 20 opens the door GPIO 2. Monitor calibrated refrigeration temperature GPIO 21 and use warning GPIO 4 above 8°C.',
     'presence',
     20,
     '>',
@@ -48,7 +48,7 @@ export const communityMissions = {
   ],
   factory: [
     'Temperature & vibration interlock',
-    'Run conveyor GPIO 7 only below 28°C and vibration GPIO 22 below 80. The moving belt and monitoring display respond to your program.',
+    'Run conveyor GPIO 7 only below 28°C and vibration GPIO 22 below 80. The belt and the monitoring display follow your program.',
     'temperature',
     21,
     '<',
@@ -57,7 +57,7 @@ export const communityMissions = {
   ],
   parking: [
     'Space detection & barrier',
-    'Spaces GPIO 26 opens entry barrier GPIO 6 when a space is available. Occupancy display uses the same detector.',
+    'Spaces GPIO 26 opens entry barrier GPIO 6 when a space is available. The occupancy display uses the same detector.',
     'spaces',
     26,
     '>',

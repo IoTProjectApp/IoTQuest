@@ -4,9 +4,13 @@
 // newest version from the server.
 export async function freshStart() {
   try {
+    // Only this site's copy: the test copy at /dev/ and the main site share an address.
+    const scope = new URL('./', location.href).href,
+      channel = globalThis.IOTQUEST_CHANNEL || '',
+      prefix = channel ? 'iotquest.' + channel + '-' : 'iotquest-';
     for (const r of (await navigator.serviceWorker?.getRegistrations?.()) || [])
-      await r.unregister();
-    for (const k of await caches.keys()) if (k.startsWith('iotquest-')) await caches.delete(k);
+      if (r.scope === scope) await r.unregister();
+    for (const k of await caches.keys()) if (k.startsWith(prefix)) await caches.delete(k);
   } catch {}
   const url = new URL(location.href);
   url.searchParams.delete('fresh');
@@ -21,7 +25,11 @@ let switching = false;
 if ('serviceWorker' in navigator) {
   // The version this page started with. If another tab switches to a new version, this page is
   // still running the old code, so it offers a reload rather than carrying on mixed.
-  const hadController = !!navigator.serviceWorker.controller;
+  // Only this site's own service worker counts: on a first visit to the test copy at /dev/, the
+  // main site's worker (whose scope covers /dev/) controls the page until /dev/'s own takes over,
+  // and that hand-over is not an update.
+  const ownWorker = new URL('./sw.js', location.href).href,
+    hadController = navigator.serviceWorker.controller?.scriptURL === ownWorker;
   navigator.serviceWorker.addEventListener('controllerchange', () => {
     if (switching) location.reload();
     else if (hadController)
@@ -30,7 +38,13 @@ if ('serviceWorker' in navigator) {
   navigator.serviceWorker
     .register('./sw.js', { updateViaCache: 'none' })
     .then((registration) => {
-      const ready = () => registration.waiting && navigator.serviceWorker.controller;
+      // A new version waits behind the one this page runs on. A first install also passes through
+      // "waiting" for a moment (with no active version yet), which is not an update, even when the
+      // main site's worker controls a first visit to /dev/.
+      const ready = () =>
+        registration.waiting &&
+        registration.active &&
+        navigator.serviceWorker.controller?.scriptURL === ownWorker;
       const offer = () =>
         ready() &&
         showBar('A new version of IoT Quest is ready.', () => {

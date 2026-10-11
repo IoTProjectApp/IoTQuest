@@ -82,6 +82,8 @@ function questRecord(profile, location, index, difficulty, state, custom = null)
         : location.city + ' · ' + location.country,
     difficulty: legacy ? 'original' : difficulty,
     index,
+    // Teacher quests sit at different positions in each student's list; their id matches them.
+    ...(custom && { questId: String(m.id) }),
     title: m.title,
     status,
     attempts,
@@ -186,6 +188,7 @@ export function parseProgressReport(source) {
       ? q.difficulty
       : 'original',
     index: Math.min(count(q.index), 99),
+    ...(text(q.questId) && { questId: text(q.questId) }),
     title: text(q.title) || 'Quest ' + (Math.min(count(q.index), 99) + 1),
     status: ['passed', 'started', 'not-started'].includes(q.status) ? q.status : 'not-started',
     attempts: count(q.attempts),
@@ -256,15 +259,33 @@ export const needsReview = (q) =>
   q.understandAnswered >= q.understandTotal &&
   q.understood * 2 < q.understandTotal;
 
+// Numbers the quests the same way for the grid and the CSV. Built-in quests keep their quest
+// number; teacher quests (which each student may have imported in a different order) are numbered
+// by quest id, in the order they first appear going through the students alphabetically, so the
+// same quest has the same number for every student. Returns the 0-based number of a quest.
+function questNumbers() {
+  const teacher = new Map();
+  return (q) => {
+    if (q.location !== 'teacher') return q.index;
+    if (!teacher.has(q.difficulty)) teacher.set(q.difficulty, new Map());
+    const ids = teacher.get(q.difficulty),
+      id = q.questId || q.title;
+    if (!ids.has(id)) ids.set(id, ids.size);
+    return ids.get(id);
+  };
+}
+
 // The class grid for one destination and level: quest columns and one row per student.
 export function classGrid(reports, viewId) {
   const columns = [],
+    column = questNumbers(),
     rows = latestReports(reports).map((r) => {
       const cells = [];
       for (const q of r.quests)
         if (q.location + '|' + q.difficulty === viewId) {
-          cells[q.index] = q;
-          columns[q.index] ??= q.title;
+          const at = column(q);
+          cells[at] = q;
+          columns[at] ??= q.title;
         }
       return { student: r.student, classCode: r.classCode, createdAt: r.createdAt, cells };
     });
@@ -311,7 +332,8 @@ export function progressCSV(reports) {
     'Language',
     'Report date',
   ];
-  const lines = [header.map(csvCell).join(',')];
+  const lines = [header.map(csvCell).join(',')],
+    number = questNumbers();
   for (const r of latestReports(reports))
     for (const q of r.quests)
       lines.push(
@@ -320,7 +342,7 @@ export function progressCSV(reports) {
           r.classCode,
           q.locationName,
           q.difficulty,
-          q.index + 1,
+          number(q) + 1,
           q.title,
           q.status,
           q.attempts,
@@ -339,5 +361,6 @@ export function progressCSV(reports) {
           .map(csvCell)
           .join(','),
       );
-  return lines.join('\r\n') + '\r\n';
+  // The byte order mark tells Excel the file is UTF-8, so names in any script open correctly.
+  return '\ufeff' + lines.join('\r\n') + '\r\n';
 }

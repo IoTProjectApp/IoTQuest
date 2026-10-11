@@ -7,13 +7,13 @@ export const sectionQuests = [
     resident: 'Nina',
     role: 'Bedroom resident',
     quote: 'Could my bedside light glow when the room becomes dark, and switch off in daylight?',
-    goal: 'Turn the RGB light on below light reading 1500. Switch it off at 1500 or above.',
+    goal: 'Turn the RGB light on when the light reading is below 1500. Switch it off at 1500 or above.',
     ids: ['ldr', 'rgb'],
     conditions: ['light < 1500'],
     xp: 140,
     badge: 'Restful nights',
     learn: ['Analogue input', 'Thresholds', 'Bedroom lighting'],
-    hint: 'Compare light < 1500 and give the light an OFF path.',
+    hint: 'Compare light < 1500, and add an else branch that turns the light off.',
     scenarios: [
       ['Dark bedroom', { light: 10 }, [1]],
       ['Bright bedroom', { light: 80 }, [0]],
@@ -29,7 +29,7 @@ export const sectionQuests = [
     role: 'Bathroom resident',
     quote:
       'The bathroom gets damp after a shower. Can the extractor fan clear the air and stop once it dries?',
-    goal: 'Run the fan above humidity 65%. Stop at 65% or below.',
+    goal: 'Run the fan when humidity is above 65%. Stop at 65% or below.',
     ids: ['humidity', 'fan'],
     conditions: ['humidity > 65'],
     xp: 150,
@@ -72,7 +72,7 @@ export const sectionQuests = [
     resident: 'Theo',
     role: 'Utility caretaker',
     quote:
-      'Please alert me if this service door opens while the safety switch is armed. Keep quiet while I am servicing it.',
+      'Please warn me if this service door opens while the safety switch is armed. It should stay quiet while I’m working on it.',
     goal: 'Switch the buzzer on only when the door is open AND the safety switch is armed.',
     ids: ['door', 'button', 'buzzer'],
     conditions: ['door == 1 && armed == 1'],

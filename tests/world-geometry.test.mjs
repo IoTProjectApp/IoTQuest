@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { geometry, roundedObject } from '../public/world-geometry.js';
+import { geometry, roundedObject, LOW_DETAIL_SHAPES } from '../public/world-geometry.js';
 
 test('smooth meshes stay within their unit bounds and have valid outward triangles', () => {
   for (const shape of [
@@ -53,4 +53,14 @@ test('rounded objects preserve architecture, thin surfaces and explicit override
   assert.equal(roundedObject({ ...furniture, rounded: false }), false);
   assert.equal(roundedObject({ ...furniture, size: [1, 0.1, 1], rounded: true }), true);
   assert.equal(roundedObject({ ...furniture, shape: 'sphere' }), false);
+});
+
+test('far-away shapes, rings included, have a much simpler low-detail version', () => {
+  assert.ok(LOW_DETAIL_SHAPES.includes('torus'));
+  for (const shape of LOW_DETAIL_SHAPES) {
+    const full = geometry(shape).count,
+      low = geometry(shape, { low: true });
+    assert.ok(low.count * 3 <= full, `${shape}: ${low.count} of ${full} vertices`);
+    assert.ok([...low.positions].every((x) => Number.isFinite(x) && Math.abs(x) <= 0.500001));
+  }
 });

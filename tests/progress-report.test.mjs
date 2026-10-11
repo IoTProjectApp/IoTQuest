@@ -182,6 +182,8 @@ test('the CSV has a row per student and quest and cannot run spreadsheet formula
   );
   const csv = progressCSV([report]),
     lines = csv.trim().split('\r\n');
+  // A byte order mark first, so Excel reads the file as UTF-8 (trim() removes it from lines).
+  assert.ok(csv.startsWith('\ufeff"Student",'));
   assert.match(lines[0], /^"Student","Class","Destination"/);
   assert.equal(lines.length, 1 + report.quests.length);
   assert.match(
@@ -261,4 +263,101 @@ test('resident chats are counted per quest and reach the report and the CSV', ()
   assert.equal(report.quests[0].chats, 2);
   assert.equal(report.quests[1].chats, 0);
   assert.match(progressCSV([report]).split('\r\n')[0], /"Hints used","Resident chats"/);
+});
+
+test('teacher quests line up by quest, whatever order each student imported them in', () => {
+  const report = (student, quests) =>
+    parseProgressReport(
+      JSON.stringify({
+        ...buildProgressReport({ name: student, language: 'cpp' }, { student }),
+        quests: quests.map(([questId, title, status], index) => ({
+          location: 'teacher',
+          difficulty: 'original',
+          index,
+          questId,
+          title,
+          status,
+        })),
+      }),
+    );
+  const grid = classGrid(
+    [
+      report('Ann', [
+        ['fan', 'Fan when hot', 'started'],
+        ['lamp', 'Lamp at dusk', 'started'],
+      ]),
+      report('Ben', [['lamp', 'Lamp at dusk', 'passed']]),
+    ],
+    'teacher|original',
+  );
+  assert.deepEqual(
+    grid.quests.map((q) => [q.title, q.passed]),
+    [
+      ['Fan when hot', 0],
+      ['Lamp at dusk', 1],
+    ],
+  );
+  const ben = grid.rows.find((r) => r.student === 'Ben');
+  assert.equal(ben.cells[0], undefined, 'Ben has no Fan result');
+  assert.equal(ben.cells[1].status, 'passed');
+});
+
+test('the CSV numbers each teacher quest the same for every student, as the grid does', () => {
+  const report = (student, quests) =>
+    parseProgressReport(
+      JSON.stringify({
+        ...buildProgressReport({ name: student, language: 'cpp' }, { student, classCode: '7A' }),
+        quests: quests.map(([questId, title]) => ({
+          location: 'teacher',
+          locationName: 'Teacher quests',
+          difficulty: 'original',
+          index: 0,
+          questId,
+          title,
+          status: 'started',
+        })),
+      }),
+    );
+  // Each student imported the two quests in a different order.
+  const reports = [
+      report('Ann', [
+        ['night', 'Night light'],
+        ['hot', 'Hot room'],
+      ]),
+      report('Bo', [
+        ['hot', 'Hot room'],
+        ['night', 'Night light'],
+      ]),
+    ].map((r) => ({ ...r, quests: r.quests.map((q, index) => ({ ...q, index })) })),
+    grid = classGrid(reports, 'teacher|original'),
+    numbers = {};
+  for (const line of progressCSV(reports).trim().split('\r\n').slice(1)) {
+    const [student, , , , number, title] = line.split(',').map((c) => c.replace(/"/g, ''));
+    numbers[student + ' ' + title] = Number(number);
+  }
+  assert.deepEqual(numbers, {
+    'Ann Night light': 1,
+    'Ann Hot room': 2,
+    'Bo Hot room': 2,
+    'Bo Night light': 1,
+  });
+  assert.deepEqual(
+    grid.quests.map((q) => q.index + 1 + ' ' + q.title),
+    ['1 Night light', '2 Hot room'],
+  );
+});
+
+test('built-in quests keep their own quest numbers in the CSV', () => {
+  const report = parseProgressReport(
+    JSON.stringify(buildProgressReport(savedGame(), { student: 'Cy', classCode: '7A' })),
+  );
+  const numbers = progressCSV([report])
+    .trim()
+    .split('\r\n')
+    .slice(1)
+    .map((line) => Number(line.split(',')[4].replace(/"/g, '')));
+  assert.deepEqual(
+    numbers,
+    report.quests.map((q) => q.index + 1),
+  );
 });

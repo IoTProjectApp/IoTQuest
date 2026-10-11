@@ -5,7 +5,7 @@ import {
   prepareWorldMaterials,
   worldSunlight,
 } from './world-materials.js';
-import { addCommunityWorld, updateCommunityWorld } from './community-world.js';
+import { addCommunityWorld, updateCommunityWorld, STREET_LIGHT_LEVEL } from './community-world.js';
 import { updateLandscape } from './landscape.js';
 import { addDeviceDetails } from './device-objects.js';
 import { locationById } from './locations.js';
@@ -87,6 +87,7 @@ uniform float uHaze;
 uniform float uFogOffset;
 uniform vec3 uLights[8];
 uniform vec3 uLightColor[8];
+uniform float uLightRange[8];
 uniform float uCelestial;
 uniform vec3 uSkySun;
 ${MATERIAL_GLSL}
@@ -154,7 +155,7 @@ void main() {
   lit = mix(lit, reflection, reflStrength);
   for (int i=0;i<8;i++) {
     float d=distance(vWorld,uLights[i]);
-    float fall=max(0.0,1.0-d/5.5);
+    float fall=max(0.0,1.0-d/uLightRange[i]);
     lit+=base*uLightColor[i]*fall*fall*2.3;
     vec3 h=normalize(normalize(uLights[i]-vWorld)+viewDir);
     lit+=uLightColor[i]*pow(max(0.0,dot(n,h)),48.0)*fall*fall*(wet+water*0.5+glass*0.4)*0.28;
@@ -382,6 +383,7 @@ export class World3D {
       'uFogOffset',
       'uLights[0]',
       'uLightColor[0]',
+      'uLightRange[0]',
       'uCelestial',
       'uSkySun',
     ])
@@ -720,6 +722,7 @@ export class World3D {
     prepareWorldMaterials(this.model);
     this.communityView = false;
     this.streetLights = null;
+    this.streetLightPools = null;
     this.deviceSignature = '';
     this.deviceObjects = [];
     this.lastPlayer = null;
@@ -1171,8 +1174,12 @@ export class World3D {
       });
     }
     // Street lights come on after dusk.
+    // The same light level as the town's street lamps (community-world.js).
     this.streetLights ??= this.model.objects.filter((o) => o.streetLight);
-    for (const light of this.streetLights) light.emission = daylight < 0.4 ? 1 : 0;
+    this.streetLightPools ??= this.model.objects.filter((o) => o.streetLightPool && !o.community);
+    const streetLampsOn = (env.light ?? 70) < STREET_LIGHT_LEVEL;
+    for (const light of this.streetLights) light.emission = streetLampsOn ? 1 : 0;
+    for (const pool of this.streetLightPools) pool.opacity = streetLampsOn ? pool.poolOpacity : 0;
     for (const pane of this.model.windows || []) {
       const lit = daylight < 0.35;
       pane.color = lit ? '#ffd98a' : '#8abec5';
@@ -1375,8 +1382,16 @@ export class World3D {
     const lights = [],
       lightColors = [],
       candidates = [];
+    // Street lamps sit high and light a wider circle than lamps at head height.
     for (const lamp of [...this.model.lamps, ...this.model.community.lights])
-      if (lamp.emission) candidates.push({ pos: lamp.pos, color: [1, 0.79, 0.47] });
+      if (lamp.emission)
+        candidates.push({
+          pos: lamp.pos,
+          color: [1, 0.79, 0.47],
+          range: lamp.streetLamp ? 10 : 5.5,
+        });
+    for (const lamp of this.streetLights || [])
+      if (lamp.emission) candidates.push({ pos: lamp.pos, color: [1, 0.82, 0.55], range: 8 });
     for (const home of this.model.community.residences)
       if (home.lamp.emission) candidates.push({ pos: home.lamp.pos, color: [1, 0.77, 0.43] });
     for (const civic of [...this.model.community.civic, ...(this.model.community.recreation || [])])
@@ -1391,14 +1406,18 @@ export class World3D {
         Math.hypot(a.pos[0] - this.target[0], a.pos[2] - this.target[2]) -
         Math.hypot(b.pos[0] - this.target[0], b.pos[2] - this.target[2]),
     );
+    const ranges = [];
     for (const lamp of candidates.slice(0, 8)) {
       lights.push(lamp.pos);
       lightColors.push(lamp.color);
+      ranges.push(lamp.range ?? 5.5);
     }
     while (lights.length < 8) {
       lights.push([0, -1000, 0]);
       lightColors.push([0, 0, 0]);
+      ranges.push(5.5);
     }
+    gl.uniform1fv(this.uniforms['uLightRange[0]'], ranges);
     gl.uniform3fv(this.uniforms['uLights[0]'], lights.flat());
     gl.uniform3fv(this.uniforms['uLightColor[0]'], lightColors.flat());
     const opaque = [],

@@ -19,6 +19,25 @@ import { fromWorld } from './world-math.js';
 
 // Place the original home in the town’s residential block.
 export const COMMUNITY_ORIGIN = { x: 24, z: 24 };
+// Every street light in the world (town and home street) switches on below this light level, and
+// lights a warm pool on the ground beneath it.
+export const STREET_LIGHT_LEVEL = 40;
+// Two warm discs, a faint wide one and a brighter small one, fade the pool out from the centre.
+export function streetLightPool(box, x, z, radius, y = 0.17) {
+  return [
+    [1, 0.13, '#ffbf6a'],
+    [0.5, 0.2, '#ffd08a'],
+  ].map(([scale, poolOpacity, color], i) =>
+    box(x, y + i * 0.004, z, radius * 2 * scale, 0.01, radius * 2 * scale, color, {
+      shape: 'cylinder',
+      opacity: 0,
+      emission: 1,
+      rounded: false,
+      streetLightPool: true,
+      poolOpacity,
+    }),
+  );
+}
 // Where students install and program in each community building: [area name, x, z] from the
 // community origin. Residences use their lot centres.
 export const communityStations = {
@@ -114,6 +133,7 @@ export function addCommunityWorld(model, location) {
   }
   const objects = [],
     lights = [],
+    lightPools = [],
     signals = [],
     machinery = [],
     doors = [],
@@ -164,7 +184,8 @@ export function addCommunityWorld(model, location) {
     const lx = x + (horizontal ? 0 : 7),
       lz = z + (horizontal ? 7 : 0);
     box(lx, 2, lz, 0.15, 4, 0.15, '#526466');
-    lights.push(box(lx, 4, lz, 0.7, 0.25, 0.7, '#e5d69e'));
+    lights.push(box(lx, 4, lz, 0.7, 0.25, 0.7, '#e5d69e', { streetLamp: true }));
+    lightPools.push(...streetLightPool(box, lx, lz, 4.5));
   }
   for (const j of sim.map.junctions.filter((j) => j.id !== 'yard'))
     box(j.x, 0.09, j.z, 12, 0.05, 12, '#414950');
@@ -373,6 +394,7 @@ export function addCommunityWorld(model, location) {
   recreation.push(...openBlocks.items);
   const recreationPeople = addRecreationPeople(model, { recreation, origin, box, sphere });
   const busStops = buildBusStops(model, { sim, origin, box, sphere });
+  lights.push(...busStops.map((s) => s.lamp));
   const sections = civic.flatMap((building) => building.sections);
   areas.push(...sections.map((section) => section.area));
   const residences = buildCommunityResidences(model, { sim, origin, location, box, objects });
@@ -570,6 +592,7 @@ export function addCommunityWorld(model, location) {
     rain,
     objects,
     lights,
+    lightPools,
     signals,
     machinery,
     doors,
@@ -763,8 +786,9 @@ export function updateCommunityWorld(model, state, seconds) {
   }
   // A program driving the street-light output controls the lamps (the street-light quest);
   // otherwise they switch on by themselves once the light level falls below 40 (dusk).
-  const lampsOn = 3 in sim.outputs ? !!sim.outputs[3] : (sim.light ?? 70) < 40;
+  const lampsOn = 3 in sim.outputs ? !!sim.outputs[3] : (sim.light ?? 70) < STREET_LIGHT_LEVEL;
   for (const light of c.lights) light.emission = lampsOn ? 1 : 0;
+  for (const pool of c.lightPools) pool.opacity = lampsOn ? pool.poolOpacity : 0;
   for (const m of c.machinery) {
     m.mesh.pos[0] =
       origin.x +

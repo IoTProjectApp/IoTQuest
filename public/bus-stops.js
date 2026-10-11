@@ -44,6 +44,8 @@ export function buildBusStops(model, { sim, origin, box, sphere }) {
       add(along, 1.3, 6.65, 0.1, 2.2, 0.1, '#55666a', { surface: 'steel' });
     add(0, 2.45, 6.25, 1.1, 0.1, 3.5, '#4f6a72', { surface: 'steel', bevel: 0.04 });
     add(0, 0.6, 6.4, 0.42, 0.07, 2.4, '#b8a074', { surface: 'timber' });
+    // A light under the roof that comes on with the street lights.
+    const lamp = add(0, 2.36, 6.3, 0.3, 0.05, 1.6, '#f4e6c0', { surface: 'plain' });
     for (const along of [-1, 1]) add(along, 0.4, 6.45, 0.08, 0.35, 0.08, '#55666a');
     add(1.2, 1.4, 6.6, 0.06, 0.8, 0.55, '#f2efe4', { surface: 'plain' });
     // Bus stop sign at the kerb and a yellow bus zone painted on the lane.
@@ -75,7 +77,7 @@ export function buildBusStops(model, { sim, origin, box, sphere }) {
       );
       return { person, x: px, z: pz, boarded: 0, phase: i * 1.7 };
     });
-    stops.push({ stop, parts, waiting, faceRoad: Math.atan2(-stop.kz, -stop.kx) });
+    stops.push({ stop, parts, lamp, waiting, faceRoad: Math.atan2(-stop.kz, -stop.kx) });
   }
   return stops;
 }

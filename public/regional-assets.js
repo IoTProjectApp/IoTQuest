@@ -604,6 +604,19 @@ function addMelbourneStreet(l, m) {
     cylinder(x, 1.4, z, 0.06, 2.8, '#6c7377');
     box(x, 2.85, z + (z < 17 ? 0.35 : -0.35), 0.25, 0.1, 0.7, '#6c7377');
     box(x, 2.78, z + (z < 17 ? 0.6 : -0.6), 0.22, 0.06, 0.22, '#f3e7c3', { streetLight: true });
+    // The warm pool it casts on the street at night (toggled with the lamp in world3d.js).
+    for (const [i, [size, poolOpacity, color]] of [
+      [6, 0.13, '#ffbf6a'],
+      [3, 0.2, '#ffd08a'],
+    ].entries())
+      box(x, 0.12 + i * 0.004, z + (z < 17 ? 0.6 : -0.6), size, 0.01, size, color, {
+        shape: 'cylinder',
+        opacity: 0,
+        emission: 1,
+        rounded: false,
+        streetLightPool: true,
+        poolOpacity,
+      });
   }
   // Neighbouring houses: fronts face the street.
   const house = (x, z, width, depth, facing, i) => {

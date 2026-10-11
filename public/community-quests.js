@@ -1,3 +1,4 @@
+import { recreationLots } from './community-recreation.js';
 import { civicLots } from './community-civic.js';
 import { residentialLots } from './community-residences.js';
 // These quests are appended, so existing home/farm project and completion indices stay stable.
@@ -379,6 +380,136 @@ communityQuests.push(
     ['Temperature', 'Alerts', 'Boundary tests'],
   ),
 );
+// Recreation areas: one project each, appended so saved quest indices stay put.
+communityQuests.push(
+  quest(
+    'pool',
+    'Riverside swimming pool',
+    'Pool Water Top-Up',
+    ['pond', 'pump'],
+    ['pond < 2000'],
+    [
+      ['Water below the skimmer', { pond: 1200 / 40.95 }, [1]],
+      ['Pool full', { pond: 3500 / 40.95 }, [0]],
+      ['At target level', { pond: 2000 / 40.95 }, [0]],
+    ],
+    'Run the top-up pump while the pool level probe reads below 2000. Stop at 2000 or above.',
+    ['Level sensing', 'Refill control', 'Pool plant'],
+  ),
+  quest(
+    'gym',
+    'Riverside gym',
+    'Gym Ventilation',
+    ['temp', 'humidity', 'fan'],
+    ['temp > 26 || humidity > 70'],
+    [
+      ['Hot workout', { temp: 30, humidity: 50 }, [1]],
+      ['Humid after a class', { temp: 22, humidity: 80 }, [1]],
+      ['Comfortable', { temp: 22, humidity: 50 }, [0]],
+      ['At both limits', { temp: 26, humidity: 70 }, [0]],
+    ],
+    'Run the ventilation fan when it is above 26°C or above 70% humidity; otherwise switch it off.',
+    ['Temperature', 'Humidity', 'Logical OR'],
+  ),
+  quest(
+    'dojo',
+    'Riverside judo dojo',
+    'Dojo Mat Lights',
+    ['pir', 'ldr', 'led'],
+    ['motion == 1 && light < 1500'],
+    [
+      ['Evening class', { motion: 1, light: 800 / 40.95 }, [1]],
+      ['Empty dojo at night', { motion: 0, light: 800 / 40.95 }, [0]],
+      ['Daytime class', { motion: 1, light: 3000 / 40.95 }, [0]],
+    ],
+    'Light the mats only when someone is moving on them and the light reading is below 1500.',
+    ['Motion sensing', 'Light sensing', 'Logical AND'],
+  ),
+  quest(
+    'zoo',
+    'Riverside wildlife zoo',
+    'Reptile House Heat Lamp',
+    ['temp', 'led'],
+    ['temp < 18'],
+    [
+      ['Cold night', { temp: 12 }, [1]],
+      ['Warm afternoon', { temp: 28 }, [0]],
+      ['At 18°C', { temp: 18 }, [0]],
+    ],
+    'Switch the reptiles’ heat lamp on below 18°C and off at 18°C or above.',
+    ['Temperature', 'Animal welfare', 'Boundary tests'],
+  ),
+  quest(
+    'busdepot',
+    'Riverside bus depot',
+    'Bus Bay Reversing Alarm',
+    ['ultra', 'buzzer'],
+    ['distance < 80'],
+    [
+      ['Bus close to the wall', { distance: 40 }, [1]],
+      ['Bay clear', { distance: 200 }, [0]],
+      ['At 80 cm', { distance: 80 }, [0]],
+    ],
+    'Sound the reversing alarm while a bus is closer than 80 cm to the back wall; silence it at 80 cm or more.',
+    ['Ultrasonic distance', 'Safety alarms', 'Thresholds'],
+  ),
+  quest(
+    'park',
+    'Riverside fountain park',
+    'Fountain Night Lights',
+    ['ldr', 'rgb'],
+    ['light < 1500'],
+    [
+      ['Night', { light: 500 / 40.95 }, [1]],
+      ['Sunny afternoon', { light: 3000 / 40.95 }, [0]],
+      ['At dusk threshold', { light: 1500 / 40.95 }, [0]],
+    ],
+    'Light the fountain’s coloured lamps while the light reading is below 1500, and turn them off at 1500 or above.',
+    ['Light sensing', 'Outdoor lighting', 'Thresholds'],
+  ),
+  quest(
+    'playground',
+    'Riverside children’s playground',
+    'Playground Heat Warning',
+    ['temp', 'rgb'],
+    ['temp > 32'],
+    [
+      ['Scorching day', { temp: 36 }, [1]],
+      ['Mild day', { temp: 25 }, [0]],
+      ['At 32°C', { temp: 32 }, [0]],
+    ],
+    'Light the warning beacon above 32°C so parents know the slide may be too hot; off at 32°C or below.',
+    ['Temperature', 'Child safety', 'Warnings'],
+  ),
+  quest(
+    'playground2',
+    'Meadow children’s playground',
+    'Playground Path Lights',
+    ['ldr', 'led'],
+    ['light < 1200'],
+    [
+      ['Dusk', { light: 600 / 40.95 }, [1]],
+      ['Daytime', { light: 3000 / 40.95 }, [0]],
+      ['At threshold', { light: 1200 / 40.95 }, [0]],
+    ],
+    'Switch the path lights on below light reading 1200 and off at 1200 or above.',
+    ['Light sensing', 'Outdoor lighting', 'Thresholds'],
+  ),
+  quest(
+    'basketball',
+    'Riverside basketball court',
+    'Court Floodlights on Demand',
+    ['ldr', 'button', 'led'],
+    ['light < 1500 && armed == 1'],
+    [
+      ['Evening game, switch on', { light: 800 / 40.95, armed: 1 }, [1]],
+      ['Evening, switch off', { light: 800 / 40.95, armed: 0 }, [0]],
+      ['Daytime game', { light: 3000 / 40.95, armed: 1 }, [0]],
+    ],
+    'Light the court only when players switch the floodlights on and the light reading is below 1500.',
+    ['Light sensing', 'User switches', 'Logical AND'],
+  ),
+);
 for (const q of communityQuests) {
   const home = residentialLots.find((b) => b.type === q.communityType);
   const civic = civicLots.find((b) => b.type === q.communityType);
@@ -391,6 +522,12 @@ for (const q of communityQuests) {
     q.resident = home.resident;
     q.role = 'Neighbourhood resident';
     q.quote = '“Can you help automate our home and garden?”';
+  }
+  const recreation = recreationLots.find((b) => b.type === q.communityType);
+  if (recreation) {
+    q.resident = recreation.resident;
+    q.role = recreation.role;
+    q.quote = '“Could you help automate our venue?”';
   }
 }
 

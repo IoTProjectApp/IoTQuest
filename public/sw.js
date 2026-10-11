@@ -10,13 +10,18 @@
 // practice weather.
 const VERSION = 'dev';
 const PRECACHE = [];
-const CACHE = 'iotquest-' + VERSION;
+// The test copy at /dev/ shares the main site's address, so its offline copies get their own name
+// ("iotquest.dev-…"); each site only ever replaces its own and never deletes the other's.
+importScripts('./channel.js');
+const CHANNEL = self.IOTQUEST_CHANNEL || '';
+const PREFIX = CHANNEL ? 'iotquest.' + CHANNEL + '-' : 'iotquest-';
+const CACHE = PREFIX + VERSION;
 // Stored in every copy made by this update scheme. Copies without it come from the earlier offline
 // code, which mixed deploys and cannot offer a clean reload, so a new version replaces those at
 // once and reloads their pages (progress is saved in the browser, so nothing is lost).
 const MARKER = './__iotquest-update-scheme-2';
 const legacyCopies = async () => {
-  const names = (await caches.keys()).filter((k) => k.startsWith('iotquest-') && k !== CACHE);
+  const names = (await caches.keys()).filter((k) => k.startsWith(PREFIX) && k !== CACHE);
   const marked = await Promise.all(
     names.map(async (k) => !!(await (await caches.open(k)).match(MARKER))),
   );
@@ -49,7 +54,7 @@ self.addEventListener('activate', (event) => {
   event.waitUntil(
     (async () => {
       const takeover = !DEV && (await legacyCopies());
-      const old = (await caches.keys()).filter((k) => k.startsWith('iotquest-') && k !== CACHE);
+      const old = (await caches.keys()).filter((k) => k.startsWith(PREFIX) && k !== CACHE);
       await Promise.all(old.map((k) => caches.delete(k)));
       await self.clients.claim();
       // Pages still running the earlier offline code reload into this version in one step.

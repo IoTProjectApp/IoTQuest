@@ -11,6 +11,10 @@ async function listFiles(dir, prefix = '') {
     else if (entry.name !== '.DS_Store') out.push(prefix + entry.name);
   return out.sort();
 }
+// --channel=dev builds the test copy published at /dev/: it saves progress and offline files under
+// its own names and labels itself "Test version" (see public/channel.js).
+const channel = (process.argv.find((a) => a.startsWith('--channel=')) || '').slice(10);
+if (!/^[a-z0-9]*$/.test(channel)) throw Error('Channel names use a-z and 0-9 only: ' + channel);
 process.chdir(fileURLToPath(new URL('..', import.meta.url)));
 for (const file of (await readdir('public')).filter((f) => f.endsWith('.js')))
   execFileSync(process.execPath, ['--check', 'public/' + file]);
@@ -20,6 +24,19 @@ await mkdir('dist/server', { recursive: true });
 await mkdir('dist/.openai', { recursive: true });
 await cp('public', 'dist/client', { recursive: true });
 await cp('public/game.html', 'dist/client/index.html');
+if (channel) {
+  const source = await readFile('dist/client/channel.js', 'utf8'),
+    stamped = source.replace(
+      "globalThis.IOTQUEST_CHANNEL = '';",
+      'globalThis.IOTQUEST_CHANNEL = ' + JSON.stringify(channel) + ';',
+    );
+  if (stamped === source) throw Error('public/channel.js has no channel line to stamp');
+  await writeFile('dist/client/channel.js', stamped);
+  const manifest = JSON.parse(await readFile('dist/client/manifest.webmanifest', 'utf8'));
+  manifest.name = 'IoT Quest (test version)';
+  manifest.short_name = 'IoT Quest test';
+  await writeFile('dist/client/manifest.webmanifest', JSON.stringify(manifest, null, 2) + '\n');
+}
 // Offline support: stamp the service worker with every built file and a content version, so
 // installed copies update on the next visit after a deploy.
 const files = await listFiles('dist/client');

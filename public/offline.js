@@ -4,9 +4,13 @@
 // newest version from the server.
 export async function freshStart() {
   try {
+    // Only this site's copy: the test copy at /dev/ and the main site share an address.
+    const scope = new URL('./', location.href).href,
+      channel = globalThis.IOTQUEST_CHANNEL || '',
+      prefix = channel ? 'iotquest.' + channel + '-' : 'iotquest-';
     for (const r of (await navigator.serviceWorker?.getRegistrations?.()) || [])
-      await r.unregister();
-    for (const k of await caches.keys()) if (k.startsWith('iotquest-')) await caches.delete(k);
+      if (r.scope === scope) await r.unregister();
+    for (const k of await caches.keys()) if (k.startsWith(prefix)) await caches.delete(k);
   } catch {}
   const url = new URL(location.href);
   url.searchParams.delete('fresh');

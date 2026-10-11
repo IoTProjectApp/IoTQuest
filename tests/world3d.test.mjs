@@ -590,6 +590,29 @@ test('3D render errors are reported once and the loop keeps running; restored co
     frames.restore();
   }
 });
+test('on a software renderer each frame first waits for the previous one to finish', () => {
+  for (const [renderer, expected] of [
+    ['Google SwiftShader', 2],
+    ['Apple M2', 0],
+  ]) {
+    const frames = animationFrames(),
+      gl = fakeGL();
+    let waits = 0;
+    gl.getParameter = () => renderer;
+    gl.getError = () => (waits++, 0);
+    try {
+      const state = { devices: [], env: { ...baseEnv }, outputs: {}, player: { x: 48, y: 77 } };
+      const world = new World3D(eventCanvas(gl), { getState: () => state });
+      world.render = () => {};
+      waits = 0;
+      frames.step(16);
+      frames.step(32);
+      assert.equal(waits, expected, renderer);
+    } finally {
+      frames.restore();
+    }
+  }
+});
 test('a 0×0 canvas (hidden Code layout) skips drawing and label projection until it is shown', () => {
   const frames = animationFrames(),
     canvas = eventCanvas(fakeGL()),

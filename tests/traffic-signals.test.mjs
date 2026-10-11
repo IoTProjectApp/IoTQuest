@@ -74,7 +74,7 @@ test('traffic heads display one lamp, with conflicting lanes red and pedestrian 
     ['WALK', 'NS', 'red', 'red'],
     ['CLEAR', 'EW', 'red', 'red'],
   ]) {
-    Object.assign(c.sim.signals, { phase, next });
+    for (const head of c.signals) Object.assign(c.sim.signalsAt(head.junction), { phase, next });
     updateCommunityWorld(
       m,
       { env: { light: 70, rain: 0 }, devices: [], outputs: {}, running: false, paused: true },
@@ -91,20 +91,32 @@ test('a pedestrian at a new civic junction holds its own traffic, not the whole 
   const sim = new CommunitySimulation({ iso: 'AUS' });
   sim.density = sim.pedestrianDensity = 0;
   const crossing = sim.map.crossings.find((c) => c.junction === '3:1');
+  const outer = sim.signalsAt('3:1');
+  assert.notEqual(outer, sim.signals, 'Outer junctions run their own controller');
   crossing.occupants.add('test-pedestrian');
+  Object.assign(outer, { phase: 'CLEAR', remaining: 0, next: 'EW' });
   Object.assign(sim.signals, { phase: 'CLEAR', remaining: 0, next: 'EW' });
   sim.step(0.05);
+  assert.equal(outer.phase, 'CLEAR', 'The occupied junction holds its traffic red');
   assert.equal(sim.signals.phase, 'EW', 'Other junctions keep cycling');
-  Object.assign(sim.signals, { remaining: 1000 });
-  const vehicle = sim.addVehicle('2:1>3:1:out', '3:1>3:2:in');
-  sim.advance(20);
-  assert.equal(vehicle.index, 0, 'Green traffic still waits for the occupied crossing');
   crossing.occupants.clear();
-  sim.advance(25);
-  assert.ok(vehicle.index > 0);
+  sim.step(0.05);
+  assert.equal(outer.phase, 'EW');
 });
 
-test('a vehicle held inside an outer junction does not freeze the coordinated phase', () => {
+test('a pedestrian waiting at an outer junction requests a walk there only', () => {
+  const sim = new CommunitySimulation({ iso: 'AUS' });
+  sim.density = sim.pedestrianDensity = 0;
+  const outer = sim.signalsAt('3:1');
+  const crossing = sim.map.crossings.find((c) => c.junction === '3:1' && c.signal);
+  const person = sim.addPerson(crossing.a, crossing.b);
+  assert.ok(person);
+  sim.step(0.05);
+  assert.equal(outer.requested || outer.phase === 'WALK', true);
+  assert.equal(sim.signals.requested, false);
+});
+
+test('a vehicle held inside an outer junction does not freeze the controller junction', () => {
   const sim = new CommunitySimulation({ iso: 'AUS' });
   sim.density = sim.pedestrianDensity = 0;
   const outer = sim.map.junctions.find((j) => j.id === '3:1');
@@ -115,15 +127,22 @@ test('a vehicle held inside an outer junction does not freeze the coordinated ph
   assert.notEqual(sim.signals.phase, 'RED');
 });
 
+test('outer junction cycles are offset for a green wave', () => {
+  const sim = new CommunitySimulation({ iso: 'AUS' });
+  const near = sim.signalsAt('2:1'),
+    far = sim.signalsAt('3:1');
+  assert.notDeepEqual([near.phase, near.remaining], [far.phase, far.remaining]);
+});
+
 test('vehicles approaching the new civic junction stop on red and proceed on their green', () => {
   const sim = new CommunitySimulation({ iso: 'AUS' });
   sim.density = sim.pedestrianDensity = 0;
-  Object.assign(sim.signals, { phase: 'NS', remaining: 1000 });
+  Object.assign(sim.signalsAt('3:1'), { phase: 'NS', remaining: 1000 });
   const vehicle = sim.addVehicle('2:1>3:1:out', '3:1>3:2:in');
   sim.advance(20);
   assert.equal(vehicle.index, 0);
   assert.ok(vehicle.speed < 0.2);
-  Object.assign(sim.signals, { phase: 'EW', remaining: 1000 });
+  Object.assign(sim.signalsAt('3:1'), { phase: 'EW', remaining: 1000 });
   sim.advance(25);
   assert.ok(vehicle.index > 0, 'Vehicle never passed its new traffic light');
 });

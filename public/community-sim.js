@@ -487,21 +487,38 @@ export class CommunitySimulation {
   occupied(id) {
     return this.map.crossings.some((c) => c.junction === id && c.occupants.size);
   }
-  // Every signalled junction shows the shared phase, but only the controller junction gates
-  // phase changes. Elsewhere, entry is already exclusive (owner, crossing and exit-space
-  // checks), so gating on all ~26 junctions would let one stuck queue freeze the town.
+  // The controller junction runs `this.signals`, which the student's program and the overview
+  // drive. Every other signalled junction runs its own controller, so a pedestrian or a held
+  // vehicle there only stops that junction's traffic, never the whole town.
   get controlJunction() {
     return (
       this.map.junctions.find((j) => j.id === '1:1' && j.signal) ||
       this.map.junctions.find((j) => j.signal)
     );
   }
+  signalsAt(id) {
+    this.junctionSignals ||= new Map();
+    let signals = this.junctionSignals.get(id);
+    if (!signals) {
+      const control = this.controlJunction,
+        j = this.map.junctions.find((j) => j.id === id);
+      if (!j?.signal || j === control) return this.signals;
+      // Each junction starts its cycle late by the drive from the controller at cruising speed
+      // (7 m/s), so a car leaving on green tends to arrive on green. The 34 s cycle is
+      // EW 12 + amber 3 + red 2 + NS 12 + amber 3 + red 2; walk calls drift it later.
+      signals = new Signals();
+      const lag = (Math.abs(j.x - control.x) + Math.abs(j.z - control.z)) / 7;
+      for (let t = 0; t < 34 - (lag % 34); t += 0.5) signals.step(0.5, false, false);
+      this.junctionSignals.set(id, signals);
+    }
+    return signals;
+  }
   signalCrossingsOccupied() {
     return this.occupied(this.controlJunction.id);
   }
   safeCrossing(crossing) {
     const j = this.map.junctions.find((j) => j.id === crossing.junction);
-    if (j.owner != null || (j.signal && this.signals.phase !== 'WALK')) return false;
+    if (j.owner != null || (j.signal && this.signalsAt(j.id).phase !== 'WALK')) return false;
     return this.vehicles.every((v) => {
       const edge = v.route[v.index];
       if (edge.approach !== j.id) return true;
@@ -557,7 +574,8 @@ export class CommunitySimulation {
     this.releaseDepartedOwners();
     this.time += dt;
     this.hour = (this.initialHour ?? 8) + this.time / 3600;
-    this.signals.step(dt, this.signalCrossingsOccupied(), this.controlJunction.owner != null);
+    for (const j of this.map.junctions)
+      if (j.signal) this.signalsAt(j.id).step(dt, this.occupied(j.id), j.owner != null);
     this.spawnClock += dt;
     if (this.spawnClock >= 1) {
       this.spawnClock = 0;
@@ -601,7 +619,7 @@ export class CommunitySimulation {
       const edge = p.route[p.index],
         c = edge.crossing;
       if (c && p.progress === 0) {
-        if (c.signal) this.signals.requested = true;
+        if (c.signal) this.signalsAt(c.junction).requested = true;
         if (!this.safeCrossing(c)) {
           p.status = 'At kerb · waiting for safe crossing';
           continue;
@@ -694,7 +712,7 @@ export class CommunitySimulation {
           (this.occupied(j.id) ||
             j.owner != null ||
             !clear ||
-            (j.signal && this.signals.phase !== next.axis) ||
+            (j.signal && this.signalsAt(j.id).phase !== next.axis) ||
             (!j.signal && waiting))
         )
           gap = edge.length - v.progress;

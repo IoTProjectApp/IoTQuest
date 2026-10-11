@@ -43,20 +43,20 @@ test('each Victorian farm has a routed driveway, a controlled crossing and three
         );
       }
     s.density = s.pedestrianDensity = 0;
-    Object.assign(s.signals, { phase: 'NS', remaining: 1000 });
+    Object.assign(s.signalsAt('farm-access'), { phase: 'NS', remaining: 1000 });
     const leaving = s.addVehicle('farm-departure', 'farm-access>0:2:out', 'van');
     s.advance(20);
     assert.equal(leaving.index, 0);
     assert.ok(leaving.speed < 0.2, 'Farm vehicle must wait on red');
-    Object.assign(s.signals, { phase: 'EW', remaining: 1000 });
+    Object.assign(s.signalsAt('farm-access'), { phase: 'EW', remaining: 1000 });
     s.advance(30);
     assert.ok(leaving.index > 0, 'Farm vehicle must proceed on green');
     s.vehicles = [];
-    Object.assign(s.signals, { phase: 'EW', remaining: 1000 });
+    Object.assign(s.signalsAt('farm-access'), { phase: 'EW', remaining: 1000 });
     const entering = s.addVehicle('0:1>0:2:out', 'farm-parking', 'van');
     s.advance(10);
     assert.equal(entering.index, 0, 'Main-street vehicle waits for its own green');
-    Object.assign(s.signals, { phase: 'NS', remaining: 1000 });
+    Object.assign(s.signalsAt('farm-access'), { phase: 'NS', remaining: 1000 });
     let reachedLoadingBay = false;
     for (let i = 0; i < 1600; i++) {
       s.advance(0.05);
@@ -93,7 +93,7 @@ test('cars and larger farm trucks enter the vehicle gate, turn inside the yard a
         c = addCommunityWorld(m, farm),
         s = c.sim;
       s.density = s.pedestrianDensity = 0;
-      Object.assign(s.signals, { phase: 'NS', remaining: 1000 });
+      Object.assign(s.signalsAt('farm-access'), { phase: 'NS', remaining: 1000 });
       const vehicle = s.addVehicle('0:1>0:2:out', 'farm-parking', kind);
       // Check more clearance than the renderer's standard five-metre truck requires.
       if (kind === 'truck') {
@@ -131,7 +131,7 @@ test('cars and larger farm trucks enter the vehicle gate, turn inside the yard a
       }
       assert.ok(arrived, kind + ' failed to reach farm loading area');
       assert.equal(s.map.farmDriveway.visits[kind], 1);
-      Object.assign(s.signals, { phase: 'EW', remaining: 1000 });
+      Object.assign(s.signalsAt('farm-access'), { phase: 'EW', remaining: 1000 });
       let departed = false;
       for (let i = 0; i < 2000; i++) {
         s.advance(0.05);

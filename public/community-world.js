@@ -581,13 +581,7 @@ export function updateCommunityWorld(model, state, seconds) {
   sim.initialHour = state.skyStartHour ?? sim.initialHour ?? 8;
   if (state.communityMission) {
     sim.stopController();
-    applyNativeCommunityOutputs(
-      sim,
-      state.devices,
-      state.outputs,
-      state.running,
-      c.sections.map((section) => section.name),
-    );
+    applyNativeCommunityOutputs(sim, state.devices, state.outputs, state.running);
   } else if (sim.nativeActive) {
     sim.nativeActive = false;
     if (sim.nativePhaseSignature) sim.signals.pending = null;
@@ -690,7 +684,8 @@ export function updateCommunityWorld(model, state, seconds) {
       mesh.color = active ? lit : unlit;
       mesh.emission = active ? 1 : 0;
     };
-    const aspect = trafficAspect(sim.signals.phase, s.axis, sim.signals.next);
+    const signals = sim.signalsAt(s.junction);
+    const aspect = trafficAspect(signals.phase, s.axis, signals.next);
     activeColor(s.red, aspect.red, '#ff5147', '#702e2c');
     activeColor(s.amber, aspect.amber, '#ffc247', '#76531e');
     activeColor(s.green, aspect.green, '#5bef82', '#285c3c');

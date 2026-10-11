@@ -76,7 +76,7 @@ test('pool water stays visible below the surrounding deck and blocks walking int
   const floors = c.objects.filter(
     (m) => m.recreation === 'pool' && m.surface === 'tile' && m.pos[1] > 0,
   );
-  assert.equal(floors.length, 4);
+  assert.equal(floors.filter((m) => !m.changingRoom).length, 4, 'Four deck strips');
   for (const floor of floors)
     assert.ok(
       Math.abs(floor.pos[0] - b.water.pos[0]) >= (floor.size[0] + b.water.size[0]) / 2 ||
@@ -246,5 +246,36 @@ test('garden chairs and outdoor benches face their tables or activities', () => 
       (Math.sin(yaw) * dx + Math.cos(yaw) * dz) / length > 0.999,
       'Seat faces its intended activity',
     );
+  }
+});
+
+test('pool and gym have enclosed changing rooms and shower rooms with doorways', () => {
+  const model = createRegionalModel('legacy'),
+    c = addCommunityWorld(model);
+  for (const type of ['pool', 'gym']) {
+    const parts = c.objects.filter((m) => m.recreation === type);
+    assert.equal(
+      parts.filter((m) => m.changingRoom).length,
+      2,
+      type + ': changing and shower floors',
+    );
+    const showers = parts.filter((m) => m.surface === 'water' && m.size[1] > 1);
+    assert.ok(showers.length >= 2, type + ': shower stalls');
+    const { building: b } = c.recreation.find((r) => r.building.type === type);
+    // Each room can be walked into: the doorway centres are free of colliders.
+    for (const [x, z] of type === 'pool'
+      ? [
+          [-11.5, -10.4],
+          [-6.2, -10.4],
+        ]
+      : [
+          [-7.2, 7.6],
+          [-8.2, 9.8],
+        ])
+      assert.equal(
+        collides(c.origin.x + b.x + x, c.origin.z + b.z + z, model.colliders),
+        false,
+        `${type} doorway at ${x}, ${z}`,
+      );
   }
 });

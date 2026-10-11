@@ -4,6 +4,7 @@ import { buildAreaBBQ } from './area-bbq.js';
 import { buildTree } from './vegetation.js';
 import { buildJudoDojo } from './judo-dojo.js';
 import { buildBusDepot } from './bus-depot.js';
+import { buildPoolChangingRooms, buildGymChangingRooms } from './changing-rooms.js';
 import { buildWildlifeZoo } from './wildlife-zoo.js';
 // Dedicated recreation plots in the next block of the town's shared street grid.
 export const recreationLots = [
@@ -17,7 +18,7 @@ export const recreationLots = [
     w: 28,
     d: 30,
     height: 3,
-    shadow: { dx: -7.5, dz: -12.5, w: 9.5, d: 4.5 },
+    shadow: { dx: -8.5, dz: -12.6, w: 10.6, d: 4.4 },
   },
   {
     type: 'gym',
@@ -247,36 +248,8 @@ export function buildRecreationAreas(model, { sim, origin, box }) {
           });
           for (const dz of [-0.5, 0.5]) prop(11, 0.31, z + dz, 2, 0.4, 0.07, '#677c80');
         }
-        for (const x of [-9, -6]) {
-          seat(x, 12);
-          prop(x, 1.3, -12.5, 2.4, 2.2, 1.1, '#86aeb7', { solid: true });
-          for (const dx of [-0.8, 0, 0.8]) prop(x + dx, 1.3, -11.93, 0.03, 2.1, 0.04, '#d0ddd6');
-        }
-        // A covered changing pavilion with private cubicles and showers, open from the west deck.
-        add(-7.5, 1.35, -14.5, 9, 2.5, 0.15, '#afc4c0', { solid: true });
-        add(-3, 1.35, -12.5, 0.15, 2.5, 4, '#afc4c0', { solid: true });
-        const canopy = add(-7.5, 2.7, -12.5, 9.5, 0.18, 4.5, '#526e7a', {
-          opacity: 0,
-          cutawayOpacity: 0,
-        });
-        model.roofs.push(canopy);
-        // Changing cubicles: timber changing bench, privacy screen and vanity mirrors.
-        add(-6, 1.35, -12.5, 0.1, 2.4, 3.8, '#9cb2ad', { solid: true });
-        prop(-4.5, 0.45, -13.6, 1.8, 0.08, 0.6, '#b8a074', { solid: true, surface: 'timber' });
-        prop(-4.5, 1.5, -14.4, 1.6, 0.8, 0.03, '#a4c2c7', { surface: 'glass' });
-        // Showers: stone non-slip base, chrome riser pipes, overhead shower heads and drain.
-        add(-9.5, 0.15, -12.5, 3.8, 0.08, 3.6, '#a8b5b2', { surface: 'stone' });
-        prop(-9.5, 0.16, -12.5, 0.4, 0.02, 0.4, '#424d4e', { surface: 'steel' });
-        add(-7.6, 1.35, -12.5, 0.04, 2.2, 3.2, '#8cb6be', { surface: 'glass', opacity: 0.65 });
-        for (const dz of [-1.1, 1.1]) {
-          prop(-11.3, 1.5, -12.5 + dz, 0.06, 1.6, 0.06, '#d5dedc', { surface: 'steel' });
-          prop(-11.1, 2.2, -12.5 + dz, 0.28, 0.08, 0.25, '#e0e8e6', { surface: 'steel' });
-          prop(-11.3, 1.1, -12.5 + dz, 0.12, 0.12, 0.15, '#c5cfcd', { surface: 'steel' });
-          prop(-11.1, 1.5, -12.5 + dz, 0.18, 1.3, 0.18, '#82d3df', {
-            surface: 'water',
-            opacity: 0.45,
-          });
-        }
+        for (const x of [-9, -6]) seat(x, 12);
+        buildPoolChangingRooms({ add, prop, model });
         prop(-7, 1.2, 7, 0.12, 2, 0.12, '#d17550');
         prop(-7, 2.1, 7, 1.2, 0.18, 1.1, '#e5d9be', { surface: 'fabric' });
         for (const z of [-4, 3]) {
@@ -321,23 +294,7 @@ export function buildRecreationAreas(model, { sim, origin, box }) {
         for (const z of [-1, 0, 1]) prop(9, 1.3, z, 1.6, 0.25, 0.3, '#35464e');
         for (const x of [-6, -3, 0])
           prop(x, 0.23, 10, 1.4, 0.05, 2.4, '#8b9dad', { surface: 'fabric' });
-        for (const z of [5, 8, 11]) prop(-10, 1.2, z, 1.3, 2, 2.2, '#a5baba', { solid: true });
-        // Changing rooms & showers inside the gym, set clear of the trainer entrance.
-        add(-8.2, 1.6, 0.5, 3.6, 3, 0.15, '#859d9c', { solid: true });
-        prop(-10, 0.45, 2.5, 2.4, 0.08, 0.6, '#a68c68', { solid: true, surface: 'timber' });
-        prop(-10, 1.6, 3.6, 1.8, 0.85, 0.03, '#a3c2c7', { surface: 'glass' });
-        add(-9.5, 0.14, -5.5, 3.8, 0.08, 3.8, '#b4c2be', { surface: 'tile' });
-        add(-7.6, 1.5, -5.5, 0.05, 2.4, 3.4, '#90bdc6', { surface: 'glass', opacity: 0.6 });
-        prop(-9.5, 0.15, -5.5, 0.4, 0.02, 0.4, '#384344', { surface: 'steel' });
-        for (const dz of [-1.1, 1.1]) {
-          prop(-11.3, 1.6, -5.5 + dz, 0.06, 1.7, 0.06, '#d8e0df', { surface: 'steel' });
-          prop(-11.1, 2.3, -5.5 + dz, 0.28, 0.08, 0.25, '#e4eded', { surface: 'steel' });
-          prop(-11.3, 1.15, -5.5 + dz, 0.12, 0.12, 0.15, '#c5cfcd', { surface: 'steel' });
-          prop(-11.1, 1.55, -5.5 + dz, 0.18, 1.4, 0.18, '#85d6e2', {
-            surface: 'water',
-            opacity: 0.45,
-          });
-        }
+        buildGymChangingRooms({ add, prop });
         seat(-6, 5);
         add(12.75, 1.9, 0, 0.035, 2.6, 7, '#a4c1c5', { surface: 'glass', opacity: 0.65 });
       }

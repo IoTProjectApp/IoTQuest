@@ -121,6 +121,10 @@ test('frustum culling skips objects outside the view, including the mirrored vie
     assert.ok(far > 0 && far < 16, 'Large at distance: drawn, with the simpler shape');
     assert.ok(near > far, 'Nearer objects are larger on screen');
     assert.ok(sharp({ pos: [0, 0, 0], size: [0.05, 0.05, 0.05] }), 'Small but near');
+    // About two pixels across: too small for a raised object, kept for a landmark.
+    const shelter = { pos: [0, 2, -100], size: [0.2, 0.2, 0.2] };
+    assert.equal(sharp(shelter), 0, 'Small raised object');
+    assert.ok(sharp({ ...shelter, landmark: true }) > 0, 'Landmark stays drawn');
     for (const flag of ['sky', 'emission'])
       assert.equal(
         sharp({ pos: [0, 0, -100], size: [0.05, 0.05, 0.05], [flag]: 1 }),

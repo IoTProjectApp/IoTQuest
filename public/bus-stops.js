@@ -42,16 +42,22 @@ export function buildBusStops(model, { sim, origin, box, sphere }) {
     add(-1.6, 1.3, 6.2, 0.9, 2.1, 0.05, '#9cc4cc', { surface: 'glass', opacity: 0.6 });
     for (const along of [-1.6, 1.6])
       add(along, 1.3, 6.65, 0.1, 2.2, 0.1, '#55666a', { surface: 'steel' });
-    add(0, 2.45, 6.25, 1.1, 0.1, 3.5, '#4f6a72', { surface: 'steel', bevel: 0.04 });
+    // A green roof, the colour of the stop sign, stands out from the grey pavement and stays drawn
+    // in the town overview (landmark), as does the sign.
+    add(0, 2.45, 6.25, 1.2, 0.12, 3.6, '#2f9a62', {
+      surface: 'plain',
+      bevel: 0.04,
+      landmark: true,
+    });
     add(0, 0.6, 6.4, 0.42, 0.07, 2.4, '#b8a074', { surface: 'timber' });
     // A light under the roof that comes on with the street lights.
     const lamp = add(0, 2.36, 6.3, 0.3, 0.05, 1.6, '#f4e6c0', { surface: 'plain' });
     for (const along of [-1, 1]) add(along, 0.4, 6.45, 0.08, 0.35, 0.08, '#55666a');
     add(1.2, 1.4, 6.6, 0.06, 0.8, 0.55, '#f2efe4', { surface: 'plain' });
     // Bus stop sign at the kerb and a yellow bus zone painted on the lane.
-    add(2.6, 1.3, 5.5, 0.08, 2.2, 0.08, '#6b7b7e', { surface: 'steel' });
-    add(2.6, 2.3, 5.5, 0.05, 0.5, 0.45, '#2f8a5c', { surface: 'plain' });
-    add(2.6, 2.3, 5.47, 0.06, 0.24, 0.24, '#f2efe4', { surface: 'plain', bevel: 0.1 });
+    add(2.6, 1.3, 5.5, 0.08, 2.6, 0.08, '#6b7b7e', { surface: 'steel' });
+    add(2.6, 2.45, 5.5, 0.06, 0.75, 0.65, '#2f9a62', { surface: 'plain', landmark: true });
+    add(2.6, 2.45, 5.46, 0.07, 0.36, 0.36, '#f2efe4', { surface: 'plain', bevel: 0.1 });
     // Yellow bus zone along the kerb edge of the lane: a long line beside the kerb and short
     // end lines reaching in from it, where the bus pulls in.
     add(0, 0.13, KERB_LINE, 0.12, 0.015, 10, '#e3c34a', { surface: 'plain', rounded: false });

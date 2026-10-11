@@ -269,9 +269,10 @@ export function frustumTest(m, pixelScale = 0) {
     if (distance <= 0) return Infinity;
     const pixels = ((r - 0.25) * pixelScale) / distance;
     // Flat ground markings (pavements, lane lines, crossings) read as a pattern even when each
-    // piece is tiny, so only raised objects use the larger cut-off.
-    const flat = h < 0.12 && y < 0.45;
-    return pixels >= (flat ? MIN_PIXEL_RADIUS : MIN_RAISED_PIXEL_RADIUS) ? pixels : 0;
+    // piece is tiny, so only raised objects use the larger cut-off. Landmarks (bus shelter roofs
+    // and signs) keep the smaller one so students can find them from the overview.
+    const small = (h < 0.12 && y < 0.45) || o.landmark;
+    return pixels >= (small ? MIN_PIXEL_RADIUS : MIN_RAISED_PIXEL_RADIUS) ? pixels : 0;
   };
 }
 // Software WebGL (SwiftShader, llvmpipe, Microsoft's Basic Render Driver) shades every pixel on

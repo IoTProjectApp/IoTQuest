@@ -249,6 +249,7 @@ const DEVICE_RADIUS = 0.3,
 export const roomHalf = (room) => (room[4] ? [room[4][0] / 2, room[4][1] / 2] : ROOM_HALF);
 // The floor a student can stand on at a community workstation (rooms are [name, x, z, ...]).
 export function communityRoomBounds(room) {
+  if (room[3]?.bounds) return { ...room[3].bounds };
   return { minX: room[1] - 2.29, maxX: room[1] + 2.29, minZ: room[2] - 2.4, maxZ: room[2] + 2.4 };
 }
 export function deviceSpots(devices, areas, colliders = [], rooms = []) {

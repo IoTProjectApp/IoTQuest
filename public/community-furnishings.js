@@ -1,3 +1,4 @@
+import { furnishNewAreas } from './new-area-furniture.js';
 // Shared metre-scale furniture and equipment. Materials use the existing lighting shader.
 export const furnishingMaterials = {
   timber: { color: '#b18d69', roughness: 0.72 },
@@ -15,7 +16,7 @@ export function furnishCommunity(model, { sim, origin, areas, objects }) {
   let group;
   const part = (shape, x, y, z, w, h, d, material, color, extra = {}) => {
     const finish = furnishingMaterials[material];
-    const m = model.mesh(shape, [origin.x + x, y, z], [w, h, d], color || finish.color, {
+    const m = model.mesh(shape, [origin.x + x, y, origin.z + z], [w, h, d], color || finish.color, {
       community: true,
       communityFurnishing: group.id,
       furnishingArea: group.area,
@@ -72,7 +73,9 @@ export function furnishCommunity(model, { sim, origin, areas, objects }) {
       areas.some((a) => {
         const r = model.rooms.find((r) => r[0] === a[0]);
         return (
-          r && Math.abs(x + origin.x - r[1]) < w / 2 + 2.59 && Math.abs(z - r[2]) < d / 2 + 2.7
+          r &&
+          Math.abs(x + origin.x - r[1]) < w / 2 + 2.59 &&
+          Math.abs(z + origin.z - r[2]) < d / 2 + 2.7
         );
       })
     )
@@ -81,7 +84,7 @@ export function furnishCommunity(model, { sim, origin, areas, objects }) {
       model.colliders.some(
         (o) =>
           Math.abs(x + origin.x - o.x) < (w + o.w) / 2 + 0.08 &&
-          Math.abs(z - o.z) < (d + o.d) / 2 + 0.08,
+          Math.abs(z + origin.z - o.z) < (d + o.d) / 2 + 0.08,
       )
     )
       return false;
@@ -105,7 +108,7 @@ export function furnishCommunity(model, { sim, origin, areas, objects }) {
       id,
       area,
       parts: [],
-      footprint: { x: origin.x + x, z, w, d },
+      footprint: { x: origin.x + x, z: origin.z + z, w, d },
       reusedFootprint: reuse,
     };
     groups.push(group);
@@ -123,7 +126,7 @@ export function furnishCommunity(model, { sim, origin, areas, objects }) {
         m.shape === 'box' &&
         Math.abs(m.pos[0] - origin.x - x) < 0.001 &&
         Math.abs(m.pos[1] - y) < 0.001 &&
-        Math.abs(m.pos[2] - z) < 0.001,
+        Math.abs(m.pos[2] - origin.z - z) < 0.001,
     );
     if (old)
       for (const list of [objects, model.objects]) {
@@ -178,7 +181,9 @@ export function furnishCommunity(model, { sim, origin, areas, objects }) {
   for (const b of sim.map.buildings) {
     const area = areas.find((a) => a[3]?.communityType === b.type)?.[0];
     if (!area) continue;
-    if (b.residential) {
+    if (b.civic || b.recreation) {
+      continue; // Dedicated furniture below follows each civic room's footprint.
+    } else if (b.residential) {
       const x = b.x - 3.2,
         z = b.z - 1.4;
       begin(b.type + ':sofa', area, x, z, 2.2, 1.3, true);
@@ -325,11 +330,24 @@ export function furnishCommunity(model, { sim, origin, areas, objects }) {
       box(37.5, 0.62, 30, 1.8, 0.1, 0.65, 'timber');
       legs(37.5, 30, 1.5, 0.45, 0.57, 0.37);
       box(37.5, 0.98, 29.75, 1.8, 0.7, 0.1, 'timber');
-    } else if (b.type === 'roads' && begin('roads:service-tools', area, -19.5, -15.5, 0.8, 1.3)) {
-      box(-19.5, 0.75, -15.5, 0.8, 1.1, 1.3, 'steel', '#86958b');
-      for (const y of [0.5, 0.85, 1.2]) box(-19.5, y, -14.82, 0.65, 0.035, 0.035, 'steel');
+    } else if (b.type === 'roads' && begin('roads:service-tools', area, 12.5, 16, 0.8, 1.3)) {
+      box(12.5, 0.75, 16, 0.8, 1.1, 1.3, 'steel', '#86958b');
+      for (const y of [0.5, 0.85, 1.2]) box(12.5, y, 16.68, 0.65, 0.035, 0.035, 'steel');
     }
   }
+  for (const area of areas.filter((a) => a[3]?.civicSection)) {
+    const parts = objects.filter(
+      (o) => o.civicSection === area[3].communityType && o.sectionIndicator,
+    );
+    groups.push({
+      id: 'section:' + area[3].communityType,
+      area: area[0],
+      parts,
+      footprint: { x: parts[0].pos[0], z: parts[0].pos[2], w: 1, d: 1 },
+      reusedFootprint: true,
+    });
+  }
+  groups.push(...furnishNewAreas(model, { sim, origin, objects, materials: furnishingMaterials }));
   return { groups, indicators };
 }
 

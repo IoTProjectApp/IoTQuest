@@ -248,7 +248,7 @@ test('reset camera retains the selected room and restores its close-up framing',
   assert.deepEqual(world.target, [expected[0], 0.75, expected[2]]);
   world.resetCamera();
   assert.equal(world.overview, true);
-  assert.equal(world.distance, 130);
+  assert.equal(world.distance, 280);
 });
 test('Sky view uses an eye-height camera and can centre the actual moon in mirrored homes', () => {
   const { world, state } = renderer();
@@ -285,6 +285,10 @@ test('Sky view looks through a visible roof instead of at its underside', () => 
   world.setView('sky');
   world.render(2, 0.016);
   assert.ok(world.model.roofs.every((r) => r.opacity < 0.2));
+  assert.ok(
+    world.model.roofs.filter((r) => r.community).every((r) => r.opacity === 0),
+    'Town roofs disappear in cutaway mode so they do not wash out interior materials',
+  );
   world.setView('world');
   world.render(3, 0.016);
   assert.ok(world.model.roofs.every((r) => r.opacity === 1));
@@ -919,9 +923,9 @@ test('community buildings and road users render in 3D on the world simulation cl
   const c = world.model.community;
   assert.ok(c.objects.length > 300);
   assert.ok(world.model.colliders.some((b) => b.community));
-  assert.equal(world.target[0], (c.origin.x + 44) / 2);
+  assert.equal(world.target[0], c.origin.x + 72);
   const factory = c.sim.map.buildings.find((b) => b.type === 'factory');
-  assert.ok(world.project([c.origin.x + factory.x, 4, factory.z]).visible);
+  assert.ok(world.project([c.origin.x + factory.x, 4, c.origin.z + factory.z]).visible);
   for (let i = 1; i <= 100; i++) {
     state.simClockMs = i * 200;
     world.render(i * 0.2, 0.016);
@@ -991,8 +995,8 @@ test('normal World view includes the original home and factory', () => {
   for (let i = 0; i < 60; i++) world.render(i * 0.016, 0.016);
   const home = c.sim.map.buildings.find((b) => b.type === 'home'),
     factory = c.sim.map.buildings.find((b) => b.type === 'factory');
-  assert.ok(world.project([home.x + c.origin.x, 2, home.z]).visible);
-  assert.ok(world.project([factory.x + c.origin.x, 4, factory.z]).visible);
+  assert.ok(world.project([home.x + c.origin.x, 2, c.origin.z + home.z]).visible);
+  assert.ok(world.project([factory.x + c.origin.x, 4, c.origin.z + factory.z]).visible);
   assert.notDeepEqual(world.move(state.player, 'up', 1), state.player, 'Property walking works');
 });
 
@@ -1015,11 +1019,11 @@ test('native factory components use normal GPIO wiring and the main controller d
   assert.equal(c.sim.outputs[7], 1);
   assert.equal(world.deviceObjects.length, 4);
   for (const device of world.deviceObjects) {
-    assert.ok(device.x > 40);
+    assert.ok(Math.abs(device.x - (c.origin.x - 25)) < 12.5);
     assert.equal(collides(device.x, device.z, world.model.colliders, 0.3), false);
   }
   const moved = world.move(state.player, 'left', 1);
-  assert.ok(toWorld(moved)[0] > 40);
+  assert.ok(Math.abs(toWorld(moved)[0] - (c.origin.x - 25)) < 12.5);
   state.env.temp = 45;
   state.outputs = runtime.step(state.env).outputs;
   state.simClockMs = 200;
@@ -1048,7 +1052,11 @@ test('clicking a rendered building selects it while orbit drags and cancellation
   canvas.getBoundingClientRect = () => ({ left: 20, top: 40 });
   world.render(0, 0.016);
   const b = world.model.community.sim.map.buildings.find((b) => b.type === 'factory');
-  const p = world.project([world.model.community.origin.x + b.x, 3, b.z]);
+  const p = world.project([
+    world.model.community.origin.x + b.x,
+    3,
+    world.model.community.origin.z + b.z,
+  ]);
   assert.equal(world.pickCommunityBuilding(p.x, p.y), 'factory');
   const e = { button: 0, pointerId: 1, clientX: p.x + 20, clientY: p.y + 40 };
   canvas.listeners.get('pointerdown')(e);
@@ -1093,12 +1101,12 @@ test('a click between buildings selects nothing, and a wall in front of another 
   const { origin, sim } = world.model.community;
   const factory = sim.map.buildings.find((b) => b.type === 'factory');
   // The road beside the factory (between it and the next block) is not a building.
-  const road = world.project([origin.x + factory.x + factory.w / 2 + 3, 0, factory.z]);
+  const road = world.project([origin.x + factory.x + factory.w / 2 + 3, 0, origin.z + factory.z]);
   assert.ok(road.visible);
   assert.equal(world.pickCommunityBuilding(road.x, road.y), null);
   assert.equal(world.pickCommunityBuilding(-1000, 100), null);
   // Where the factory's front wall covers ground behind it on screen, the factory wins.
-  const wall = world.project([origin.x + factory.x, 4.5, factory.z + factory.d / 2]);
+  const wall = world.project([origin.x + factory.x, 4.5, origin.z + factory.z + factory.d / 2]);
   assert.equal(world.pickCommunityBuilding(wall.x, wall.y), 'factory');
 });
 
@@ -1118,7 +1126,7 @@ test('community buildings can be clicked when zoomed in and when partly off the 
     world.render(0, 0.016);
     let checked = 0;
     for (const b of sim.map.buildings) {
-      const p = world.project([origin.x + b.x, roofHeight(b), b.z]);
+      const p = world.project([origin.x + b.x, roofHeight(b), origin.z + b.z]);
       if (!onScreen(p)) continue;
       checked++;
       assert.equal(world.pickCommunityBuilding(p.x, p.y), b.type, `${b.type} at zoom ${zoom}`);
@@ -1128,13 +1136,13 @@ test('community buildings can be clicked when zoomed in and when partly off the 
   // Close up on the factory: its corners are off screen, but its roof fills the view.
   const factory = sim.map.buildings.find((b) => b.type === 'factory');
   for (const distance of [30, 15, 8, 5]) {
-    world.target = [origin.x + factory.x, 0.5, factory.z];
+    world.target = [origin.x + factory.x, 0.5, origin.z + factory.z];
     world.distance = distance;
     world.render(0, 0.016);
     const corner = world.project([
       origin.x + factory.x - factory.w / 2,
       5,
-      factory.z - factory.d / 2,
+      origin.z + factory.z - factory.d / 2,
     ]);
     if (distance <= 15) assert.ok(!onScreen(corner), 'a corner is off screen');
     for (const [x, y] of distance > 8
@@ -1158,7 +1166,11 @@ test('community buildings can be clicked when zoomed in and when partly off the 
       for (let i = -3; i <= 3; i++)
         for (let j = -3; j <= 3; j++)
           samples.push(
-            world.project([origin.x + b.x + (i * b.w) / 7, roofHeight(b), b.z + (j * b.d) / 7]),
+            world.project([
+              origin.x + b.x + (i * b.w) / 7,
+              roofHeight(b),
+              origin.z + b.z + (j * b.d) / 7,
+            ]),
           );
       const shown = samples.filter(onScreen);
       if (!shown.length || shown.length === samples.length) continue;
@@ -1355,7 +1367,7 @@ test('two fingers pinch to zoom without orbiting, clicking or jumping the camera
   assert.equal(world.pitch, pitch);
   // Pinching in zooms back out, within the view's limits.
   fire('pointermove', { pointerId: 2, clientX: 301, clientY: 200 });
-  assert.equal(world.distance, 220);
+  assert.equal(world.distance, 330);
   // Lifting the first finger hands the drag to the second, from where it is: no jump.
   fire('pointerup', { pointerId: 1, clientX: 300, clientY: 200 });
   assert.equal(world.drag.id, 2);
@@ -1407,4 +1419,18 @@ test('a servo turned toward 180° or set HIGH lowers the 3D blind, matching the 
   assert.equal(angle(90, { 18: 180 }), Math.PI / 2);
   assert.equal(angle(180, { 18: 180 }), Math.PI);
   assert.ok(Math.abs(angle(512, { 18: 1023 }) - Math.PI / 2) < 0.01, 'PWM duty follows its scale');
+});
+
+test('each neighbour garden is selectable as its own house area', () => {
+  const { world } = renderer();
+  const { origin, residences } = world.model.community;
+  for (const { building: b } of residences) {
+    world.target = [origin.x + b.x, 0.5, origin.z + b.z];
+    world.distance = 35;
+    world.pitch = 1.5;
+    world.snapCamera();
+    world.render(0, 0.016);
+    const garden = world.project([origin.x + b.x + 5.5, 0.02, origin.z + b.z + 8]);
+    assert.equal(world.pickCommunityBuilding(garden.x, garden.y), b.type, b.name);
+  }
 });

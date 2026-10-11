@@ -1,3 +1,10 @@
+import { connectFarmHomeCars } from './farm-home-access.js';
+import { connectHomeDriveway, drawHomeStreetDriveway } from './home-driveway.js';
+import { recreationLots, buildRecreationAreas } from './community-recreation.js';
+import { integrateRegionalNeighbours } from './regional-neighbourhood.js';
+import { buildTrafficSignals, trafficAspect } from './traffic-signals.js';
+import { connectFarmDriveway, connectFarmFootpath, drawFarmDriveway } from './farm-driveway.js';
+import { civicLots, buildCivicBuildings, updateCivicBuildings } from './community-civic.js';
 import { furnishCommunity, updateCommunityEquipment } from './community-furnishings.js';
 import { buildCommunityResidences, updateResidentialDevices } from './community-residences.js';
 import { detailCommunity } from './community-details.js';
@@ -6,8 +13,8 @@ import { CommunitySimulation } from './community-sim.js';
 import { residentialLots } from './community-residences.js';
 import { fromWorld } from './world-math.js';
 
-// Expand the same scene beside the original property; keep its home and garden intact.
-export const COMMUNITY_ORIGIN = { x: 80, z: 0 };
+// Place the original home in the town’s residential block.
+export const COMMUNITY_ORIGIN = { x: 24, z: 24 };
 // Where students install and program in each community building: [area name, x, z] from the
 // community origin. Residences use their lot centres.
 export const communityStations = {
@@ -15,23 +22,26 @@ export const communityStations = {
   office: ['Business office', 25, -11.5],
   warehouse: ['Loading bay', 25, 27],
   factory: ['Factory floor', -25, 24],
-  roads: ['Community roads', -16, -16],
+  roads: ['Community roads', 11, 11],
   parking: ['Parking area', 40, 34],
+  ...Object.fromEntries(
+    recreationLots.map((b) => [b.type, [b.name, b.stationX ?? b.x - 9, b.stationZ ?? b.z]]),
+  ),
+  ...Object.fromEntries(
+    civicLots.map((b) => [b.type, [b.name, b.type === 'school' ? b.x - 5 : b.x, b.z]]),
+  ),
   ...Object.fromEntries(residentialLots.map((b) => [b.type, [b.name, b.x, b.z]])),
 };
 export function addCommunityWorld(model, location) {
   const sim = new CommunitySimulation(location),
-    origin = {
-      x: Math.max(
-        80,
-        ...model.colliders.map((c) => c.x + c.w / 2 + 68),
-        ...model.objects.filter((o) => o.neighbour).map((o) => o.pos[0] + o.size[0] / 2 + 62),
-      ),
-      z: 0,
-    };
+    origin = { ...COMMUNITY_ORIGIN, x: model.farm ? 96 : COMMUNITY_ORIGIN.x };
+  const neighbourAreas = integrateRegionalNeighbours(model, sim, origin);
+  if (model.farm) connectFarmDriveway(sim, origin);
+  connectHomeDriveway(model, sim, origin);
+  if (model.farm) connectFarmHomeCars(model, sim, origin);
   const home = sim.map.buildings.find((b) => b.type === 'home');
   home.x = -origin.x;
-  home.z = 0;
+  home.z = -origin.z;
   home.w = 33.8;
   home.d = 27.5;
   home.existingProperty = true;
@@ -45,39 +55,58 @@ export function addCommunityWorld(model, location) {
     }
   for (const id of Object.keys(walks.edges))
     walks.edges[id] = walks.edges[id].filter((e) => walks.nodes[e.to]);
-  home.node = walks.node('existing-home', -origin.x, 10);
-  const gate = walks.node('home-front-gate', -origin.x, 13),
-    street = walks.node('home-public-path', -56, 13);
+  home.node = walks.node('existing-home', -origin.x, 10 - origin.z);
+  const gate = walks.node('home-front-gate', -origin.x, 13 - origin.z),
+    street = walks.node('home-public-path', -origin.x, -8);
   for (const [a, b] of [
     [home.node, gate],
     [gate, street],
-    [street, '0:1/-1/1'],
+    [street, '0:1/1/-1'],
   ]) {
     walks.edge(a, b, { originalProperty: true });
     walks.edge(b, a, { originalProperty: true });
   }
+  if (model.farm) connectFarmFootpath(sim, origin);
   sim.map.viewBounds = {
-    x: Math.min(-60, -origin.x - 18),
-    z: -60,
-    w: 60 - Math.min(-60, -origin.x - 18),
-    h: 120,
+    x: Math.min(-60, -origin.x - (model.farm ? 38 : 18)),
+    z: -110,
+    w: 206 - Math.min(-60, -origin.x - (model.farm ? 38 : 18)),
+    h: 218,
   };
-  // Retain scenery around the enlarged neighbourhood rather than underneath its streets.
-  for (const mesh of model.objects)
+  // Keep scenery around the shared town boundary, with no distant second island.
+  const waterOffset = model.farm ? -16 : 8;
+  for (const mesh of model.objects) {
+    if (!mesh.landscape || mesh.landscapeGround || mesh.flyingBird || mesh.wildlife) continue;
+    if (['mountain', 'snowcap'].includes(mesh.terrainFeature)) {
+      mesh.pos[0] += origin.x;
+      mesh.pos[2] -= 50;
+    } else if (mesh.pos[0] > 18)
+      mesh.pos[0] +=
+        (mesh.terrainFeature === 'foothill' ? 201 : 186) + origin.x - COMMUNITY_ORIGIN.x;
+    else if (model.farm && mesh.terrainFeature === 'foothill') mesh.pos[0] -= 20;
     if (
-      mesh.landscape &&
-      !mesh.landscapeGround &&
-      !mesh.flyingBird &&
-      !mesh.wildlife &&
-      mesh.pos[0] > 18
+      [
+        'river',
+        'tributary',
+        'river-bank',
+        'water-flow',
+        'lake',
+        'lake-bank',
+        'lake-ripple',
+        'shore-rock',
+      ].includes(mesh.terrainFeature)
     )
-      mesh.pos[0] += 160;
+      mesh.pos[0] += waterOffset;
+  }
+  for (const water of model.landscape?.waters || []) water.x += waterOffset;
   for (const animal of model.landscape?.wildlife || []) {
-    animal.x += 160;
-    animal.paddock = animal.paddock.map((v, i) => (i % 2 === 0 ? v + 160 : v));
-    if (animal.bounds) animal.bounds = animal.bounds.map((v, i) => (i % 2 === 0 ? v + 160 : v));
-    if (animal.target) animal.target[0] += 160;
-    for (const part of animal.parts) part.mesh.pos[0] += 160;
+    const wildlifeOffset = 186 + origin.x - COMMUNITY_ORIGIN.x;
+    animal.x += wildlifeOffset;
+    animal.paddock = animal.paddock.map((v, i) => (i % 2 === 0 ? v + wildlifeOffset : v));
+    if (animal.bounds)
+      animal.bounds = animal.bounds.map((v, i) => (i % 2 === 0 ? v + wildlifeOffset : v));
+    if (animal.target) animal.target[0] += wildlifeOffset;
+    for (const part of animal.parts) part.mesh.pos[0] += wildlifeOffset;
   }
   const objects = [],
     lights = [],
@@ -111,7 +140,7 @@ export function addCommunityWorld(model, location) {
       : ['tropical', 'monsoon'].includes(location?.climate)
         ? '#8ba982'
         : '#a1af8a';
-  box(0, -0.55, 0, 122, 1, 122, ground, { surface: arid ? 'soil' : 'grass' });
+  box(72, -0.55, 0, 266, 1, 218, ground, { surface: arid ? 'soil' : 'grass' });
   for (const [a, b] of sim.map.segments) {
     const horizontal = a.z === b.z,
       x = (a.x + b.x) / 2,
@@ -135,6 +164,7 @@ export function addCommunityWorld(model, location) {
   }
   for (const j of sim.map.junctions.filter((j) => j.id !== 'yard'))
     box(j.x, 0.09, j.z, 12, 0.05, 12, '#414950');
+  if (model.farm) model.farm.driveway = drawFarmDriveway({ box, origin, sim });
   for (const c of sim.map.crossings) {
     const a = sim.map.walks.nodes[c.a],
       b = sim.map.walks.nodes[c.b],
@@ -155,6 +185,7 @@ export function addCommunityWorld(model, location) {
     for (const edge of edges) {
       if (
         id > edge.to ||
+        (edge.originalProperty && model.homeDriveway && !model.farm) ||
         !(
           id.includes(':entrance:') ||
           edge.to.includes(':entrance:') ||
@@ -185,7 +216,8 @@ export function addCommunityWorld(model, location) {
           : b.type === 'office'
             ? '#b6c0bb'
             : '#b88b72';
-    if (b.type === 'home' || b.residential) continue; // The regional home already exists in this scene.
+    if (b.type === 'home' || b.residential || b.civic || b.recreation || b.regionalNeighbour)
+      continue; // The regional home already exists in this scene.
     const h = b.type === 'office' ? 6 : b.type === 'factory' ? 5 : 4;
     // Cutaway walls have actual door gaps; floors and furniture remain visible from above.
     box(
@@ -239,26 +271,11 @@ export function addCommunityWorld(model, location) {
     }
   }
   barriers.push(box(30, 0.85, 37, 0.15, 0.18, 5, '#ddaa54'));
-  for (const [x, z, axis] of [
-    [-12, -5, 'EW'],
-    [12, 5, 'EW'],
-    [5, -12, 'NS'],
-    [-5, 12, 'NS'],
-  ]) {
-    box(x, 1.4, z, 0.15, 2.8, 0.15, '#536466');
-    box(x, 2.8, z, 0.6, 1.3, 0.35, '#293c40');
-    // Three separate lenses make the signal readable at a glance, including at night.
-    signals.push({
-      axis,
-      green: sphere(x, 3.27, z + 0.22, 0.14, '#285c3c'),
-      amber: sphere(x, 3, z + 0.22, 0.14, '#76531e'),
-      red: sphere(x, 2.73, z + 0.22, 0.14, '#702e2c'),
-    });
-  }
-  walks.node('road-control-approach', -16, -8);
-  walks.node('road-control-station', -16, -16);
+  signals.push(...buildTrafficSignals({ sim, box }));
+  walks.node('road-control-approach', 11, 8);
+  walks.node('road-control-station', 11, 11);
   for (const [a, b] of [
-    ['1:1/-1/-1', 'road-control-approach'],
+    ['1:1/1/1', 'road-control-approach'],
     ['road-control-approach', 'road-control-station'],
   ]) {
     walks.edge(a, b);
@@ -281,25 +298,58 @@ export function addCommunityWorld(model, location) {
     type: 'roads',
     name: 'Road control station',
     district: 'Public infrastructure',
-    x: -16,
-    z: -16,
+    x: 11,
+    z: 11,
     w: 5,
     d: 5,
     node: 'road-control-station',
   });
-  box(-18, 1, -18, 1.5, 2, 1.5, '#647e7c', { solid: true });
+  box(9, 1, 13, 1.5, 2, 1.5, '#647e7c', { solid: true });
   const areas = Object.entries(communityStations).map(([type, [name, x, z]]) => {
-    const point = fromWorld(origin.x + x, z);
-    model.rooms.push([name, origin.x + x, z, { community: true, type }]);
-    return [name, point.x, point.y, { communityType: type }];
+    const point = fromWorld(origin.x + x, origin.z + z);
+    const recreationLot = recreationLots.find((b) => b.type === type);
+    const bounds = recreationLot
+      ? {
+          minX: origin.x + recreationLot.x - recreationLot.w / 2 + 0.6,
+          maxX: origin.x + recreationLot.x + recreationLot.w / 2 - 0.6,
+          minZ: origin.z + recreationLot.z - recreationLot.d / 2 + 0.6,
+          maxZ: origin.z + recreationLot.z + recreationLot.d / 2 - 0.6,
+        }
+      : undefined;
+    model.rooms.push([
+      name,
+      origin.x + x,
+      origin.z + z,
+      {
+        community: true,
+        type,
+        ...(recreationLot ? { district: recreationLot.district } : {}),
+        ...(bounds ? { bounds } : {}),
+      },
+    ]);
+    return [
+      name,
+      point.x,
+      point.y,
+      {
+        communityType: type,
+        ...(recreationLots.some((b) => b.type === type)
+          ? { recreation: true, district: recreationLots.find((b) => b.type === type).district }
+          : {}),
+      },
+    ];
   });
+  areas.push(...neighbourAreas);
   const originalFloorHeight = model.floorHeight;
   model.floorHeight = (x, z) =>
     sim.map.buildings.some(
       (b) =>
-        (['shop', 'office', 'warehouse', 'factory'].includes(b.type) || b.residential) &&
+        (['shop', 'office', 'warehouse', 'factory'].includes(b.type) ||
+          b.residential ||
+          b.civic ||
+          b.recreation) &&
         Math.abs(x - origin.x - b.x) < b.w / 2 &&
-        Math.abs(z - b.z) < b.d / 2,
+        Math.abs(z - origin.z - b.z) < b.d / 2,
     )
       ? 0.2
       : originalFloorHeight?.(x, z) || 0;
@@ -311,9 +361,27 @@ export function addCommunityWorld(model, location) {
   ];
   const monitor = box(-12.1, 1.8, 24, 0.15, 1.4, 2, '#385a62');
   const gauge = box(-12, 1.8, 24, 0.16, 0.2, 0.9, '#83c99f');
+  const civic = buildCivicBuildings(model, { sim, origin, box, objects });
+  const recreation = buildRecreationAreas(model, { sim, origin, box });
+  const sections = civic.flatMap((building) => building.sections);
+  areas.push(...sections.map((section) => section.area));
   const residences = buildCommunityResidences(model, { sim, origin, location, box, objects });
   detailCommunity(model, { sim, origin, location, box, objects });
+  drawHomeStreetDriveway(model, { origin, box });
   const furnishings = furnishCommunity(model, { sim, origin, areas, objects });
+  for (const item of recreation)
+    furnishings.groups.push({
+      id: 'recreation:' + item.building.type,
+      area: item.building.name,
+      parts: item.furniture,
+      footprint: {
+        x: origin.x + item.building.x,
+        z: origin.z + item.building.z,
+        w: item.building.w,
+        d: item.building.d,
+      },
+      reusedFootprint: true,
+    });
   // Pools are reused: no growing mesh arrays as people and vehicles finish trips.
   const vehicles = Array.from({ length: 30 }, () => {
     const parts = {
@@ -460,7 +528,7 @@ export function addCommunityWorld(model, location) {
       name: worker.role,
       role: worker.role,
       x: origin.x + worker.x,
-      z: worker.z,
+      z: origin.z + worker.z,
       parts,
       color: worker.shirt,
       area: worker.area,
@@ -479,6 +547,9 @@ export function addCommunityWorld(model, location) {
     origin,
     areas,
     residences,
+    civic,
+    recreation,
+    sections,
     furnishings,
     rain,
     objects,
@@ -501,6 +572,7 @@ export function updateCommunityWorld(model, state, seconds) {
   const c = model.community;
   if (!c) return;
   const { sim, origin } = c;
+  updateCivicBuildings([...c.civic, ...c.recreation], state);
   sim.rain = state.env.rain || 0;
   sim.temperature = state.communityMission
     ? (state.env.temp ?? 24)
@@ -509,7 +581,13 @@ export function updateCommunityWorld(model, state, seconds) {
   sim.initialHour = state.skyStartHour ?? sim.initialHour ?? 8;
   if (state.communityMission) {
     sim.stopController();
-    applyNativeCommunityOutputs(sim, state.devices, state.outputs, state.running);
+    applyNativeCommunityOutputs(
+      sim,
+      state.devices,
+      state.outputs,
+      state.running,
+      c.sections.map((section) => section.name),
+    );
   } else if (sim.nativeActive) {
     sim.nativeActive = false;
     if (sim.nativePhaseSignature) sim.signals.pending = null;
@@ -530,7 +608,7 @@ export function updateCommunityWorld(model, state, seconds) {
     if (!v) return;
     parts.shadow.opacity = 0.18;
     parts.shadow.size = [v.length + 0.2, 0.018, v.width + 0.3];
-    parts.shadow.pos = [origin.x + v.x, 0.135, v.z];
+    parts.shadow.pos = [origin.x + v.x, 0.135, origin.z + v.z];
     parts.shadow.rotation = [0, -v.angle, 0];
     const car = v.kind === 'car',
       truck = v.kind === 'truck';
@@ -539,7 +617,7 @@ export function updateCommunityWorld(model, state, seconds) {
       mesh.pos = [
         origin.x + v.x + Math.cos(v.angle) * dx - Math.sin(v.angle) * dz,
         y,
-        v.z + Math.sin(v.angle) * dx + Math.cos(v.angle) * dz,
+        origin.z + v.z + Math.sin(v.angle) * dx + Math.cos(v.angle) * dz,
       ];
       mesh.rotation = [0, -v.angle, 0];
     };
@@ -578,7 +656,7 @@ export function updateCommunityWorld(model, state, seconds) {
     if (!p) return;
     parts.shadow.opacity = 0.16;
     parts.shadow.size = [0.65, 0.015, 0.5];
-    parts.shadow.pos = [origin.x + p.x, 0.18, p.z];
+    parts.shadow.pos = [origin.x + p.x, 0.18, origin.z + p.z];
     const walking = p.status === 'Walking',
       phase = walking && !state.reduced ? Math.sin(sim.time * 8 + p.id) : 0;
     const shirt = ['#72857c', '#ab7864', '#648396', '#9b9173', '#7a7189'][p.id % 5];
@@ -586,7 +664,7 @@ export function updateCommunityWorld(model, state, seconds) {
       mesh.pos = [
         origin.x + p.x - Math.sin(p.angle) * side + Math.cos(p.angle) * ahead,
         y,
-        p.z + Math.cos(p.angle) * side + Math.sin(p.angle) * ahead,
+        origin.z + p.z + Math.cos(p.angle) * side + Math.sin(p.angle) * ahead,
       ];
       mesh.rotation = [0, Math.PI / 2 - p.angle, 0];
     };
@@ -612,10 +690,10 @@ export function updateCommunityWorld(model, state, seconds) {
       mesh.color = active ? lit : unlit;
       mesh.emission = active ? 1 : 0;
     };
-    const phase = sim.signals.phase;
-    activeColor(s.red, phase === 'RED', '#ff5147', '#702e2c');
-    activeColor(s.amber, phase === 'AMBER', '#ffc247', '#76531e');
-    activeColor(s.green, phase === s.axis, '#5bef82', '#285c3c');
+    const aspect = trafficAspect(sim.signals.phase, s.axis, sim.signals.next);
+    activeColor(s.red, aspect.red, '#ff5147', '#702e2c');
+    activeColor(s.amber, aspect.amber, '#ffc247', '#76531e');
+    activeColor(s.green, aspect.green, '#5bef82', '#285c3c');
   }
   for (const light of c.lights) light.emission = sim.outputs[3] ? 1 : 0;
   for (const m of c.machinery) {

@@ -1,3 +1,6 @@
+import { recreationLots } from '../public/community-recreation.js';
+import { neighbourProfiles, migrateNeighbourAreas } from '../public/neighbour-profiles.js';
+import { civicLots } from '../public/community-civic.js';
 import { residentialLots } from '../public/community-residences.js';
 import { communityStations, COMMUNITY_ORIGIN } from '../public/community-world.js';
 import { boundaryScenarios } from '../public/quest-boundaries.js';
@@ -338,6 +341,9 @@ function harness(
     DEFAULT_OBSERVER,
     missions,
     residentialLots,
+    civicLots,
+    recreationLots,
+    migrateNeighbourAreas,
     boundaryScenarios,
     communityStations,
     COMMUNITY_ORIGIN,
@@ -2292,7 +2298,7 @@ test('paused 3D building and area clicks immediately place the technician and op
   const h = harness(),
     world = attachRenderedWorld(h);
   h.api.labState().paused = true;
-  for (const area of world.model.community.areas) {
+  for (const area of world.model.community.areas.filter((a) => !a[3]?.civicSection)) {
     h.document.getElementById('freeBtn').click();
     h.api.setLayout('world');
     h.api.changeView('world');
@@ -2476,10 +2482,10 @@ for (const language of ['cpp', 'python'])
   test(`new residences support resident conversations and normal installation/programming (${language})`, () => {
     const h = harness(),
       world = attachRenderedWorld(h);
-    for (const b of residentialLots) {
+    for (const b of [...residentialLots, ...civicLots]) {
       h.document
         .querySelectorAll('[data-section-npc]')
-        .find((n) => n.dataset.sectionNpc === 'residence:' + b.type)
+        .find((n) => n.dataset.sectionNpc === (b.civic ? 'civic:' : 'residence:') + b.type)
         .click();
       assert.equal(
         h.document.getElementById('modalTitle').textContent,
@@ -2509,20 +2515,29 @@ for (const language of ['cpp', 'python'])
       world.render(0, 0.016);
       const out = h.api.project().devices.find((d) => d.output);
       assert.equal(h.api.getOutputs()[out.pin], 1);
-      const home = world.model.community.residences.find((h) => h.building.type === b.type);
+      const home = [...world.model.community.residences, ...world.model.community.civic].find(
+        (h) => h.building.type === b.type,
+      );
       if (b.type === 'residence1') assert.equal(home.lamp.emission, 1);
       if (b.type === 'residence3') {
         assert.ok(home.water.every((d) => d.opacity > 0));
         const pump = world.deviceObjects.find((d) => d.device.id === 'pump');
         assert.ok(
-          pump.parts.every((d) => d.pos[0] > 40),
+          pump.parts
+            .filter((d) => d.droplet !== undefined)
+            .every(
+              (d) =>
+                Math.abs(d.pos[0] - (world.model.community.origin.x + b.x - 3.8)) < 1.2 &&
+                d.pos[2] > world.model.community.origin.z + b.z + b.d / 2,
+            ),
           'Water belongs to the new garden',
         );
       }
       h.api.stop(false);
       world.render(0.2, 0.016);
       assert.equal(home.lamp.emission, 0);
-      assert.ok(home.water.every((d) => d.opacity === 0));
+      if (b.civic) assert.equal(home.indicator.emission, 0);
+      else assert.ok(home.water.every((d) => d.opacity === 0));
       h.api.testSolution();
       assert.equal(h.api.getPassed(), true, q.title);
     }
@@ -2949,4 +2964,70 @@ test('the Teacher dashboard restores an import backup and backs up the current w
   assert.equal(JSON.parse(h.storage.get('iotquest-v1')).projects[0].code.cpp, mine);
   // Plain projects have nothing to restore.
   assert.equal(h.api.restoreBackup('legacy', '0'), false);
+});
+
+test('previously decorative Melbourne neighbours open their own labeled free-build sections', async () => {
+  const h = harness();
+  await h.api.enterLocation('fitzroy', fallbackWeather(locations.find((l) => l.id === 'fitzroy')));
+  const world = attachRenderedWorld(h);
+  world.setRegion('fitzroy');
+  h.api.attachWorld(world);
+  for (const b of world.model.community.sim.map.buildings.filter((b) => b.regionalNeighbour)) {
+    h.api.selectCommunityBuilding(b.type);
+    assert.equal(world.indoorArea, b.name);
+    const p = toWorld(h.api.state.player),
+      bounds = world.nativeAreaBounds();
+    assert.ok(p[0] >= bounds.minX && p[0] <= bounds.maxX);
+    assert.ok(
+      p[2] >= bounds.minZ - 1e-9 && p[2] <= bounds.maxZ + 1e-9,
+      JSON.stringify({ name: b.name, p, bounds }),
+    );
+    assert.equal(collides(p[0], p[2], world.model.colliders), false, b.name + ' yard landing');
+    assert.ok(h.api.allAreas().some((a) => a[0] === b.name));
+    const resident = h.document
+      .querySelectorAll('[data-section-npc]')
+      .find((el) => el.dataset.sectionNpc === 'neighbour:' + b.type);
+    assert.ok(resident, b.name + ' resident label');
+    resident.click();
+    assert.equal(h.document.getElementById('modalTitle').textContent, 'A chat with ' + b.resident);
+    h.document.getElementById('closeModal').click();
+    h.api.installDialog('led');
+    assert.equal(h.document.getElementById('installArea').value, b.name);
+    h.document.getElementById('closeModal').click();
+  }
+});
+
+test('classroom and police section buttons select their own area, staff and installation location', () => {
+  const h = harness(),
+    world = attachRenderedWorld(h);
+  for (const section of world.model.community.sections) {
+    h.api.enterArea(
+      world.model.community.civic.find((c) => c.building.type === section.parentType).building.name,
+    );
+    world.render(0, 0.016);
+    h.api.projectWorldLabels(world);
+    const button = h.document
+      .querySelectorAll('[data-civic-section]')
+      .find((el) => el.dataset.civicSection === section.type);
+    assert.ok(button, section.name);
+    button.click();
+    assert.equal(world.indoorArea, section.name);
+    const p = toWorld(h.api.state.player),
+      bounds = world.nativeAreaBounds();
+    assert.ok(p[0] >= bounds.minX && p[0] <= bounds.maxX);
+    assert.ok(p[2] >= bounds.minZ && p[2] <= bounds.maxZ);
+    assert.equal(collides(p[0], p[2], world.model.colliders), false);
+    const resident = h.document
+      .querySelectorAll('[data-section-npc]')
+      .find((el) => el.dataset.sectionNpc === 'civic-section:' + section.type);
+    resident.click();
+    assert.equal(
+      h.document.getElementById('modalTitle').textContent,
+      'A chat with ' + section.resident,
+    );
+    h.document.getElementById('closeModal').click();
+    h.api.installDialog('led');
+    assert.equal(h.document.getElementById('installArea').value, section.name);
+    h.document.getElementById('closeModal').click();
+  }
 });

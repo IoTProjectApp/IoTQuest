@@ -1,4 +1,7 @@
+import { civicLots } from './community-civic.js';
 import { residentialLots } from './community-residences.js';
+import { recreationLots } from './community-recreation.js';
+import { neighbourProfiles } from './neighbour-profiles.js';
 // These quests are appended, so existing home/farm project and completion indices stay stable.
 export const communityComponents = [
   {
@@ -302,8 +305,90 @@ communityQuests.push(
     ['Moisture', 'Irrigation', 'Water conservation'],
   ),
 );
+// Append new projects to preserve the saved indices of all existing quests.
+communityQuests.push(
+  ...residentialLots.slice(3).map((b) =>
+    quest(
+      b.type,
+      b.name,
+      b.name + ' Porch Lighting',
+      ['ldr', 'led'],
+      ['light < 1800'],
+      [
+        ['After sunset', { light: 10 }, [1]],
+        ['Daylight', { light: 80 }, [0]],
+        ['At threshold', { light: 1800 / 40.95 }, [0]],
+      ],
+      'Light the porch below light reading 1800 and switch it off at 1800 or above.',
+      ['Light sensors', 'Neighbourhood lighting'],
+    ),
+  ),
+  quest(
+    'hospital',
+    'Community hospital',
+    'Hospital Waiting-Room Comfort',
+    ['temp', 'occupancy', 'fan'],
+    ['temp > 26 && occupied == 1'],
+    [
+      ['Warm occupied room', { temp: 30, occupied: 1 }, [1]],
+      ['Empty room', { temp: 30, occupied: 0 }, [0]],
+      ['Comfortable room', { temp: 24, occupied: 1 }, [0]],
+      ['At threshold', { temp: 26, occupied: 1 }, [0]],
+    ],
+    'Run the waiting-room fan above 26°C while occupied. Turn it off otherwise.',
+    ['Occupancy', 'Temperature', 'Room comfort'],
+  ),
+  quest(
+    'school',
+    'Neighbourhood school',
+    'School Classroom Lighting',
+    ['ldr', 'occupancy', 'led'],
+    ['light < 1800 && occupied == 1'],
+    [
+      ['Dark occupied classroom', { light: 10, occupied: 1 }, [1]],
+      ['Empty classroom', { light: 10, occupied: 0 }, [0]],
+      ['Bright classroom', { light: 80, occupied: 1 }, [0]],
+    ],
+    'Light the classroom below reading 1800 while occupied. Turn it off otherwise.',
+    ['Light sensors', 'Occupancy', 'Energy conservation'],
+  ),
+  quest(
+    'police',
+    'Police station',
+    'Police Equipment-Room Access Alert',
+    ['door', 'button', 'buzzer'],
+    ['door == 1 && armed == 1'],
+    [
+      ['Armed open door', { door: 1, armed: 1 }, [1]],
+      ['Closed door', { door: 0, armed: 1 }, [0]],
+      ['Authorised access', { door: 1, armed: 0 }, [0]],
+    ],
+    'Sound the equipment-room alert only when the door is open and the switch is armed.',
+    ['Digital inputs', 'Access monitoring', 'Logical AND'],
+  ),
+  quest(
+    'fire',
+    'Fire station',
+    'Fire Station Training-Room Heat Alert',
+    ['temp', 'buzzer'],
+    ['temp > 45'],
+    [
+      ['Hot training room', { temp: 50 }, [1]],
+      ['Cool training room', { temp: 25 }, [0]],
+      ['At threshold', { temp: 45 }, [0]],
+    ],
+    'Sound the simulated training-room alert above 45°C and silence it at 45°C or below.',
+    ['Temperature', 'Alerts', 'Boundary tests'],
+  ),
+);
 for (const q of communityQuests) {
   const home = residentialLots.find((b) => b.type === q.communityType);
+  const civic = civicLots.find((b) => b.type === q.communityType);
+  if (civic) {
+    q.resident = civic.resident;
+    q.role = civic.role;
+    q.quote = '“Could you help program our building’s automation?”';
+  }
   if (home) {
     q.resident = home.resident;
     q.role = 'Neighbourhood resident';
@@ -321,11 +406,21 @@ export const nativeOutputChannels = {
   led: 3,
   buzzer: 4,
 };
-export function applyNativeCommunityOutputs(sim, devices, outputs, running) {
+// Devices inside homes, civic buildings, sections, recreation areas and neighbour houses stay
+// local to that building instead of driving the town's shared output channels.
+const privateAreaNames = new Set(
+  [...residentialLots, ...civicLots, ...recreationLots, ...neighbourProfiles].map((b) => b.name),
+);
+export function applyNativeCommunityOutputs(sim, devices, outputs, running, sectionNames = []) {
   sim.nativeActive = true;
   const next = {};
   for (const d of devices)
-    if (d.output && nativeOutputChannels[d.id] && !residentialLots.some((b) => b.name === d.area))
+    if (
+      d.output &&
+      nativeOutputChannels[d.id] &&
+      !privateAreaNames.has(d.area) &&
+      !sectionNames.includes(d.area)
+    )
       next[nativeOutputChannels[d.id]] = Number(outputs[d.pin] || 0);
   sim.outputs = next;
   sim.parkingControlled = devices.some((d) => d.id === 'parkBarrier');
@@ -336,7 +431,8 @@ export function applyNativeCommunityOutputs(sim, devices, outputs, running) {
       .map((d) => ({ trafficEW: 'EW', trafficNS: 'NS', walkPhase: 'WALK' })[d.id]);
     const request = movements.length ? movements : ['RED'],
       signature = request.join(',');
-    if (sim.signals.request(request, sim.occupied('1:1'))) sim.nativePhaseSignature = signature;
+    if (sim.signals.request(request, sim.signalCrossingsOccupied()))
+      sim.nativePhaseSignature = signature;
   } else {
     if (sim.nativePhaseSignature) sim.signals.pending = null;
     sim.nativePhaseSignature = null;

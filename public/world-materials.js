@@ -14,6 +14,7 @@ export const SURFACE = {
   asphalt: 12,
   foliage: 13,
   terrain: 14,
+  tile: 15,
 };
 const mapped = { wood: 'timber', concrete: 'stone', ceramic: 'stone', metal: 'steel' };
 const cache = new WeakMap();
@@ -72,15 +73,18 @@ export function prepareWorldMaterials(model) {
   for (const vehicle of model.community?.vehicles || []) vehicle.glass.surface = 'glass';
   model.visualShadows = [{ x: -5.85, z: -6, w: 15.4, d: 11.2, h: 3, opacity: 0.45 }];
   for (const b of model.community?.sim.map.buildings || [])
-    if (!['home', 'roads', 'parking'].includes(b.type))
+    if (!b.playground && !['home', 'roads', 'parking', 'park', 'basketball'].includes(b.type)) {
+      // A lot may declare a smaller footprint (e.g. the pool's canopy) relative to its centre.
+      const f = b.shadow || { dx: 0, dz: 0, w: b.w, d: b.d };
       model.visualShadows.push({
-        x: model.community.origin.x + b.x,
-        z: b.z,
-        w: b.w,
-        d: b.d,
+        x: model.community.origin.x + b.x + f.dx,
+        z: model.community.origin.z + b.z + f.dz,
+        w: f.w,
+        d: f.d,
         h: b.height || (b.type === 'office' ? 6 : b.type === 'factory' ? 5 : 4),
         opacity: 0.5,
       });
+    }
   // The existing greenhouse lets most sunlight through its glazing.
   const greenhouse = model.rooms.find((r) => r[0] === 'Greenhouse');
   if (greenhouse)
@@ -130,37 +134,72 @@ vec3 materialColor(vec3 base, vec3 normal) {
   float close=1.0-smoothstep(18.0,65.0,distance(vWorld,uEye));
   float coarse=noise2(vWorld.xz*1.3), grain=close>0.001 ? noise2(uv*34.0) : 0.5;
   if(uSurface>0.5 && uSurface<1.5) {
-    float patch=noise2(vWorld.xz*0.24);
-    return base*mix(0.88,1.05,patch)*(0.96+0.09*coarse)*(1.0+(grain-0.5)*0.11*close);
+    float patch=noise2(vWorld.xz*0.22);
+    float blades=noise2(uv*40.0);
+    vec3 lush=mix(base*0.86,base*1.08,patch);
+    return lush*(0.94+0.12*coarse)*(1.0+(blades-0.5)*0.14*close);
   }
   if(uSurface>1.5 && uSurface<2.5) {
-    float streak=sin(uv.y*85.0+noise2(uv*vec2(2.2,0.8))*13.0);
-    float joint=1.0-smoothstep(0.004,0.018,min(fract(uv.x/0.23),1.0-fract(uv.x/0.23)));
-    return base*(0.94+streak*0.055*close)*(1.0-joint*0.17*close);
+    float streak=sin(uv.y*90.0+noise2(uv*vec2(2.5,0.8))*14.0);
+    float rings=sin(length(uv*vec2(1.2,4.8))*18.0)*0.035;
+    float joint=1.0-smoothstep(0.003,0.016,min(fract(uv.x/0.24),1.0-fract(uv.x/0.24)));
+    return base*(0.93+(streak+rings)*0.06*close)*(1.0-joint*0.18*close);
   }
   if(uSurface>2.5 && uSurface<3.5) {
     float row=floor(uv.y/0.095); vec2 tile=vec2(uv.x/0.29+mod(row,2.0)*0.5,uv.y/0.095);
     vec2 edge=min(fract(tile),1.0-fract(tile));
-    float mortar=1.0-smoothstep(0.035,0.075,min(edge.x,edge.y));
-    vec3 brick=base*(0.83+hash2(floor(tile))*0.24);
-    return mix(base,mix(brick,vec3(0.52,0.51,0.46),mortar*0.64),close);
+    float mortar=1.0-smoothstep(0.032,0.075,min(edge.x,edge.y));
+    float brickVar=hash2(floor(tile));
+    vec3 brick=base*mix(vec3(0.82,0.78,0.76),vec3(1.08,1.04,1.02),brickVar)*(1.0+(grain-0.5)*0.12*close);
+    vec3 mortarColor=vec3(0.54,0.53,0.48);
+    return mix(base,mix(brick,mortarColor,mortar*0.68),close);
   }
-  if(uSurface>3.5 && uSurface<4.5) return base*(0.9+noise2(uv*4.0)*0.15+(grain-0.5)*0.075*close);
-  if(uSurface>4.5 && uSurface<5.5) return base*(0.96+sin(uv.x*140.0)*0.027*close);
-  if(uSurface>5.5 && uSurface<6.5) return base*(0.97+sin(uv.x*170.0)*sin(uv.y*170.0)*0.035*close);
+  if(uSurface>3.5 && uSurface<4.5) {
+    float speckle=hash2(floor(uv*65.0))*0.08*close;
+    return base*(0.88+noise2(uv*3.8)*0.18+(grain-0.5)*0.09*close+speckle);
+  }
+  if(uSurface>4.5 && uSurface<5.5) {
+    float brush=sin(uv.x*160.0)*0.035*close+(hash2(floor(uv*vec2(120.0,15.0)))-0.5)*0.04*close;
+    return base*(0.96+brush);
+  }
+  if(uSurface>5.5 && uSurface<6.5) {
+    float weave=sin(uv.x*180.0)*sin(uv.y*180.0)*0.04*close;
+    return base*(0.96+weave);
+  }
   if(uSurface>8.5 && uSurface<9.5) {
-    float seam=pow(abs(sin(uv.y*13.0)),16.0);
-    return base*(0.94+noise2(uv*3.0)*0.08-seam*0.18*close);
+    float seam=pow(abs(sin(uv.y*14.0)),16.0);
+    float shingleRow=floor(uv.y*14.0);
+    float shingleVar=(hash2(vec2(shingleRow,floor(uv.x/0.3)))-0.5)*0.08*close;
+    return base*(0.94+noise2(uv*3.2)*0.08-seam*0.2*close+shingleVar);
   }
-  if(uSurface>9.5 && uSurface<10.5) return base*(0.97+(grain-0.5)*0.055*close);
-  if(uSurface>10.5 && uSurface<11.5) return base*(0.78+coarse*0.25+(grain-0.5)*0.16*close);
-  if(uSurface>11.5 && uSurface<12.5) return base*(0.91+noise2(vWorld.xz*40.0)*0.16*close+coarse*0.05);
+  if(uSurface>9.5 && uSurface<10.5) return base*(0.96+noise2(uv*12.0)*0.06*close+(grain-0.5)*0.06*close);
+  if(uSurface>10.5 && uSurface<11.5) {
+    float clods=noise2(uv*18.0)*0.12*close;
+    return base*(0.76+coarse*0.28+(grain-0.5)*0.18*close+clods);
+  }
+  if(uSurface>11.5 && uSurface<12.5) {
+    float agg=hash2(floor(vWorld.xz*35.0))*0.14*close;
+    return base*(0.90+noise2(vWorld.xz*36.0)*0.14*close+coarse*0.06+agg);
+  }
+  if(uSurface>14.5) {
+    vec2 tile=uv/0.55;
+    vec2 edge=min(fract(tile),1.0-fract(tile));
+    float joint=1.0-smoothstep(0.004,0.015,min(edge.x,edge.y));
+    vec3 finish=base*(0.98+hash2(floor(tile))*0.04);
+    return mix(base,finish*(1.0-joint*0.18),close);
+  }
   if(uSurface>13.5) {
-    float strata=sin(vWorld.y*0.8+noise2(vWorld.xz*0.17)*4.0);
-    vec3 exposed=mix(base,vec3(dot(base,vec3(0.3,0.4,0.3))),0.22*(1.0-normal.y));
-    return exposed*(0.93+strata*0.055+(grain-0.5)*0.1*close);
+    float strata=sin(vWorld.y*0.85+noise2(vWorld.xz*0.18)*4.5);
+    float slope=1.0-smoothstep(0.35,0.82,normal.y);
+    vec3 rock=vec3(dot(base,vec3(0.3,0.4,0.3)))*vec3(0.98,0.97,0.94);
+    vec3 exposed=mix(base,rock,slope*0.75);
+    float weathering=noise2(vWorld.xz*0.75+vWorld.y*0.16);
+    return exposed*(0.85+weathering*0.18+strata*0.06+(grain-0.5)*0.1*close);
   }
-  if(uSurface>12.5) return base*(0.91+noise2(uv*12.0)*0.14);
+  if(uSurface>12.5) {
+    float vein=abs(sin(uv.x*45.0+noise2(uv*8.0)*6.0))*0.05*close;
+    return base*(0.92+noise2(uv*10.0)*0.15-vein);
+  }
   return base;
 }
 float groundShadow(vec3 n) {

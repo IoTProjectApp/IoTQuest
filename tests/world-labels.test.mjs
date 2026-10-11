@@ -89,3 +89,15 @@ test('a tag is measured again when its text changes', () => {
   place(a, b);
   assert.equal(moved(b), true);
 });
+
+test('resident labels hide instead of drifting away from their homes', () => {
+  const resident = tag('Avery · Neighbourhood home', 120);
+  declutterLabels(
+    [{ el: resident, x: 150, y: 150, visible: true, priority: 3, maxDisplacement: 64 }],
+    {
+      bounds: { left: 0, top: 0, right: 500, bottom: 500 },
+      blocked: [{ left: 0, top: 0, right: 300, bottom: 300 }],
+    },
+  );
+  assert.equal(resident.style.visibility, 'hidden');
+});

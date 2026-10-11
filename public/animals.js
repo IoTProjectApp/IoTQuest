@@ -161,7 +161,7 @@ export function addAnimal(model, kind, paddock, seed) {
       opacity: options.opacity,
     });
   }
-  model.animals.push(animal);
+  (model.animals ||= []).push(animal);
   pose(animal, 0);
   return animal;
 }
@@ -222,6 +222,30 @@ export function setGoal(animal, key, route = [], bounds = animal.paddock, hide =
   animal.grazeFor = 0;
 }
 
+const blocked = (animal, x, z) =>
+  (animal.obstacles || []).some(
+    (b) =>
+      Math.abs(x - b.x) < b.w / 2 + animal.obstacleMargin &&
+      Math.abs(z - b.z) < b.d / 2 + animal.obstacleMargin,
+  );
+const grazingTarget = (animal, [x0, z0, x1, z1]) => {
+  for (let i = 0; i < 16; i++) {
+    const p = [x0 + 1 + animal.rand() * (x1 - x0 - 2), z0 + 1 + animal.rand() * (z1 - z0 - 2)];
+    if (!blocked(animal, ...p)) return p;
+  }
+  return null;
+};
+export function setAnimalObstacles(animal, obstacles, margin = 0.4) {
+  animal.obstacles = obstacles;
+  animal.obstacleMargin = margin;
+  if (blocked(animal, animal.x, animal.z)) {
+    const point = grazingTarget(animal, animal.paddock);
+    if (point) [animal.x, animal.z] = point;
+    animal.target = null;
+    pose(animal, 0);
+  }
+}
+
 // `dt` is real seconds since the last frame; animals hold still when paused or reduced motion.
 export function updateAnimals(animals, t, dt, still = false) {
   for (const a of animals || []) {
@@ -237,8 +261,7 @@ export function updateAnimals(animals, t, dt, still = false) {
     }
     if (a.grazeFor > 0) {
       a.grazeFor -= dt;
-      if (a.grazeFor <= 0)
-        a.target = [x0 + 1 + a.rand() * (x1 - x0 - 2), z0 + 1 + a.rand() * (z1 - z0 - 2)];
+      if (a.grazeFor <= 0) a.target = grazingTarget(a, [x0, z0, x1, z1]);
       pose(a, t, false, true);
       continue;
     }
@@ -266,8 +289,14 @@ export function updateAnimals(animals, t, dt, still = false) {
           const step = Math.min(distance, SPEED[a.kind] * (free ? 2.5 : 1) * dt),
             x = a.x + Math.cos(a.heading) * step,
             z = a.z - Math.sin(a.heading) * step;
-          a.x = free ? x : Math.min(x1 - 0.5, Math.max(x0 + 0.5, x));
-          a.z = free ? z : Math.min(z1 - 0.5, Math.max(z0 + 0.5, z));
+          // An animal a route left inside a margin may walk out; only block steps that enter one.
+          if (!routing && blocked(a, x, z) && !blocked(a, a.x, a.z)) {
+            a.target = null;
+            a.grazeFor = 0.5;
+          } else {
+            a.x = free ? x : Math.min(x1 - 0.5, Math.max(x0 + 0.5, x));
+            a.z = free ? z : Math.min(z1 - 0.5, Math.max(z0 + 0.5, z));
+          }
         }
       }
     }

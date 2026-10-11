@@ -89,7 +89,7 @@ test('blocked exit keeps a vehicle outside intersection', () => {
   const v = car(s);
   s.advance(30);
   assert.equal(v.index, 0);
-  assert.equal(s.map.junctions.find((j) => j.signal).owner, null);
+  assert.equal(s.map.junctions.find((j) => j.id === '1:1').owner, null);
 });
 test('delivery visits bay using a connected road and driveway route', () => {
   const s = empty(),
@@ -140,8 +140,8 @@ test('acceleration retains identical movement and separation in rain', () => {
 test('all playable towns and suburbs have connected community districts and correct driving lanes', () => {
   for (const location of locations) {
     const m = createCommunity(location);
-    assert.equal(m.buildings.length, 9);
-    assert.equal(m.crossings.length, 37);
+    assert.equal(m.buildings.length, 25);
+    assert.equal(m.crossings.length, 121);
     for (const a of m.buildings)
       for (const b of m.buildings)
         if (a.node !== b.node) assert.ok(m.walks.route(a.node, b.node).length, location.id);

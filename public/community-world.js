@@ -2,6 +2,7 @@ import { connectFarmHomeCars } from './farm-home-access.js';
 import { connectHomeDriveway, drawHomeStreetDriveway } from './home-driveway.js';
 import { recreationLots, buildRecreationAreas } from './community-recreation.js';
 import { addOpenBlocks, updateOpenBlocks } from './open-blocks.js';
+import { addWorldSky, updateWorldSky } from './world-sky.js';
 import { integrateRegionalNeighbours } from './regional-neighbourhood.js';
 import { buildTrafficSignals, trafficAspect } from './traffic-signals.js';
 import { connectFarmDriveway, connectFarmFootpath, drawFarmDriveway } from './farm-driveway.js';
@@ -572,6 +573,17 @@ export function addCommunityWorld(model, location) {
     people,
     workers,
   };
+  // A high cloud layer and flocks of birds over the whole world.
+  const placed = objects.filter((m) => m.pos[1] > -5);
+  model.community.sky = addWorldSky(model, {
+    seed: model.landscape?.seed ?? 1,
+    town: {
+      minX: Math.min(...placed.map((m) => m.pos[0])),
+      maxX: Math.max(...placed.map((m) => m.pos[0])),
+      minZ: Math.min(...placed.map((m) => m.pos[2])),
+      maxZ: Math.max(...placed.map((m) => m.pos[2])),
+    },
+  });
   return model.community;
 }
 export function updateCommunityWorld(model, state, seconds) {
@@ -580,6 +592,7 @@ export function updateCommunityWorld(model, state, seconds) {
   const { sim, origin } = c;
   updateCivicBuildings([...c.civic, ...c.recreation], state);
   updateOpenBlocks(c.openBlocks || [], sim.time, state.reduced);
+  updateWorldSky(c.sky, state.env, state.paused ? 0 : seconds, state.reduced);
   sim.rain = state.env.rain || 0;
   sim.temperature = state.communityMission
     ? (state.env.temp ?? 24)

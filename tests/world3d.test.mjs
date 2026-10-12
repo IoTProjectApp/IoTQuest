@@ -590,6 +590,43 @@ test('3D render errors are reported once and the loop keeps running; restored co
     frames.restore();
   }
 });
+test('the travel screen pauses the world without losing its context, and returning resumes it', () => {
+  const frames = animationFrames(),
+    counter = {},
+    gl = fakeGL(counter),
+    canvas = eventCanvas(gl),
+    errors = [];
+  let lost = 0;
+  gl.getExtension = () => ({ loseContext: () => lost++, restoreContext: () => {} });
+  try {
+    const state = { devices: [], env: { ...baseEnv }, outputs: {}, player: { x: 48, y: 77 } };
+    const world = new World3D(canvas, { getState: () => state, onError: (m) => errors.push(m) });
+    let drawn = 0;
+    world.render = () => drawn++;
+    frames.step(16);
+    assert.equal(drawn, 1);
+    assert.equal(world.releaseGraphics(), true);
+    assert.equal(world.releaseGraphics(), false, 'Already paused');
+    assert.equal(frames.queue.size, 0);
+    assert.equal(lost, 0, 'The context is kept');
+    assert.equal(world.restoreGraphics(), true);
+    frames.step(32);
+    assert.equal(drawn, 2);
+    assert.equal(counter.programs, 1, 'Nothing is rebuilt');
+    // A real loss while paused stays quiet, and drawing waits for the player to come back.
+    world.releaseGraphics();
+    canvas.fire('webglcontextlost');
+    canvas.fire('webglcontextrestored');
+    frames.step(48);
+    assert.equal(drawn, 2);
+    assert.deepEqual(errors, []);
+    world.restoreGraphics();
+    frames.step(64);
+    assert.equal(drawn, 3);
+  } finally {
+    frames.restore();
+  }
+});
 test('a 0×0 canvas (hidden Code layout) skips drawing and label projection until it is shown', () => {
   const frames = animationFrames(),
     canvas = eventCanvas(fakeGL()),
@@ -686,7 +723,7 @@ test('travel globe pauses while inactive, falls back on context loss, rebuilds o
     frames.restore();
   }
 });
-test('a deliberately released globe context comes back as the globe without a fallback notice', async () => {
+test('a released globe pauses without losing its context and comes back as the globe', async () => {
   const { TravelGlobe } = await import('../public/globe.js');
   const frames = animationFrames(),
     ctx2d = new Proxy({}, { get: () => () => {} }),
@@ -713,7 +750,9 @@ test('a deliberately released globe context comes back as the globe without a fa
       onRestore: () => restored++,
     });
     assert.equal(globe.releaseGraphics(), true);
-    assert.equal(globe.contextLost, true);
+    assert.equal(globe.releaseGraphics(), false, 'Already paused');
+    assert.equal(globe.contextLost, false, 'The context is kept');
+    assert.equal(globe.running(), false);
     assert.equal(globe.restoreGraphics(), true);
     assert.equal(globe.contextLost, false);
     assert.equal(globe.mode, 'globe');

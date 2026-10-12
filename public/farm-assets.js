@@ -1,5 +1,8 @@
+import { buildFeedStation, updateFeedStation } from './farm-feed-station.js';
+import { buildFarmHomeLane } from './farm-home-access.js';
+import { buildFarmPondGarden } from './farm-pond-garden.js';
 import { buildTree } from './vegetation.js';
-import { addAnimal, setGoal } from './animals.js';
+import { addAnimal, setGoal, setAnimalObstacles } from './animals.js';
 // Victorian farm scenes: a homestead on the usual property, surrounded by post-and-wire
 // paddocks with farm buildings, water and animals. The playable property stays where it is.
 
@@ -14,11 +17,16 @@ const PADDOCKS = {
 export function buildFarm(l, m) {
   const { box, cylinder, sphere, mesh, roof, pitchedRoof, beam } = m;
   m.animals = [];
-  const farm = (m.farm = { style: l.style });
+  const farm = (m.farm = { style: l.style, obstacles: [] });
   const front = -1,
     pasture = { dairy: '#8fb865', sheep: '#b4b877', orchard: '#9cba6d', horse: '#a3b56f' }[l.style];
   // ---- Homestead on the property ----
-  for (let y = 0.35; y <= 1.45; y += 0.18) box(-5.85, y, front + 0.06, 14.5, 0.05, 0.06, '#d8cfb8');
+  for (let y = 0.35; y <= 1.45; y += 0.18)
+    for (const [start, end] of [
+      [-13.1, -2.7],
+      [0.5, 1.4],
+    ])
+      box((start + end) / 2, y, front + 0.06, end - start, 0.05, 0.06, '#d8cfb8');
   pitchedRoof(l.accent, { pitch: l.style === 'sheep' ? 0.4 : 0.5, ridge: '#5f5a55' });
   const verandaDepth = l.style === 'sheep' ? 2.2 : 1.5;
   roof(
@@ -29,26 +37,50 @@ export function buildFarm(l, m) {
     [0.12, 0, 0],
   );
   for (let x = -12.8; x <= 1.3; x += 2.35)
-    cylinder(x, 0.78, front + verandaDepth, 0.06, 1.55, '#f1ece0');
-  if (l.style === 'horse') box(-5.85, 0.35, front + 0.08, 14.6, 0.5, 0.1, '#a19883'); // stone base
+    if (x < -2.7 || x > 0.5) cylinder(x, 0.78, front + verandaDepth, 0.06, 1.55, '#f1ece0');
+  if (l.style === 'horse')
+    for (const [start, end] of [
+      [-13.1, -2.7],
+      [0.5, 1.4],
+    ])
+      box((start + end) / 2, 0.35, front + 0.08, end - start, 0.5, 0.1, '#a19883'); // stone base
   // ---- Land and paddocks around the property ----
   box(0, -0.53, 0, 72, 1, 64, '#a3b278');
   box(0, -0.045, 0, 71.8, 0.1, 63.8, pasture);
   const wire = (x0, z0, x1, z1) => {
     const alongX = z0 === z1,
       length = alongX ? x1 - x0 : z1 - z0;
-    for (let d = 0; d <= length + 1e-9; d += 5)
-      box(alongX ? x0 + d : x0, 0.6, alongX ? z0 : z0 + d, 0.12, 1.2, 0.12, '#8c7458');
-    for (const y of [0.4, 0.7, 1.0])
-      box(
-        (x0 + x1) / 2,
-        y,
-        (z0 + z1) / 2,
-        alongX ? length : 0.02,
-        0.02,
-        alongX ? 0.02 : length,
-        '#9aa0a2',
-      );
+    const gaps = [];
+    // The homestead track reaches the shared town without crossing unbroken wire.
+    if (alongX && z0 === 14.6) gaps.push([-3 - x0, 3 - x0]);
+    if (l.style === 'dairy' && alongX && z0 === 14.6) gaps.push([6.75 - x0, 9.75 - x0]);
+    if (alongX && z0 === 31) gaps.push([-12.7 - x0, -7.3 - x0]);
+    if (alongX && z0 === 31 && x0 < 14 && x1 > 14) gaps.push([12.8 - x0, 15.2 - x0]);
+    if (!alongX && x0 >= 17 && z0 < 16 && z1 > 16) gaps.push([14.8 - z0, 17.2 - z0]);
+    if (!alongX && l.style === 'dairy' && Math.abs(x0) === 17.6)
+      gaps.push([-23.2 - z0, -20.8 - z0]);
+    let start = 0;
+    for (const [a, b] of [...gaps.sort((a, b) => a[0] - b[0]), [length, length]]) {
+      const end = Math.max(start, Math.min(length, a));
+      if (end > start) {
+        for (let d = start; d <= end; d += 5)
+          box(alongX ? x0 + d : x0, 0.6, alongX ? z0 : z0 + d, 0.12, 1.2, 0.12, '#8c7458', {
+            farmFence: true,
+          });
+        for (const y of [0.4, 0.7, 1])
+          box(
+            alongX ? x0 + (start + end) / 2 : x0,
+            y,
+            alongX ? z0 : z0 + (start + end) / 2,
+            alongX ? end - start : 0.02,
+            0.02,
+            alongX ? 0.02 : end - start,
+            '#9aa0a2',
+            { farmFence: true },
+          );
+      }
+      start = Math.min(length, Math.max(start, b));
+    }
   };
   for (const [x0, z0, x1, z1] of Object.values(PADDOCKS)) {
     wire(x0, z0, x1, z0);
@@ -58,6 +90,7 @@ export function buildFarm(l, m) {
   }
   // ---- Farm features ----
   const shed = (x, z, w, d, h, wallColour, roofColour) => {
+    farm.obstacles.push({ x, z, w, d });
     box(x, h / 2, z, w, h, d, wallColour);
     box(x, h + 0.35, z, w + 0.6, 0.12, d + 0.6, roofColour, { rotation: [0.12, 0, 0] });
   };
@@ -67,14 +100,26 @@ export function buildFarm(l, m) {
     box(x, h + 0.2, z, w + 0.6, 0.1, d + 0.6, roofColour, { rotation: [0.1, 0, 0] });
   };
   const dam = (x, z, r) => {
+    farm.obstacles.push({ x, z, w: r * 2, d: r * 2, water: true });
     cylinder(x, 0.02, z, r + 0.6, 0.05, '#9a8a62');
     cylinder(x, 0.05, z, r, 0.05, '#5f93a8', { opacity: 0.9 });
   };
-  const bale = (x, z, colour = '#d7bd6b') =>
-    cylinder(x, 0.55, z, 0.55, 1.1, colour, { rotation: [Math.PI / 2, 0, 0] });
+  const bale = (x, z, colour = '#d7bd6b') => {
+    farm.obstacles.push({ x, z, w: 1.1, d: 1.1, bale: true });
+    m.colliders.push({ x, z, w: 1.1, d: 1.1, farmBale: true });
+    return cylinder(x, 0.55, z, 0.55, 1.1, colour, {
+      farmFeature: 'bale',
+      rotation: [Math.PI / 2, 0, 0],
+    });
+  };
   const trough = (x, z) => {
-    box(x, 0.3, z, 2.2, 0.5, 0.7, '#8d969a');
-    return box(x, 0.52, z, 2.0, 0.05, 0.5, '#6f9fb0');
+    farm.obstacles.push({ x, z, w: 2.2, d: 0.7 });
+    box(x, 0.06, z, 2.2, 0.08, 0.7, '#8d969a', { farmTrough: true });
+    for (const side of [-1, 1]) {
+      box(x + side * 1.05, 0.3, z, 0.1, 0.5, 0.7, '#8d969a', { farmTrough: true });
+      box(x, 0.3, z + side * 0.3, 2.1, 0.5, 0.1, '#8d969a', { farmTrough: true });
+    }
+    return box(x, 0.52, z, 2.0, 0.05, 0.5, '#6f9fb0', { surface: 'water', farmTroughWater: true });
   };
   // A swinging gate in a paddock fence, hinged at (x, z) and closed along +z.
   const fenceGate = (x, z) => {
@@ -112,7 +157,7 @@ export function buildFarm(l, m) {
     case 'dairy':
       openShed(0, -23, 10, 6, 2.6, '#a33b2f'); // milking shed
       box(0, 0.08, -23, 9.6, 0.1, 5.6, '#c9c6bd'); // concrete yard
-      for (let i = 0; i < 6; i++) bale(-12 + i * 1.3, 26, '#eef0ea'); // wrapped silage
+      for (let i = 0; i < 6; i++) bale(-14 + i * 1.3, -17.2, '#eef0ea'); // wrapped silage beside the dairy shed
       dam(8, 24, 3.2);
       windmill(27, -22);
       trough(24, -22);
@@ -124,7 +169,7 @@ export function buildFarm(l, m) {
       }
       box(-10, 0.15, -20.5, 4.5, 0.3, 1.8, '#bebdb1', { farmFeature: 'dairy-platform' });
       // Gates from the side paddocks into the dairy yard.
-      farm.gates = [fenceGate(-17.3, -23.2), fenceGate(17.3, -23.2)];
+      farm.gates = [fenceGate(-17.6, -23.2), fenceGate(17.6, -23.2)];
       herd('cow', PADDOCKS.left, 5);
       herd('cow', PADDOCKS.right, 4);
       break;
@@ -216,6 +261,15 @@ export function buildFarm(l, m) {
       herd('goat', PADDOCKS.back, 4);
       break;
   }
+  buildFeedStation(m, farm, l.style);
+  buildFarmHomeLane(m);
+  buildFarmPondGarden(m);
+  for (const animal of m.animals)
+    setAnimalObstacles(
+      animal,
+      farm.obstacles.filter((b) => animal.kind !== 'duck' || !b.water),
+      ['cow', 'horse'].includes(animal.kind) ? 0.7 : animal.kind === 'goat' ? 0.6 : 0.3,
+    );
   m.architecture = l.style;
   return m;
 }
@@ -233,6 +287,12 @@ export function updateFarm(model, devices, outputs, env, t, reduced) {
   if (!farm) return;
   const daylight = Math.min(1, Math.max(0, (env.light ?? 70) / 65)),
     animals = model.animals || [];
+  // While the feed or water runs low, the station's herd waits there instead of grazing.
+  const station = updateFeedStation(model, devices, outputs, env);
+  const home = (a, route = []) =>
+    station?.claims(a)
+      ? goal(a, 'feeding', route, station.around)
+      : goal(a, 'home', route, a.paddock);
   if (farm.henDoor) {
     // Without a door circuit the farmer opens the door by day and shuts it at night.
     const open = devices?.some((d) => d.id === 'gate')
@@ -243,9 +303,14 @@ export function updateFarm(model, devices, outputs, env, t, reduced) {
     for (const a of animals.filter((a) => a.kind === 'chicken')) {
       if (daylight > 0.35) {
         // Morning: out through an open door; with the door shut the hens stay in.
-        if (open || a.goalKey !== 'roost') goal(a, 'home', [door], a.paddock);
+        if (open || a.goalKey !== 'roost') home(a, [door]);
       } else if (open) goal(a, 'roost', [door, [-6, -22]], [-7.5, -23.2, -4.5, -21], true);
-      else if (a.goalKey !== 'roost') goal(a, 'waiting', [], [-7.6, -20.2, -4.4, -17.4]);
+      else if (a.goalKey !== 'roost') {
+        // Hens behind a shut house approach around its nearest side, through open ground.
+        const side = a.x < -6 ? -8.6 : -3.4;
+        const approach = a.z < -20.2 ? [[side, a.z], [side, -19.2], door] : [];
+        goal(a, 'waiting', approach, [-7.6, -20.2, -4.4, -17.4]);
+      }
     }
   }
   if (farm.gates) {
@@ -272,15 +337,10 @@ export function updateFarm(model, devices, outputs, env, t, reduced) {
           [-6, -26, 6, -17.5],
         );
       else
-        goal(
-          a,
-          'home',
-          [
-            [s * 14, -22],
-            [s * 21, -22],
-          ],
-          a.paddock,
-        );
+        home(a, [
+          [s * 14, -22],
+          [s * 21, -22],
+        ]);
     }
   }
   if (farm.troughWater) {
@@ -291,7 +351,7 @@ export function updateFarm(model, devices, outputs, env, t, reduced) {
     // A low trough brings the thirsty sheep in the windmill paddock crowding round.
     for (const a of animals.filter((a) => a.kind === 'sheep' && a.paddock[0] > 0))
       if (level < 0.3) goal(a, 'thirsty', [], [20.5, -23.5, 27, -16.5]);
-      else goal(a, 'home', [], a.paddock);
+      else home(a);
   }
   if (farm.shelters) {
     const misting = on(devices, outputs, 'valve') && (env.tank ?? 0) > 0;
@@ -306,7 +366,10 @@ export function updateFarm(model, devices, outputs, env, t, reduced) {
       const shelter = farm.shelters[a.paddock[0] < 0 ? 0 : 1];
       if ((env.temp ?? 24) > 30)
         goal(a, 'shade', [], [shelter.x - 2.2, shelter.z - 1.6, shelter.x + 2.2, shelter.z + 1.6]);
-      else goal(a, 'home', [], a.paddock);
+      else home(a);
     }
   }
+  // Stock with no other routine (the station paddock's sheep) also follow the station.
+  for (const a of animals)
+    if (station && (!a.goalKey || a.goalKey === 'home' || a.goalKey === 'feeding')) home(a);
 }

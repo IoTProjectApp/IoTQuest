@@ -5,12 +5,12 @@ import {
   prepareWorldMaterials,
   worldSunlight,
 } from './world-materials.js';
-import { addCommunityWorld, updateCommunityWorld } from './community-world.js';
+import { addCommunityWorld, updateCommunityWorld, STREET_LIGHT_LEVEL } from './community-world.js';
 import { updateLandscape } from './landscape.js';
 import { addDeviceDetails } from './device-objects.js';
 import { locationById } from './locations.js';
 import { skyTime, DEFAULT_OBSERVER } from './astronomy.js';
-import { geometry, roundedObject, LOW_DETAIL_SHAPES } from './world-geometry.js';
+import { geometry, roundedObject, bevelKey, LOW_DETAIL_SHAPES } from './world-geometry.js';
 import {
   multiply,
   perspective,
@@ -87,6 +87,7 @@ uniform float uHaze;
 uniform float uFogOffset;
 uniform vec3 uLights[8];
 uniform vec3 uLightColor[8];
+uniform float uLightRange[8];
 uniform float uCelestial;
 uniform vec3 uSkySun;
 ${MATERIAL_GLSL}
@@ -102,38 +103,70 @@ void main() {
   vec3 viewDir = normalize(uEye - vWorld);
   float water = uSurface>6.5 && uSurface<7.5 ? 1.0 : 0.0;
   float glass = uSurface>7.5 && uSurface<8.5 ? 1.0 : 0.0;
-  if(water>0.5 && n.y>0.6) {
-    n=normalize(n+vec3(sin(vWorld.x*2.3+vWorld.z*1.2+uTime*0.65)*0.085,0.0,
-      cos(vWorld.z*2.6-vWorld.x*0.7-uTime*0.5)*0.085));
+  if(water>0.5 && n.y>0.5) {
+    vec2 wp1 = vWorld.xz * 2.2;
+    vec2 wp2 = vWorld.xz * 4.6;
+    vec2 wp3 = vWorld.xz * 8.4;
+    float wX = sin(wp1.x + wp1.y*0.8 + uTime*1.1)*0.045 +
+               sin(wp2.x*1.3 - wp2.y*0.9 + uTime*1.8)*0.025 +
+               cos(wp3.x*0.9 + wp3.y*1.4 - uTime*2.4)*0.015;
+    float wZ = cos(wp1.y*1.1 - wp1.x*0.7 - uTime*0.9)*0.045 +
+               cos(wp2.y*1.2 + wp2.x*1.1 - uTime*1.6)*0.025 +
+               sin(wp3.y*1.2 - wp3.x*1.3 + uTime*2.1)*0.015;
+    n = normalize(n + vec3(wX, 0.0, wZ));
   }
-  vec3 base=pow(max(materialColor(uColor.rgb,n),vec3(0.0)),vec3(2.2));
+  vec3 base = pow(max(materialColor(uColor.rgb,n),vec3(0.0)),vec3(2.2));
+  if(water > 0.5) {
+    base = mix(base * vec3(0.55, 0.85, 0.95), vec3(0.05, 0.18, 0.24), 0.52);
+  }
   float sun = max(0.0, dot(n, lightDir))*uSunStrength;
   float shade = groundShadow(n);
+  float groundContact = smoothstep(0.0, 0.38, vWorld.y);
+  float ao = mix(0.76, 1.0, groundContact);
   float hemisphere = n.y * 0.5 + 0.5;
-  vec3 fill = mix(vec3(0.22,0.20,0.18),vec3(0.42,0.48,0.56),hemisphere);
-  vec3 ambient=mix(vec3(0.025,0.035,0.06),fill,uDay);
-  vec3 lit=base*(ambient*(1.0-shade*0.35)+uSunColor*sun*uDay*(1.0-shade)*0.8);
-  float wet = uWet * max(0.0,n.y);
-  float roughness=clamp(uRoughness-wet*0.3,0.08,1.0);
-  vec3 halfDir=normalize(lightDir+viewDir);
-  float specular=pow(max(0.0,dot(n,halfDir)),mix(128.0,12.0,roughness));
-  lit+=uSunColor*specular*sun*uDay*(1.0-roughness)*0.45;
-  float fresnel=pow(1.0-max(0.0,dot(n,viewDir)),4.0);
-  vec3 reflection=pow(uFog,vec3(2.2));
-  lit=mix(lit,reflection,clamp((water*0.35+glass*0.35+wet*0.16+(1.0-roughness)*0.06)*fresnel,0.0,0.55));
-  if(uSurface>12.5 && uSurface<13.5) lit+=base*uSunColor*max(0.0,dot(-n,lightDir))*sun*uDay*0.16;
+  vec3 skyDome = mix(vec3(0.18, 0.20, 0.25), vec3(0.38, 0.46, 0.56), hemisphere);
+  vec3 groundBounce = mix(vec3(0.12, 0.14, 0.10), vec3(0.32, 0.28, 0.20), 0.5) * max(0.0, -n.y) * uSunStrength * 0.35;
+  vec3 fill = skyDome + groundBounce;
+  vec3 ambient = mix(vec3(0.025, 0.035, 0.06), fill, uDay) * ao;
+  float isMetal = (uSurface > 4.5 && uSurface < 5.5) ? 1.0 : 0.0;
+  vec3 diffuseAlbedo = base * (1.0 - isMetal * 0.75);
+  vec3 lit = diffuseAlbedo * (ambient * (1.0 - shade * 0.35) + uSunColor * sun * uDay * (1.0 - shade) * 0.8);
+  float sss = 0.0;
+  if(uSurface > 12.5 && uSurface < 13.5) {
+    sss = (max(0.0, dot(-viewDir, lightDir)) * 0.30 + max(0.0, dot(-n, lightDir)) * 0.22) * (1.0 - shade * 0.65);
+  } else if(uSurface > 0.5 && uSurface < 1.5) {
+    sss = max(0.0, dot(-n, lightDir)) * 0.14 * (1.0 - shade * 0.75);
+  }
+  lit += base * uSunColor * sss * uSunStrength * uDay;
+  float wet = uWet * max(0.0, n.y);
+  float roughness = clamp(uRoughness - wet * 0.3, 0.06, 1.0);
+  vec3 halfDir = normalize(lightDir + viewDir);
+  float specPower = mix(220.0, 8.0, roughness);
+  float specNorm = (specPower + 2.0) / 8.0;
+  float specular = pow(max(0.0, dot(n, halfDir)), specPower) * specNorm * 0.14;
+  vec3 specColor = mix(uSunColor, uSunColor * base, isMetal);
+  lit += specColor * specular * sun * uDay * (1.0 - roughness * 0.55);
+  if(water > 0.5) {
+    lit += uSunColor * pow(max(0.0, dot(n, halfDir)), 180.0) * sun * uDay * 1.35;
+  }
+  float fresnel = pow(1.0 - max(0.0, dot(n, viewDir)), 5.0);
+  vec3 reflection = pow(uFog, vec3(2.2));
+  float reflStrength = clamp((water * 0.65 + glass * 0.45 + wet * 0.22 + isMetal * 0.18 + (1.0 - roughness) * 0.08) * fresnel, 0.0, 0.75);
+  lit = mix(lit, reflection, reflStrength);
   for (int i=0;i<8;i++) {
     float d=distance(vWorld,uLights[i]);
-    float fall=max(0.0,1.0-d/5.5);
+    float fall=max(0.0,1.0-d/uLightRange[i]);
     lit+=base*uLightColor[i]*fall*fall*2.3;
     vec3 h=normalize(normalize(uLights[i]-vWorld)+viewDir);
     lit+=uLightColor[i]*pow(max(0.0,dot(n,h)),48.0)*fall*fall*(wet+water*0.5+glass*0.4)*0.28;
   }
-  lit=mix(lit,lit*0.8+vec3(0.01,0.018,0.024),wet*0.28);
-  lit=mix(lit,pow(uColor.rgb,vec3(2.2))*1.45,clamp(uEmission,0.0,1.0));
-  lit=pow(filmic(lit),vec3(1.0/2.2));
+  lit = mix(lit, lit * 0.8 + vec3(0.01, 0.018, 0.024), wet * 0.28);
+  lit = mix(lit, pow(uColor.rgb, vec3(2.2)) * 1.45, clamp(uEmission, 0.0, 1.0));
+  lit = pow(filmic(lit), vec3(1.0 / 2.2));
+  float sunMie = pow(max(0.0, dot(-viewDir, lightDir)), 8.0) * uSunStrength * uDay;
+  vec3 fogColor = mix(uFog, min(vec3(1.0), uSunColor * 1.15 + vec3(0.08, 0.05, 0.0)), sunMie * 0.38 * (0.25 + 0.75 * uHaze));
   float fog = smoothstep(mix(38.0, 12.0, uHaze), mix(90.0, 52.0, uHaze), max(0.0, distance(vWorld, uEye) - uFogOffset));
-  gl_FragColor = vec4(mix(lit, uFog, fog * mix(0.18, 0.88, uHaze)), uColor.a);
+  gl_FragColor = vec4(mix(lit, fogColor, fog * mix(0.18, 0.88, uHaze)), uColor.a);
 }`;
 // Parsed colours are cached (read-only) because objects are recoloured every frame.
 const colorCache = new Map();
@@ -164,22 +197,50 @@ const DEFAULT_SKY_SUN = [0, 1, 0];
 // Per instance: model matrix (16, with the size in three w components), colour (4), material (3).
 const INSTANCE_FLOATS = 23;
 const MIN_PIXEL_RADIUS = 1;
+const MIN_RAISED_PIXEL_RADIUS = 3;
 // Most simulated seconds one frame advances the community; 360× at 60 fps is about 6 s.
 const MAX_SIM_STEP = 10;
-const roughnessFor = (surface) =>
-  surface === SURFACE.water
-    ? 0.12
-    : surface === SURFACE.glass
-      ? 0.16
-      : surface === SURFACE.steel
-        ? 0.3
-        : surface === SURFACE.grass
-          ? 0.96
-          : 0.76;
+const roughnessFor = (surface) => {
+  switch (surface) {
+    case SURFACE.water:
+      return 0.08;
+    case SURFACE.glass:
+      return 0.12;
+    case SURFACE.tile:
+      return 0.22;
+    case SURFACE.steel:
+      return 0.28;
+    case SURFACE.timber:
+      return 0.58;
+    case SURFACE.roof:
+      return 0.65;
+    case SURFACE.foliage:
+      return 0.68;
+    case SURFACE.stone:
+      return 0.74;
+    case SURFACE.brick:
+      return 0.82;
+    case SURFACE.asphalt:
+      return 0.84;
+    case SURFACE.terrain:
+      return 0.86;
+    case SURFACE.plaster:
+      return 0.88;
+    case SURFACE.fabric:
+      return 0.92;
+    case SURFACE.soil:
+      return 0.94;
+    case SURFACE.grass:
+      return 0.96;
+    default:
+      return 0.76;
+  }
+};
 // Objects smaller than this radius on screen use the simpler shapes; their curves are a few pixels.
 const LOW_DETAIL_PIXELS = 16;
 const geometryKey = (m, pixels = Infinity) => {
   const low = pixels < LOW_DETAIL_PIXELS;
+  if (m.bevel && m.shape === 'box') return low ? 'box' : bevelKey(m);
   if (roundedObject(m)) return low ? 'box' : 'roundedBox';
   return low && LOW_DETAIL_SHAPES.includes(m.shape) ? m.shape + ':low' : m.shape;
 };
@@ -207,7 +268,11 @@ export function frustumTest(m, pixelScale = 0) {
     const distance = m[3] * x + m[7] * y + m[11] * z + m[15];
     if (distance <= 0) return Infinity;
     const pixels = ((r - 0.25) * pixelScale) / distance;
-    return pixels >= MIN_PIXEL_RADIUS ? pixels : 0;
+    // Flat ground markings (pavements, lane lines, crossings) read as a pattern even when each
+    // piece is tiny, so only raised objects use the larger cut-off. Landmarks (bus shelter roofs
+    // and signs) keep the smaller one so students can find them from the overview.
+    const small = (h < 0.12 && y < 0.45) || o.landmark;
+    return pixels >= (small ? MIN_PIXEL_RADIUS : MIN_RAISED_PIXEL_RADIUS) ? pixels : 0;
   };
 }
 // Software WebGL (SwiftShader, llvmpipe, Microsoft's Basic Render Driver) shades every pixel on
@@ -250,10 +315,14 @@ export class World3D {
     prepareWorldMaterials(this.model);
     this.yaw = 0.32;
     this.pitch = 0.85;
-    this.distance = 130;
-    this.target = [(this.model.community.origin.x + 44) / 2, 0.5, 0];
+    this.distance = this.model.farm ? 320 : 280;
+    this.target = [
+      this.model.community.origin.x + (this.model.farm ? 36 : 72),
+      0.5,
+      this.model.community.origin.z,
+    ];
     this.currentTarget = [...this.target];
-    this.currentDistance = 130;
+    this.currentDistance = this.distance;
     this.communityView = true;
     this.follow = false;
     this.overview = true;
@@ -315,6 +384,7 @@ export class World3D {
       'uFogOffset',
       'uLights[0]',
       'uLightColor[0]',
+      'uLightRange[0]',
       'uCelestial',
       'uSkySun',
     ])
@@ -351,6 +421,8 @@ export class World3D {
       'vase',
       'shade',
       'mountain',
+      'ridge',
+      'gable',
       'leaf',
       'foliage',
       'wool',
@@ -417,7 +489,7 @@ export class World3D {
           this.distance = clamp(
             this.pinch.distance * ratio,
             5,
-            this.communityView ? 220 : this.landscapeView ? 90 : 55,
+            this.communityView ? 330 : this.landscapeView ? 90 : 55,
           );
         return;
       }
@@ -476,7 +548,7 @@ export class World3D {
           this.distance = clamp(
             this.distance + e.deltaY * 0.018,
             5,
-            this.communityView ? 220 : this.landscapeView ? 90 : 55,
+            this.communityView ? 330 : this.landscapeView ? 90 : 55,
           );
       },
       { passive: false },
@@ -530,8 +602,12 @@ export class World3D {
       this.landscapeView = false;
       this.follow = false;
       this.overview = true;
-      this.target = [(this.model.community.origin.x + 44) / 2, 0.5, 0];
-      this.distance = 130 / Math.max(0.7, zoom);
+      this.target = [
+        this.model.community.origin.x + (this.model.farm ? 36 : 72),
+        0.5,
+        this.model.community.origin.z,
+      ];
+      this.distance = (this.model.farm ? 320 : 280) / Math.max(0.7, zoom);
       this.pitch = 0.85;
       return;
     }
@@ -546,10 +622,24 @@ export class World3D {
     this.follow = false;
     this.overview = view === 'world' || view === 'landscape';
     this.target = focus ? toWorld({ x: focus[1], y: focus[2] }) : [0, 0, 0];
+    if (view === 'detail' && focus?.[3]?.recreation) {
+      const b = this.model.community.sim.map.buildings.find(
+        (b) => b.type === focus[3].communityType,
+      );
+      if (b)
+        this.target = [
+          this.model.community.origin.x + b.x,
+          0.75,
+          this.model.community.origin.z + b.z,
+        ];
+    }
+    if (view === 'landscape' && this.model.farm && !focus) this.target = [8, 0.35, 20];
     this.target[1] = view === 'detail' ? 0.75 : 0.35;
     this.distance = clamp(
       (view === 'landscape'
-        ? 68
+        ? this.model.farm
+          ? 105
+          : 68
         : view === 'world'
           ? 35
           : view === 'detail'
@@ -563,6 +653,19 @@ export class World3D {
                 residence1: 18,
                 residence2: 18,
                 residence3: 18,
+                residence4: 18,
+                residence5: 18,
+                residence6: 18,
+                pool: 40,
+                gym: 40,
+                park: 35,
+                playground: 35,
+                playground2: 40,
+                basketball: 36,
+                hospital: 24,
+                school: 28,
+                police: 24,
+                fire: 24,
               }[focus?.[3]?.communityType] || 11
             : 25) /
         (view === 'landscape'
@@ -572,7 +675,7 @@ export class World3D {
               zoom / (view === 'detail' ? 1.9 : view === 'world' || view === 'landscape' ? 1 : 1.5),
             )),
       5,
-      view === 'landscape' ? 90 : 55,
+      view === 'landscape' ? (this.model.farm ? 110 : 90) : 55,
     );
   }
   snapCamera() {
@@ -620,6 +723,7 @@ export class World3D {
     prepareWorldMaterials(this.model);
     this.communityView = false;
     this.streetLights = null;
+    this.streetLightPools = null;
     this.deviceSignature = '';
     this.deviceObjects = [];
     this.lastPlayer = null;
@@ -666,7 +770,19 @@ export class World3D {
           b.height ||
           (b.type === 'parking' ? 0.18 : b.type === 'office' ? 6 : b.type === 'factory' ? 5 : 4),
         cx = origin.x + b.x,
-        t = rayBox(ray, [cx - b.w / 2, 0, b.z - b.d / 2], [cx + b.w / 2, height, b.z + b.d / 2]);
+        structure = rayBox(
+          ray,
+          [cx - b.w / 2, 0, origin.z + b.z - b.d / 2],
+          [cx + b.w / 2, height, origin.z + b.z + b.d / 2],
+        ),
+        parcel = b.lot
+          ? rayBox(
+              ray,
+              [origin.x + b.lot.x - b.lot.w / 2, -0.035, origin.z + b.lot.z - b.lot.d / 2],
+              [origin.x + b.lot.x + b.lot.w / 2, 0.025, origin.z + b.lot.z + b.lot.d / 2],
+            )
+          : Infinity,
+        t = Math.min(structure, parcel);
       if (t < nearest) {
         nearest = t;
         best = b.type;
@@ -751,7 +867,9 @@ export class World3D {
         const home = this.model.community.residences.find((h) => h.building.name === d.area);
         const native = this.model.rooms.some((r) => r[0] === d.area && r[3]?.community);
         const sprayX = home ? this.model.community.origin.x + home.building.x - 3.8 : x;
-        const sprayZ = home ? home.building.z + home.building.d / 2 + 1.3 : z;
+        const sprayZ = home
+          ? this.model.community.origin.z + home.building.z + home.building.d / 2 + 1.3
+          : z;
         for (let i = 0; i < 18; i++)
           record.parts.push(
             this.model.sphere(
@@ -841,7 +959,7 @@ export class World3D {
     for (const actor of this.model.actors) {
       let ax = actor.x,
         az = actor.z,
-        angle = 0,
+        angle = actor.heading ?? 0,
         phase = 0;
       if (actor.id === 'player') {
         ax = p[0];
@@ -965,9 +1083,17 @@ export class World3D {
     }
     const passage = this.model.community.sim.people.some(
       (person) =>
-        Math.abs(person.x + this.model.community.origin.x) < 2 && person.z > 7.5 && person.z < 16,
+        Math.abs(person.x + this.model.community.origin.x) < 2 &&
+        person.z + this.model.community.origin.z > 7.5 &&
+        person.z + this.model.community.origin.z < 16,
     );
-    if (passage) gate = Math.max(gate, Math.PI / 2); // Walking residents can open the existing entrance gate.
+    const vehiclePassage = this.model.community.sim.vehicles.some(
+      (vehicle) =>
+        Math.abs(vehicle.x + this.model.community.origin.x) < 2 &&
+        vehicle.z + this.model.community.origin.z > 7 &&
+        vehicle.z + this.model.community.origin.z < 17,
+    );
+    if (passage || vehiclePassage) gate = Math.max(gate, Math.PI / 2); // Walking residents can open the existing entrance gate.
     const target = state.devices.some((d) => d.id === 'led' && (outputs[d.pin] || 0) > 0);
     for (const lamp of this.model.lamps) {
       lamp.color = target ? '#ffe4a0' : '#c9bf9c';
@@ -995,7 +1121,8 @@ export class World3D {
     }
     // The sky view's eye-level camera sits under the roof, so it always looks through the cutaway.
     const roofsShown = state.roofsVisible && !this.skyView;
-    for (const roof of this.model.roofs || []) roof.opacity = roofsShown ? 1 : 0.17;
+    for (const roof of this.model.roofs || [])
+      roof.opacity = roofsShown ? 1 : (roof.cutawayOpacity ?? (roof.community ? 0 : 0.17));
     if (this.model.pondWater) this.model.pondWater.pos[1] = 0.17 + ((env.pond ?? 60) / 100) * 0.2;
     for (const item of this.model.windObjects || []) {
       item.mesh.pos[0] =
@@ -1048,8 +1175,12 @@ export class World3D {
       });
     }
     // Street lights come on after dusk.
+    // The same light level as the town's street lamps (community-world.js).
     this.streetLights ??= this.model.objects.filter((o) => o.streetLight);
-    for (const light of this.streetLights) light.emission = daylight < 0.4 ? 1 : 0;
+    this.streetLightPools ??= this.model.objects.filter((o) => o.streetLightPool && !o.community);
+    const streetLampsOn = (env.light ?? 70) < STREET_LIGHT_LEVEL;
+    for (const light of this.streetLights) light.emission = streetLampsOn ? 1 : 0;
+    for (const pool of this.streetLightPools) pool.opacity = streetLampsOn ? pool.poolOpacity : 0;
     for (const pane of this.model.windows || []) {
       const lit = daylight < 0.35;
       pane.color = lit ? '#ffd98a' : '#8abec5';
@@ -1099,14 +1230,14 @@ export class World3D {
     const door = this.model.dynamic.gate;
     door.pos = [
       door.anchor[0] + Math.cos(gate) * 0.75,
-      0.68,
+      door.baseHeight ?? 0.68,
       door.anchor[2] + Math.sin(gate) * 0.75,
     ];
     door.rotation[1] = -gate;
     const mate = this.model.dynamic.gateRight;
     mate.pos = [
       mate.anchor[0] - Math.cos(gate) * 0.75,
-      0.68,
+      mate.baseHeight ?? 0.68,
       mate.anchor[2] + Math.sin(gate) * 0.75,
     ];
     mate.rotation[1] = gate;
@@ -1116,7 +1247,13 @@ export class World3D {
     const garageDoor = this.model.dynamic.garageDoor;
     const garageFloor =
       this.model.floorHeight?.(garageDoor.pos[0], garageDoor.pos[2] - 0.05) ?? 0.23;
-    garageDoor.pos[1] = (env.door ? 2.2 : 0.38) + garageFloor - 0.23;
+    const garageVehicle = this.model.community.sim.vehicles.some(
+      (vehicle) =>
+        Math.abs(vehicle.x + this.model.community.origin.x - garageDoor.pos[0]) < 2 &&
+        vehicle.z + this.model.community.origin.z > garageDoor.pos[2] - 5 &&
+        vehicle.z + this.model.community.origin.z < garageDoor.pos[2] + 5,
+    );
+    garageDoor.pos[1] = (env.door || garageVehicle ? 2.2 : 0.38) + garageFloor - 0.23;
   }
   render(t, dt, s = this.getState()) {
     const gl = this.gl;
@@ -1183,7 +1320,9 @@ export class World3D {
       perspective(
         fov,
         width / height,
-        0.1,
+        // Keep depth precision at town scale; a fixed ten-centimetre near plane makes
+        // river banks and terrain edges flicker when viewed from hundreds of metres away.
+        this.skyView ? 0.1 : Math.max(0.1, this.currentDistance * 0.01),
         this.communityView ? 650 : this.landscapeView || this.currentDistance > 95 ? 320 : 160,
       ),
       mirrored ? multiply(view, MIRROR) : view,
@@ -1216,7 +1355,12 @@ export class World3D {
     gl.uniform1f(this.uniforms.uTime, this.surfaceTime || 0);
     const boxes = [],
       info = [];
-    for (const caster of this.model.visualShadows.slice(0, 12)) {
+    // Measure each caster once (squared distance) rather than twice per comparison.
+    const [tx, , tz] = this.currentTarget;
+    for (const { caster } of this.model.visualShadows
+      .map((caster) => ({ caster, d: (caster.x - tx) ** 2 + (caster.z - tz) ** 2 }))
+      .sort((a, b) => a.d - b.d)
+      .slice(0, 12)) {
       boxes.push(caster.x, caster.z, caster.w / 2, caster.d / 2);
       info.push(caster.h, caster.opacity, 0, 0);
     }
@@ -1239,10 +1383,22 @@ export class World3D {
     const lights = [],
       lightColors = [],
       candidates = [];
+    // Street lamps sit high and light a wider circle than lamps at head height.
     for (const lamp of [...this.model.lamps, ...this.model.community.lights])
-      if (lamp.emission) candidates.push({ pos: lamp.pos, color: [1, 0.79, 0.47] });
+      if (lamp.emission)
+        candidates.push({
+          pos: lamp.pos,
+          color: [1, 0.79, 0.47],
+          range: lamp.streetLamp ? 10 : 5.5,
+        });
+    for (const lamp of this.streetLights || [])
+      if (lamp.emission) candidates.push({ pos: lamp.pos, color: [1, 0.82, 0.55], range: 8 });
     for (const home of this.model.community.residences)
       if (home.lamp.emission) candidates.push({ pos: home.lamp.pos, color: [1, 0.77, 0.43] });
+    for (const civic of [...this.model.community.civic, ...(this.model.community.recreation || [])])
+      if (civic.lamp?.emission) candidates.push({ pos: civic.lamp.pos, color: [1, 0.77, 0.43] });
+    for (const section of this.model.community.sections || [])
+      if (section.lamp.emission) candidates.push({ pos: section.lamp.pos, color: [1, 0.77, 0.43] });
     for (const d of this.deviceObjects)
       if (d.light?.emission)
         candidates.push({ pos: d.light.pos, color: color(d.light.color).slice(0, 3) });
@@ -1251,14 +1407,18 @@ export class World3D {
         Math.hypot(a.pos[0] - this.target[0], a.pos[2] - this.target[2]) -
         Math.hypot(b.pos[0] - this.target[0], b.pos[2] - this.target[2]),
     );
+    const ranges = [];
     for (const lamp of candidates.slice(0, 8)) {
       lights.push(lamp.pos);
       lightColors.push(lamp.color);
+      ranges.push(lamp.range ?? 5.5);
     }
     while (lights.length < 8) {
       lights.push([0, -1000, 0]);
       lightColors.push([0, 0, 0]);
+      ranges.push(5.5);
     }
+    gl.uniform1fv(this.uniforms['uLightRange[0]'], ranges);
     gl.uniform3fv(this.uniforms['uLights[0]'], lights.flat());
     gl.uniform3fv(this.uniforms['uLightColor[0]'], lightColors.flat());
     const opaque = [],
@@ -1334,11 +1494,27 @@ export class World3D {
       this.instancing?.vertexAttribDivisorANGLE(a.location, on ? 1 : 0);
     }
   }
+  // Bevelled boxes ('roundedBox:fx:fy:fz') are built the first time one is drawn.
+  createGeometry(key) {
+    const gl = this.gl,
+      g = geometry(key),
+      buffer = (data) => {
+        const b = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, b);
+        gl.bufferData(gl.ARRAY_BUFFER, data, gl.STATIC_DRAW);
+        return b;
+      };
+    return (this.geometries[key] = {
+      positions: buffer(g.positions),
+      normals: buffer(g.normals),
+      count: g.count,
+    });
+  }
   bindGeometry(key) {
     if (this.drawState.geometry === key) return this.geometries[key];
     this.drawState.geometry = key;
     const gl = this.gl,
-      g = this.geometries[key];
+      g = this.geometries[key] || this.createGeometry(key);
     gl.bindBuffer(gl.ARRAY_BUFFER, g.positions);
     gl.vertexAttribPointer(this.position, 3, gl.FLOAT, false, 0, 0);
     gl.bindBuffer(gl.ARRAY_BUFFER, g.normals);

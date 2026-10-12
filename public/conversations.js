@@ -122,7 +122,9 @@ export function sendConversationMessage(
             ? ' The trough refills and the sheep respond to their water supply.'
             : m.farmQuest === 'horse'
               ? ' The shelter sprinklers mist and the horses seek shade on hot days.'
-              : '';
+              : m.farmStation
+                ? ' The feed chute opens and the trough fills; the stock crowd round the station while either runs low.'
+                : '';
     reply = `When your code switches the outputs, ${actions.join('; ')}.${farm} The scene follows your running code, so installing a component alone does not switch it on. ${m.goal}`;
   } else if (/weather|rain|wind|cloud|frost|humidity|climate/.test(q)) {
     const weather = devices.filter((d) =>

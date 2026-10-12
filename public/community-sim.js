@@ -1,3 +1,5 @@
+import { recreationLots } from './community-recreation.js';
+import { civicLots } from './community-civic.js';
 import { residentialLots } from './community-residences.js';
 import { Runtime } from './runtime.js';
 import { communityDevices } from './community-missions.js';
@@ -70,8 +72,8 @@ export function createCommunity(location = {}) {
     NOR: ['Butikk · Kafé', 'Fabrikk', 'STOP'],
   }[location.iso] || ['Market · Café', 'Factory', 'STOP'];
   const handedness = LEFT_DRIVING.has(location.iso || 'AUS') ? -1 : 1;
-  for (let iz = 0; iz < 3; iz++)
-    for (let ix = 0; ix < 3; ix++) {
+  for (let iz = -1; iz < 4; iz++)
+    for (let ix = 0; ix < 6; ix++) {
       const id = `${ix}:${iz}`,
         x = (ix - 1) * 48,
         z = (iz - 1) * 48;
@@ -125,6 +127,8 @@ export function createCommunity(location = {}) {
     }
   for (const j of junctions) {
     const incoming = Object.keys(roads.nodes).filter((id) => id.endsWith(`>${j.id}:in`));
+    j.signal = incoming.length >= 3;
+    for (const crossing of crossings.filter((c) => c.junction === j.id)) crossing.signal = j.signal;
     const outgoing = Object.keys(roads.nodes).filter(
       (id) => id.startsWith(`${j.id}>`) && id.endsWith(':out'),
     );
@@ -253,29 +257,20 @@ export function createCommunity(location = {}) {
       type: 'parking',
     },
   ];
-  // A shared residential walkway serves the new homes and links both ends to public footpaths.
-  const residentialNodes = [
-    ['residential:south', -10, -8],
-    ['residential:east', -10, -23],
-    ['residential:middle', -18, -23],
-    ['residential:west', -32, -23],
-    ['residential:outer', -40, -23],
-    ['residential:cottage', -32, -8],
-  ];
-  for (const [id, x, z] of residentialNodes) walks.node(id, x, z);
-  for (const [a, b] of [
-    ['1:1/-1/-1', 'residential:south'],
-    ['residential:south', 'residential:east'],
-    ['residential:east', 'residential:middle'],
-    ['residential:middle', 'residential:west'],
-    ['residential:west', 'residential:outer'],
-    ['residential:outer', '0:1/1/-1'],
-    ['residential:south', 'residential:cottage'],
-  ]) {
-    walks.edge(a, b, { residential: true });
-    walks.edge(b, a, { residential: true });
-  }
   buildings.push(...residentialLots.map((b) => ({ ...b })));
+  buildings.push(...civicLots.map((b) => ({ ...b })));
+  buildings.push(...recreationLots.map((b) => ({ ...b })));
+  // Each pair of homes occupies one northern block. Door paths join the adjacent
+  // pavement without cutting across a road or through a neighbouring garden.
+  const residentialEntrances = Object.fromEntries(
+    residentialLots.map((b, i) => {
+      const block = Math.floor(i / 2),
+        right = i % 2 === 1;
+      const corner = `${block + (right ? 1 : 0)}:0/${right ? -1 : 1}/-1`;
+      const sideX = walks.nodes[corner].x;
+      return [b.type, [corner, [sideX, -62], [b.x, -62], [b.x, b.z + b.d / 2 + 1]]];
+    }),
+  );
   // Connected forecourts reach doorsteps without cutting through neighbouring buildings.
   const entrances = {
     home: ['1:1/-1/-1', [-10, -8], [-10, -15], [-25, -15]],
@@ -284,14 +279,40 @@ export function createCommunity(location = {}) {
     warehouse: ['1:1/1/1', [10, 8], [10, 32], [24, 32]],
     factory: ['1:1/-1/1', [-10, 8], [-10, 38], [-25, 38]],
     parking: ['2:2/-1/-1', [35, 34]],
-    residence1: ['residential:west', [-32, -25]],
-    residence2: ['residential:middle', [-18, -25]],
-    residence3: ['residential:cottage', [-32, -11]],
+    ...residentialEntrances,
+    ...Object.fromEntries(
+      recreationLots.map((b) => [
+        b.type,
+        b.type === 'busdepot'
+          ? [`${Math.floor(b.x / 48) + 1}:0/1/-1`, [b.x, -56], [b.x, b.z + b.d / 2 + 1]]
+          : b.type === 'park' || b.type === 'playground2'
+            ? [`${Math.floor(b.x / 48) + 1}:3/1/-1`, [b.x, 88]]
+            : b.type === 'basketball' || b.type === 'playground'
+              ? ['3:0/1/-1', [b.x, -56], [b.x, b.z + b.d / 2 + 1]]
+              : [
+                  `${Math.floor(b.x / 48) + 1}:1/1/${b.z < 0 ? -1 : 1}`,
+                  [Math.floor(b.x / 48) * 48 + 8, b.z],
+                  [b.x - b.w / 2 - 1, b.z],
+                ],
+      ]),
+    ),
+    ...Object.fromEntries(
+      civicLots.map((b, i) => [
+        b.type,
+        [
+          `${2}:${Math.min(2, i)}/1/${i === 0 ? 1 : -1}`,
+          [60, i === 0 ? -40 : i === 1 ? -8 : 40],
+          [60, b.z],
+          [b.x - b.w / 2 - 1, b.z],
+        ],
+      ]),
+    ),
   };
   for (const building of buildings) {
     const [origin, ...points] = entrances[building.type];
     let previous = origin;
     for (const [i, [x, z]] of points.entries()) {
+      if (walks.nodes[previous].x === x && walks.nodes[previous].z === z) continue;
       const node = walks.node(`${building.id}:entrance:${i}`, x, z);
       walks.edge(previous, node);
       walks.edge(node, previous);
@@ -299,10 +320,54 @@ export function createCommunity(location = {}) {
     }
     building.node = previous;
   }
+  // A direct pavement link lets park visitors reach the adjacent playground crossing.
+  const park = buildings.find((b) => b.type === 'park');
+  if (park) {
+    walks.edge(park.node, '4:3/-1/-1');
+    walks.edge('4:3/-1/-1', park.node);
+  }
+  // Bus stops halfway along the busiest street lanes (both directions of each block). Buses pull
+  // in, wait, then pull away; community-world draws a shelter on the kerb beside each one.
+  const busStops = [];
+  for (const [a, b] of [
+    ['0:1', '1:1'],
+    ['2:1', '3:1'],
+    ['4:1', '5:1'],
+    ['1:2', '2:2'],
+    ['2:2', '3:2'],
+  ])
+    for (const [from, to] of [
+      [a, b],
+      [b, a],
+    ]) {
+      const edge = roads.edges[`${from}>${to}:out`]?.find((e) => e.to === `${from}>${to}:in`);
+      if (!edge) continue;
+      const start = roads.nodes[edge.from],
+        end = roads.nodes[edge.to];
+      const length = Math.hypot(end.x - start.x, end.z - start.z),
+        dx = (end.x - start.x) / length,
+        dz = (end.z - start.z) / length;
+      // 6 m past halfway in the direction of travel, so the two directions' stops are staggered
+      // at opposite ends of the block rather than facing each other.
+      const at = length / 2 + 6;
+      edge.busStop = {
+        id: `${from}>${to}`,
+        at,
+        x: start.x + dx * at,
+        z: start.z + dz * at,
+        dx,
+        dz,
+        // Towards the kerb on this lane's side of the road.
+        kx: -dz * handedness,
+        kz: dx * handedness,
+      };
+      busStops.push(edge.busStop);
+    }
   return {
     location,
     localSigns,
     handedness,
+    busStops,
     roads,
     walks,
     junctions,
@@ -311,6 +376,7 @@ export function createCommunity(location = {}) {
     buildings,
   };
 }
+export const BUS_DWELL = 4;
 export class Signals {
   constructor() {
     this.phase = 'EW';
@@ -415,7 +481,11 @@ export class CommunitySimulation {
     this.sequence = 0;
     this.outputs = {};
     this.walkNodes = Object.keys(this.map.walks.nodes);
-    this.roadStarts = Object.keys(this.map.roads.nodes).filter((id) => id.endsWith(':out'));
+    // Through traffic enters from the main town streets; the northern housing
+    // streets remain connected for local routes without spawning delivery queues.
+    this.roadStarts = Object.keys(this.map.roads.nodes).filter(
+      (id) => id.endsWith(':out') && !id.includes(':-1') && !id.includes(':3'),
+    );
   }
   addVehicle(start, goal, kind = 'car') {
     const route = this.map.roads.route(start, goal);
@@ -456,9 +526,38 @@ export class CommunitySimulation {
   occupied(id) {
     return this.map.crossings.some((c) => c.junction === id && c.occupants.size);
   }
+  // The controller junction runs `this.signals`, which the student's program and the overview
+  // drive. Every other signalled junction runs its own controller, so a pedestrian or a held
+  // vehicle there only stops that junction's traffic, never the whole town.
+  get controlJunction() {
+    return (
+      this.map.junctions.find((j) => j.id === '1:1' && j.signal) ||
+      this.map.junctions.find((j) => j.signal)
+    );
+  }
+  signalsAt(id) {
+    this.junctionSignals ||= new Map();
+    let signals = this.junctionSignals.get(id);
+    if (!signals) {
+      const control = this.controlJunction,
+        j = this.map.junctions.find((j) => j.id === id);
+      if (!j?.signal || j === control) return this.signals;
+      // Each junction starts its cycle late by the drive from the controller at cruising speed
+      // (7 m/s), so a car leaving on green tends to arrive on green. The 34 s cycle is
+      // EW 12 + amber 3 + red 2 + NS 12 + amber 3 + red 2; walk calls drift it later.
+      signals = new Signals();
+      const lag = (Math.abs(j.x - control.x) + Math.abs(j.z - control.z)) / 7;
+      for (let t = 0; t < 34 - (lag % 34); t += 0.5) signals.step(0.5, false, false);
+      this.junctionSignals.set(id, signals);
+    }
+    return signals;
+  }
+  signalCrossingsOccupied() {
+    return this.occupied(this.controlJunction.id);
+  }
   safeCrossing(crossing) {
     const j = this.map.junctions.find((j) => j.id === crossing.junction);
-    if (j.owner != null || (j.signal && this.signals.phase !== 'WALK')) return false;
+    if (j.owner != null || (j.signal && this.signalsAt(j.id).phase !== 'WALK')) return false;
     return this.vehicles.every((v) => {
       const edge = v.route[v.index];
       if (edge.approach !== j.id) return true;
@@ -500,7 +599,7 @@ export class CommunitySimulation {
       if (phase && phase !== this.lastControllerPhase)
         this.signals.request(
           [{ 1: 'EW', 2: 'NS', 3: 'WALK', 4: 'RED' }[phase]],
-          this.occupied('1:1'),
+          this.signalCrossingsOccupied(),
         );
       this.lastControllerPhase = phase;
       if (result.logs?.length) this.controllerLog = result.logs.slice(-8).join('\n');
@@ -514,8 +613,8 @@ export class CommunitySimulation {
     this.releaseDepartedOwners();
     this.time += dt;
     this.hour = (this.initialHour ?? 8) + this.time / 3600;
-    const center = this.map.junctions.find((j) => j.signal);
-    this.signals.step(dt, this.occupied(center.id), center.owner != null);
+    for (const j of this.map.junctions)
+      if (j.signal) this.signalsAt(j.id).step(dt, this.occupied(j.id), j.owner != null);
     this.spawnClock += dt;
     if (this.spawnClock >= 1) {
       this.spawnClock = 0;
@@ -526,11 +625,13 @@ export class CommunitySimulation {
         const start = this.roadStarts[this.sequence % this.roadStarts.length],
           kind = ['car', 'van', 'bus', 'truck'][this.sequence % 4];
         const goal =
-          kind === 'truck' || kind === 'van'
-            ? 'loading-bay'
-            : kind === 'car' && this.sequence % 3 === 0
-              ? 'parking'
-              : this.roadStarts[(this.sequence + 11) % this.roadStarts.length];
+          this.map.farmDriveway && (kind === 'truck' || (kind !== 'bus' && this.sequence % 3 === 0))
+            ? 'farm-parking'
+            : kind === 'truck' || kind === 'van'
+              ? 'loading-bay'
+              : kind === 'car' && this.sequence % 3 === 0
+                ? 'parking'
+                : this.roadStarts[(this.sequence + 11) % this.roadStarts.length];
         this.addVehicle(start, goal, kind);
       }
       if (this.people.length < this.pedestrianDensity) {
@@ -540,7 +641,7 @@ export class CommunitySimulation {
           .filter((b) => ['shop', 'parking'].includes(b.type))
           .map((b) => b.node);
         const workplaces = this.map.buildings
-          .filter((b) => ['office', 'factory', 'warehouse'].includes(b.type))
+          .filter((b) => ['office', 'factory', 'warehouse'].includes(b.type) || b.civic)
           .map((b) => b.node);
         const hour = this.hour % 24;
         const destination =
@@ -557,7 +658,7 @@ export class CommunitySimulation {
       const edge = p.route[p.index],
         c = edge.crossing;
       if (c && p.progress === 0) {
-        if (c.signal) this.signals.requested = true;
+        if (c.signal) this.signalsAt(c.junction).requested = true;
         if (!this.safeCrossing(c)) {
           p.status = 'At kerb · waiting for safe crossing';
           continue;
@@ -588,9 +689,21 @@ export class CommunitySimulation {
         v.dwell = Math.max(0, v.dwell - dt);
         continue;
       }
-      if (v.clearing && v.progress > v.length / 2 + 1) {
-        this.map.junctions.find((j) => j.id === v.clearing).owner = null;
-        v.clearing = null;
+      if (v.clearing) {
+        const junction = this.map.junctions.find((j) => j.id === v.clearing);
+        // The farm junction has short through links. Release once the rear clears its
+        // footprint and western crossing, even if the next signal has stopped the vehicle.
+        const clear = junction.farmAccess
+          ? !overlaps(
+              v,
+              { x: junction.x - 1.5, z: junction.z, angle: 0, length: 15, width: 12 },
+              0.5,
+            )
+          : v.progress > v.length / 2 + 1;
+        if (clear) {
+          junction.owner = null;
+          v.clearing = null;
+        }
       }
       const edge = v.route[v.index],
         next = v.route[v.index + 1];
@@ -609,6 +722,21 @@ export class CommunitySimulation {
       }
       let limit = (edge.turn || edge.driveway ? 2 : 7) * (this.rain > 0 ? 0.65 : 1);
       let gap = Infinity;
+      // Buses brake to a halt at each stop on their route, wait for passengers, then move on.
+      const stop = v.kind === 'bus' && edge.busStop && !edge.busStop.removed ? edge.busStop : null;
+      let stopGap = Infinity;
+      if (stop && v.servedStop !== stop) {
+        const toStop = stop.at - v.progress;
+        if (toStop > -0.5 && toStop <= 0.2 && v.speed < 0.6) {
+          v.servedStop = stop;
+          v.atStop = stop;
+          v.dwell = BUS_DWELL;
+          v.speed = 0;
+          continue;
+        }
+        if (toStop > 0) stopGap = toStop;
+      }
+      if (v.atStop && v.atStop !== stop) v.atStop = null;
       if (edge.approach && next?.junction) {
         const j = this.map.junctions.find((j) => j.id === next.junction);
         const waiting = this.people.some(
@@ -638,12 +766,14 @@ export class CommunitySimulation {
           (this.occupied(j.id) ||
             j.owner != null ||
             !clear ||
-            (j.signal && this.signals.phase !== next.axis) ||
+            (j.signal && this.signalsAt(j.id).phase !== next.axis) ||
             (!j.signal && waiting))
         )
           gap = edge.length - v.progress;
         else if (edge.length - v.progress < 0.5) j.owner = v.id;
       }
+      // Applied after the junction check, which sets its own stopping distance.
+      gap = Math.min(gap, stopGap);
       for (const other of this.vehicles)
         if (other !== v && other.route[other.index] === edge && other.progress > v.progress)
           gap = Math.min(
@@ -689,8 +819,12 @@ export class CommunitySimulation {
         v.index++;
         v.progress = 0;
         if (v.index === v.route.length) {
-          if (v.goal === 'loading-bay' || v.goal === 'parking') {
+          if (v.goal === 'loading-bay' || v.goal === 'parking' || v.goal === 'farm-parking') {
             const origin = v.goal;
+            if (origin === 'farm-parking') {
+              const visits = this.map.farmDriveway.visits;
+              visits[v.kind] = (visits[v.kind] || 0) + 1;
+            }
             v.goal = this.roadStarts[(v.id + 7) % this.roadStarts.length];
             v.route = this.map.roads.route(origin, v.goal);
             v.index = 0;

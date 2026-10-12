@@ -385,9 +385,19 @@ export function advanceEnvironment(
   );
   // A pump wired with a level probe fills the trough or pond instead of watering the beds.
   const refill = devices.some((d) => d.id === 'pond');
-  // The flock slowly drinks the stock trough down.
-  if (location?.farm && location.style === 'sheep')
+  // Livestock slowly drink the stock trough down and eat the feed trough down (the ultrasonic
+  // sensor above it reads further away as the feed drops). A servo wired with that sensor opens
+  // the hopper chute and the feed rises again.
+  if (location?.farm) {
     next.pond = clamp((next.pond ?? 60) - 0.15 * dt, 0, 100);
+    const feedSensor = devices.some((d) => d.id === 'ultra');
+    const chute = devices.some((d) => d.id === 'servo' && (outputs[d.pin] || 0) > 0);
+    next.distance = clamp(
+      (next.distance ?? 100) + 0.25 * dt - (feedSensor && chute ? 3 * dt : 0),
+      15,
+      300,
+    );
+  }
   for (const d of devices)
     if (['pump', 'valve'].includes(d.id) && (outputs[d.pin] || 0) > 0 && next.tank > 0) {
       const rate = d.id === 'pump' ? 1.1 : 0.4,

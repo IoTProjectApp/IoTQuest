@@ -54,6 +54,7 @@ export function declutterLabels(labels, { bounds, blocked = [] } = {}) {
     if (label.visible) {
       const { w, h } = labelBox(label);
       for ([dx, dy] of label.priority > 1 || label.movable ? offsets(w, h) : [[0, 0]]) {
+        if (Math.hypot(dx, dy) > (label.maxDisplacement ?? Infinity)) continue;
         const candidate = labelBox(label, dx, dy);
         const fits =
           !bounds ||

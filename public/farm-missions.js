@@ -138,8 +138,58 @@ const quests = {
 
 export const farmQuest = (location) => (location?.farm ? quests[location.style] : null);
 
+// A second farm quest in slot 6: the automatic feed and water station in the livestock paddock.
+// The servo opens the hopper chute while the ultrasonic sensor sees the feed 60 cm or more below it; the
+// pump fills the drinking trough while its level probe reads below 2400.
+const STOCK = { dairy: 'cows', sheep: 'flock', horse: 'horses', orchard: 'hens' };
+export function stationQuest(location) {
+  if (!location?.farm || !STOCK[location.style]) return null;
+  const stock = STOCK[location.style];
+  const scenarios = [
+    ['Feed and water both low', { distance: 140, pond: 10 }, [1, 1]],
+    ['Feed and water both topped up', { distance: 25, pond: 90 }, [0, 0]],
+    ['Feed low, trough full', { distance: 120, pond: 90 }, [1, 0]],
+    ['Feed topped up, trough low', { distance: 25, pond: 10 }, [0, 1]],
+  ];
+  return {
+    index: 6,
+    title: 'Automatic Feed & Water Station',
+    badge: 'Stock Keeper',
+    quote: `The ${stock} empty the feed trough and the drinking trough every day. Can the station top both up on its own, so nobody has to?`,
+    learn: ['Ultrasonic level sensing', 'Two independent outputs', 'Refill control'],
+    beginner: {
+      ids: ['ultra', 'servo', 'pond', 'pump'],
+      conditions: ['distance >= 60', 'pond < 2400'],
+      goal: 'Open the feed chute (servo) while the ultrasonic sensor reads 60 cm or more to the feed. Run the pump while the trough level reading is below 2400.',
+      hint: 'Two separate decisions: distance >= 60 for the servo (the sensor reports whole centimetres), pond < 2400 for the pump. The further the sensor sees, the lower the feed.',
+      scenarios,
+    },
+    advanced: {
+      ids: ['ultra', 'servo', 'pond', 'pump', 'level'],
+      conditions: ['distance >= 60', 'pond < 2400 && tank > 400'],
+      goal: 'Open the feed chute while the feed is 60 cm or more below the sensor. Run the pump while the trough reads below 2400, but only while the bore tank reads above 400.',
+      hint: 'The pump needs pond < 2400 && tank > 400 so it never runs a dry bore. The servo only needs distance >= 60.',
+      scenarios: [
+        ...scenarios.map(([name, env, want]) => [name, { ...env, tank: 80 }, want]),
+        ['Trough low but bore tank empty', { distance: 25, pond: 10, tank: 5 }, [0, 0]],
+      ],
+    },
+  };
+}
+
 // Replaces the farm's signature slot; other quests keep their farm-named home versions.
 export function applyFarmQuest(m, index, location, difficulty) {
+  const station = stationQuest(location);
+  if (station && station.index === index) {
+    const level = difficulty === 'advanced' ? station.advanced : station.beginner;
+    return Object.assign(m, structuredClone(level), {
+      title: station.title,
+      badge: station.badge,
+      farmStation: location.style,
+      quote: '“' + station.quote + '”',
+      learn: station.learn,
+    });
+  }
   const q = farmQuest(location);
   if (!q || q.index !== index) return m;
   const level = difficulty === 'advanced' ? q.advanced : q.beginner;

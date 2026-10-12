@@ -13,6 +13,8 @@ test('smooth meshes stay within their unit bounds and have valid outward triangl
     'vase',
     'shade',
     'mountain',
+    'ridge',
+    'gable',
     'leaf',
     'foliage',
     'wool',

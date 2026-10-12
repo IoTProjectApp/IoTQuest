@@ -1,3 +1,6 @@
+import { recreationLots } from './community-recreation.js';
+import { migrateNeighbourAreas } from './neighbour-profiles.js';
+import { civicLots } from './community-civic.js';
 import { residentialLots } from './community-residences.js';
 import { communityStations, COMMUNITY_ORIGIN } from './community-world.js';
 import { residentsForSections, createGreetingTracker } from './section-residents.js';
@@ -130,6 +133,7 @@ state.projects = state.projects || {};
 state.completed = state.completed || {};
 state.activeLocation = locationById(state.activeLocation) ? state.activeLocation : 'legacy';
 state.locationProgress = state.locationProgress || {};
+migrateNeighbourAreas(state);
 state.weatherByLocation = state.weatherByLocation || {};
 state.weatherMode = state.weatherMode || 'live';
 state.difficulty = state.difficulty || 'beginner';
@@ -187,6 +191,19 @@ let activeFault = null,
   inspectionVariables = {};
 const labState = () => (project().lab ??= createLabState());
 let world3d = null;
+// Free mode inside a recreation area, civic section or neighbour house names its own host.
+function freeAreaHost() {
+  const meta = focusArea?.[3];
+  if (!(meta?.recreation || meta?.civicSection || meta?.regionalNeighbour))
+    return { area: 'House & garden', resident: 'Maya', role: 'Your creative companion' };
+  const actor = world3d?.model.actors?.find((a) => a.community && a.area === focusArea[0]),
+    lot = recreationLots.find((b) => b.type === meta.communityType);
+  return {
+    area: focusArea[0],
+    resident: lot?.resident ?? actor?.name,
+    role: lot?.role ?? actor?.role,
+  };
+}
 
 const communityAreaNames = Object.fromEntries(
   Object.entries(communityStations).map(([type, [name]]) => [type, name]),
@@ -198,7 +215,17 @@ function nativeAreas() {
     world3d?.model.community?.areas ||
     Object.entries(communityStations).map(([type, [name, x, z]]) => {
       const p = fromWorld(COMMUNITY_ORIGIN.x + x, COMMUNITY_ORIGIN.z + z);
-      return [name, p.x, p.y, { communityType: type }];
+      return [
+        name,
+        p.x,
+        p.y,
+        {
+          communityType: type,
+          ...(recreationLots.some((b) => b.type === type)
+            ? { recreation: true, district: recreationLots.find((b) => b.type === type).district }
+            : {}),
+        },
+      ];
     })
   );
 }
@@ -284,9 +311,7 @@ const mission = () =>
         : free
           ? {
               title: 'Your smart world',
-              area: 'House & garden',
-              resident: 'Maya',
-              role: 'Your creative companion',
+              ...freeAreaHost(),
               quote:
                 '“What would you like to make smarter? Explore, try an idea, and see what happens. Your toolkit is open.”',
               goal: 'Build your own connected home. Choose any components and use the language guide to program them.',
@@ -859,13 +884,19 @@ function enterArea(name, { keepProject = false } = {}) {
   ) {
     const index = activeMissions().findIndex((m) => m.communityQuest && m.area === name);
     if (index >= 0) selectMission(index);
+    else if ((a[3]?.regionalNeighbour || a[3]?.civicSection || a[3]?.recreation) && !free)
+      $('freeBtn').click();
   }
   world3d?.returnToProperty();
   if (native) world3d?.focusCommunityArea(name);
   focusArea = a;
   view = 'detail';
   zoom = 1.9;
-  state.player = world3d?.findFree({ x: a[1], y: a[2] + 5 }) ?? { x: a[1], y: a[2] + 5 };
+  const landing = {
+    x: a[1],
+    y: a[2] + (a[3]?.regionalNeighbour || a[3]?.civicSection || a[3]?.recreation ? 0 : 5),
+  };
+  state.player = world3d?.findFree(landing) ?? landing;
   const p = toWorld(state.player);
   greetingTracker.acknowledge({ x: p[0], z: p[2] }, characterPositions());
   save();
@@ -892,6 +923,7 @@ function setMapView() {
     ? 'none'
     : 'translate(' + tx + '%,' + ty + '%) scale(' + zoom + ')';
   world3d?.setView(view, a, zoom);
+  updateRoofToggle();
   // The minimap matches the 3D view, which draws the community (and its buildings close up)
   // unflipped even when the home is mirrored.
   $('minimap')?.classList.toggle(
@@ -2029,6 +2061,13 @@ function installDialog(id) {
       (c.resistor ? '<br>Include a ' + esc(c.resistor) + ' resistor.' : '') +
       '</p><button class="primary" id="confirmInstall">Install here</button></div>',
   );
+  if (
+    free &&
+    (focusArea?.[3]?.regionalNeighbour ||
+      focusArea?.[3]?.civicSection ||
+      focusArea?.[3]?.recreation)
+  )
+    $('installArea').value = focusArea[0];
   $('confirmInstall').onclick = () => {
     const area = $('installArea').value;
     if (nativeAreas().some((a) => a[0] === area)) enterArea(area, { keepProject: true });
@@ -3862,15 +3901,16 @@ function restoreBackup(locationId, backupKey) {
 
 $('exportBtn').onclick = exportProject;
 function residentialResidents(engine = world3d) {
-  return residentialLots.map((b) => {
-    const actor = engine?.model.actors.find((a) => a.id === 'residence:' + b.type);
+  return [...residentialLots, ...civicLots, ...recreationLots].map((b) => {
+    const key = (b.recreation ? 'recreation:' : b.civic ? 'civic:' : 'residence:') + b.type;
+    const actor = engine?.model.actors.find((a) => a.id === key);
     const area = nativeAreas().find((a) => a[3]?.communityType === b.type);
     const p = toWorld({ x: area[1], y: area[2] });
     return {
-      key: 'residence:' + b.type,
+      key,
       name: b.resident,
       area: b.name,
-      section: 'Neighbourhood home',
+      section: b.civic || b.recreation ? b.name : 'Neighbourhood home',
       x: actor?.x ?? p[0] + 1.7,
       z: actor?.z ?? p[2] + 0.3,
     };
@@ -3914,7 +3954,13 @@ function renderSectionResidents() {
   )
     .concat(
       residentialResidents(),
-      characterPositions().filter((c) => c.key.startsWith('worker:')),
+      characterPositions().filter(
+        (c) =>
+          c.key.startsWith('worker:') ||
+          c.key.startsWith('neighbour:') ||
+          c.key.startsWith('openblock:') ||
+          c.key.startsWith('civic-section:'),
+      ),
     )
     .map((c) => {
       const point = fromWorld(c.x, c.z);
@@ -4321,11 +4367,15 @@ $('difficultySelect').onchange = () => setDifficulty($('difficultySelect').value
 $('scenarioSelect').innerHTML = scenarioOptions();
 $('scenarioSelect').onchange = () => setScenario($('scenarioSelect').value);
 function updateRoofToggle() {
-  $('roofToggle').textContent = state.roofsVisible ? 'Roof: visible' : 'Roof: cutaway';
-  $('roofToggle').setAttribute('aria-pressed', String(!!state.roofsVisible));
+  const shown = world3d?.communityView
+    ? state.overviewRoofsVisible !== false
+    : !!state.roofsVisible;
+  $('roofToggle').textContent = shown ? 'Roof: visible' : 'Roof: cutaway';
+  $('roofToggle').setAttribute('aria-pressed', String(shown));
 }
 $('roofToggle').onclick = () => {
-  state.roofsVisible = !state.roofsVisible;
+  if (world3d?.communityView) state.overviewRoofsVisible = state.overviewRoofsVisible === false;
+  else state.roofsVisible = !state.roofsVisible;
   updateRoofToggle();
   save();
 };
@@ -4583,7 +4633,7 @@ function projectWorldLabels(engine) {
   }
   // Labels are collected first, then declutterLabels decides which name tags fit on screen.
   const labels = [];
-  const place = (el, p, priority) => {
+  const place = (el, p, priority, maxDisplacement) => {
     if (!el) return;
     const v = engine.project(p);
     el.style.left = v.x + 'px';
@@ -4596,6 +4646,7 @@ function projectWorldLabels(engine) {
         y: v.y,
         visible: v.visible,
         priority,
+        maxDisplacement: maxDisplacement ?? (priority === 3 ? 64 : undefined),
         movable: el.id === 'player' && !!engine.indoorArea,
         // Community building (and crossing) buttons stay reachable by keyboard even when there
         // is no room to show them.
@@ -4606,7 +4657,10 @@ function projectWorldLabels(engine) {
     const a = allAreas().find((a) => a[0] === el.dataset.area);
     const p = toWorld({ x: a[1], y: a[2] });
     p[1] = 1.65 + (engine.model.floorHeight?.(p[0], p[2]) || 0);
-    if (engine.communityView && a[3]?.communityType) el.style.visibility = 'hidden';
+    // Civic sections have their own buttons inside the building. In the overview, home rooms
+    // stay at low priority so label decluttering, not a hard hide, keeps the town readable.
+    if (a[3]?.civicSection || (engine.communityView && a[3]?.communityType))
+      el.style.visibility = 'hidden';
     else place(el, p, engine.communityView ? 2 : 0);
   }
   const targets = world3d?.deviceObjects || [];
@@ -4636,6 +4690,20 @@ function projectWorldLabels(engine) {
   place($('player'), p, 1);
   for (const actor of engine.model.actors) {
     if (actor.id === 'player') continue;
+    const residentEl = $(
+      actor.area
+        ? 'resident-' + actor.id
+        : actor.id === 'Maya'
+          ? 'resident'
+          : actor.id === 'Alex'
+            ? 'alexNpc'
+            : 'samNpc',
+    );
+    // The overview identifies buildings. People get names in the closer building views.
+    if (engine.communityView) {
+      if (residentEl) residentEl.style.visibility = 'hidden';
+      continue;
+    }
     const part = actor.parts.find((p) => p.shape === 'sphere' && p.local[1] === 1.27);
     place(
       $(
@@ -4651,6 +4719,36 @@ function projectWorldLabels(engine) {
       actor.area ? 3 : 2,
     );
   }
+  const sectionTargets = $('civicSectionTargets');
+  const selectedArea = nativeAreas().find((a) => a[0] === engine.indoorArea);
+  const parent = selectedArea?.[3]?.parentType || selectedArea?.[3]?.communityType;
+  const visibleSections = (engine.model.community.sections || []).filter(
+    (s) => s.parentType === parent,
+  );
+  sectionTargets.hidden = engine.communityView || !visibleSections.length;
+  const sectionSignature = visibleSections.map((s) => s.type).join(',');
+  if (sectionTargets.dataset.signature !== sectionSignature) {
+    sectionTargets.dataset.signature = sectionSignature;
+    sectionTargets.innerHTML = visibleSections
+      .map(
+        (s) =>
+          `<button class="world-device-target community-building-target" data-civic-section="${esc(s.type)}">${esc(s.name)}</button>`,
+      )
+      .join('');
+    sectionTargets.querySelectorAll('[data-civic-section]').forEach((button) => {
+      button.onclick = () =>
+        enterArea(visibleSections.find((s) => s.type === button.dataset.civicSection).name);
+    });
+  }
+  if (!sectionTargets.hidden)
+    for (const section of visibleSections) {
+      const area = nativeAreas().find((a) => a[0] === section.name);
+      place(
+        sectionTargets.querySelector(`[data-civic-section="${section.type}"]`),
+        toWorld({ x: area[1], y: area[2] }).map((v, i) => (i === 1 ? 2 : v)),
+        1.5,
+      );
+    }
   const communityTargets = $('communityWorldTargets');
   communityTargets.hidden = !engine.communityView;
   if (engine.communityView) {
@@ -4662,7 +4760,7 @@ function projectWorldLabels(engine) {
         sim.map.buildings
           .map(
             (b) =>
-              `<button class="world-device-target community-building-target" data-community-building="${esc(b.type)}">${esc(b.name)}</button>`,
+              `<button class="world-device-target community-building-target" data-community-building="${esc(b.type)}" title="${esc(b.name)}">${esc(b.type === 'park' || b.type === 'playground2' ? b.district : b.name)}</button>`,
           )
           .join('') +
         '<button class="world-device-target community-building-target" data-community-crossing>Request pedestrian crossing</button><span class="world-device-target" data-community-signal></span>';
@@ -4677,7 +4775,10 @@ function projectWorldLabels(engine) {
             enterArea('Living room');
             return;
           }
-          enterArea(communityAreaNames[type]);
+          enterArea(
+            communityAreaNames[type] ||
+              nativeAreas().find((a) => a[3]?.communityType === type)?.[0],
+          );
         };
       });
     }
@@ -4686,7 +4787,7 @@ function projectWorldLabels(engine) {
     place(signal, [engine.model.community.origin.x, 4, engine.model.community.origin.z], 6);
     place(
       communityTargets.querySelector('[data-community-crossing]'),
-      [engine.model.community.origin.x, 1, 8],
+      [engine.model.community.origin.x, 1, engine.model.community.origin.z + 8],
       5,
     );
     communityTargets.querySelectorAll('[data-community-building]').forEach((button) => {
@@ -4694,8 +4795,13 @@ function projectWorldLabels(engine) {
       // Placed before resident tags (2) so the buttons get first choice of the free space.
       place(
         button,
-        [engine.model.community.origin.x + b.x, b.type === 'factory' ? 8 : 5, b.z],
+        [
+          engine.model.community.origin.x + b.x,
+          b.residential ? 1 : b.type === 'factory' ? 8 : 5,
+          engine.model.community.origin.z + b.z + (b.residential ? b.d / 2 + 3 : 0),
+        ],
         1.5,
+        b.residential ? 96 : undefined,
       );
     });
   }
@@ -4745,7 +4851,9 @@ if (typeof $('worldCanvas')?.getContext === 'function') {
         visible: !state.travelScreen,
         upgrades: labState().upgrades,
         batteryWh: labState().resources.batteryWh,
-        roofsVisible: state.roofsVisible,
+        roofsVisible: world3d?.communityView
+          ? state.overviewRoofsVisible !== false
+          : state.roofsVisible,
         simClockMs: labState().elapsedMs,
         weatherMode: state.weatherMode,
         skyMode: state.skyMode || 'live',
@@ -4822,9 +4930,14 @@ if (navigator.modelContext?.registerTool) {
 
 // A click in the overview follows the same rule as the area markers (keepCurrentProject).
 function selectCommunityBuilding(type) {
-  enterArea(type === 'home' ? 'Living room' : communityAreaNames[type], {
-    keepProject: keepCurrentProject(),
-  });
+  enterArea(
+    type === 'home'
+      ? 'Living room'
+      : communityAreaNames[type] || nativeAreas().find((a) => a[3]?.communityType === type)?.[0],
+    {
+      keepProject: keepCurrentProject(),
+    },
+  );
 }
 function openWorldCommunityProgramming() {
   enterArea(world3d?.indoorArea || 'Factory floor');

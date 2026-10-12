@@ -1,5 +1,14 @@
 // Shapes with a simpler version for objects far from the camera (see LOW_DETAIL_SHAPES).
-export const LOW_DETAIL_SHAPES = ['sphere', 'foliage', 'wool', 'cylinder', 'cone', 'leaf', 'torus'];
+export const LOW_DETAIL_SHAPES = [
+  'sphere',
+  'foliage',
+  'wool',
+  'cylinder',
+  'cone',
+  'leaf',
+  'torus',
+  'ridge',
+];
 // low: far fewer vertices for objects only a few pixels across. A rounded box far away is
 // drawn as a plain box instead (its bevel is under a pixel).
 export function geometry(shape, { low = false } = {}) {
@@ -71,12 +80,19 @@ export function geometry(shape, { low = false } = {}) {
           smoothTriangle(vertices, normals);
         }
       }
-  } else if (shape === 'mountain') {
+  } else if (shape === 'mountain' || shape === 'ridge') {
     // A smooth, asymmetric height field with multiple ridges and a low perimeter.
     // Shared vertices have analytic-gradient normals for continuous shading.
-    const steps = 20;
+    const steps = shape === 'ridge' ? (low ? 12 : 32) : 20;
     const height = (x, z) => {
       const edge = Math.max(0, 1 - 4 * x * x) * Math.max(0, 1 - 4 * z * z);
+      if (shape === 'ridge') {
+        const peaks =
+          0.78 * Math.exp(-((x + 0.12) ** 2 * 38 + (z - 0.02) ** 2 * 18)) +
+          0.55 * Math.exp(-((x - 0.22) ** 2 * 75 + (z + 0.12) ** 2 * 44));
+        const crag = 1 + 0.14 * Math.sin(x * 28 + z * 17) + 0.07 * Math.sin(x * 47 - z * 31);
+        return Math.min(0.98, Math.pow(edge, 0.65) * peaks * crag);
+      }
       const ridges =
         0.72 * Math.exp(-((x + 0.07) ** 2 * 10 + (z - 0.04) ** 2 * 12)) +
         0.28 * Math.exp(-((x - 0.18) ** 2 * 28 + (z + 0.12) ** 2 * 22));
@@ -106,32 +122,84 @@ export function geometry(shape, { low = false } = {}) {
             indices.map((k) => q[k].normal),
           );
       }
-  } else if (shape === 'roundedBox') {
-    // A shared bevelled cube: flat face centres, three curved bands at each edge.
-    // Project a subdivided cube onto its inset core plus a spherical bevel.
-    const core = 0.445,
-      radius = 0.5 - core,
-      steps = [-0.5, -0.484, -core, core, 0.484, 0.5];
+  } else if (shape === 'gable') {
+    const vertices = [
+      [-0.5, -0.5, -0.5],
+      [0.5, -0.5, -0.5],
+      [0, 0.5, -0.5],
+      [-0.5, -0.5, 0.5],
+      [0.5, -0.5, 0.5],
+      [0, 0.5, 0.5],
+    ];
+    for (const indices of [
+      [0, 2, 1],
+      [3, 4, 5],
+      [0, 1, 4],
+      [0, 4, 3],
+      [0, 3, 5],
+      [0, 5, 2],
+      [1, 2, 5],
+      [1, 5, 4],
+    ]) {
+      const [a, b, c] = indices.map((i) => vertices[i]);
+      const u = b.map((v, k) => v - a[k]),
+        v = c.map((v, k) => v - a[k]);
+      const face = [
+        u[1] * v[2] - u[2] * v[1],
+        u[2] * v[0] - u[0] * v[2],
+        u[0] * v[1] - u[1] * v[0],
+      ];
+      const length = Math.hypot(...face);
+      triangle(
+        a,
+        b,
+        c,
+        face.map((v) => v / length),
+      );
+    }
+  } else if (shape === 'roundedBox' || shape.startsWith('roundedBox:')) {
+    // A bevelled cube: flat face centres, curved bands at each edge. Project a subdivided cube
+    // onto its inset core plus an ellipsoidal bevel. 'roundedBox:fx:fy:fz' gives each axis its
+    // own bevel (a fraction of the unit cube), so a scaled object can have true round corners.
+    const custom = shape !== 'roundedBox';
+    const bevel = custom ? shape.split(':').slice(1).map(Number) : [0.055, 0.055, 0.055];
+    const core = bevel.map((f) => 0.5 - f);
+    // The shared box keeps its original two bands; a custom bevel uses three, 15° apart.
+    const stepsFor = (f) => {
+      const edge = custom ? [0, 0.423, 0.732].map((t) => -0.5 + t * f) : [-0.5, -0.484];
+      return [...edge, f - 0.5, 0.5 - f, ...edge.map((v) => -v).reverse()];
+    };
+    const steps = [stepsFor(bevel[0]), stepsFor(bevel[1]), stepsFor(bevel[2])];
     const vertex = (axis, side, u, v) => {
       const q = [0, 0, 0];
       q[axis] = side * 0.5;
       q[(axis + 1) % 3] = u;
       q[(axis + 2) % 3] = v;
-      const base = q.map((x) => Math.max(-core, Math.min(core, x))),
-        delta = q.map((x, i) => x - base[i]),
-        length = Math.hypot(...delta),
-        normal = delta.map((x) => x / length);
-      return { point: base.map((x, i) => x + normal[i] * radius), normal };
+      const base = q.map((x, i) => Math.max(-core[i], Math.min(core[i], x))),
+        unit = q.map((x, i) => (x - base[i]) / bevel[i]),
+        length = Math.hypot(...unit),
+        u2 = unit.map((x) => x / length),
+        // The ellipsoid's normal; the shader's inverse-transpose scaling makes it round in world space.
+        normal = u2.map((x, i) => x / bevel[i]),
+        nl = Math.hypot(...normal);
+      return {
+        point: base.map((x, i) => x + u2[i] * bevel[i]),
+        normal: normal.map((x) => x / nl),
+      };
     };
     for (let axis = 0; axis < 3; axis++)
       for (const side of [-1, 1])
-        for (let i = 0; i < steps.length - 1; i++)
-          for (let j = 0; j < steps.length - 1; j++) {
+        for (
+          let i = 0, su = steps[(axis + 1) % 3], sv = steps[(axis + 2) % 3];
+          i < su.length - 1;
+          i++
+        )
+          for (let j = 0; j < sv.length - 1; j++) {
             const quad = [
-              vertex(axis, side, steps[i], steps[j]),
-              vertex(axis, side, steps[i + 1], steps[j]),
-              vertex(axis, side, steps[i + 1], steps[j + 1]),
-              vertex(axis, side, steps[i], steps[j + 1]),
+              vertex(axis, side, su[i], sv[j]),
+              vertex(axis, side, su[i + 1], sv[j]),
+              vertex(axis, side, su[i + 1], sv[j + 1]),
+              vertex(axis, side, su[i], sv[j + 1]),
             ];
             for (const indices of side > 0
               ? [
@@ -343,6 +411,17 @@ export function geometry(shape, { low = false } = {}) {
     }
   }
   return { positions: new Float32Array(p), normals: new Float32Array(n), count: p.length / 3 };
+}
+
+// A box with `bevel` (metres, or [x, y, z] metres) gets its own rounded geometry, quantised so
+// similar sizes share one buffer. Returns its geometry key, or null.
+export function bevelKey(m) {
+  if (m.shape !== 'box' || !m.bevel) return null;
+  const r = Array.isArray(m.bevel) ? m.bevel : [m.bevel, m.bevel, m.bevel];
+  const f = m.size.map((size, i) =>
+    (Math.round(Math.min(0.45, Math.max(0.02, r[i] / Math.max(size, 1e-6))) * 50) / 50).toFixed(2),
+  );
+  return 'roundedBox:' + f.join(':');
 }
 
 export function roundedObject(m) {

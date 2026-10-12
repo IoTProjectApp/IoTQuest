@@ -641,7 +641,9 @@ test('every new building label opens its project and the technician remains visi
   })) {
     await page.locator('#exploreCommunity').click();
     await settle(page);
-    await page.locator(`[data-community-building="${type}"]`).click({ timeout: 10000 });
+    // Clicks use Playwright's default 30 s: the click itself is instant, but Playwright waits a
+    // few rendered frames around it, and CI's software WebGL draws the community at 1-2 s a frame.
+    await page.locator(`[data-community-building="${type}"]`).click();
     assert.match(await page.textContent('#location'), new RegExp(area));
     if (['pool', 'gym', 'dojo', 'park', 'playground', 'playground2', 'basketball'].includes(type)) {
       await page.locator('[data-install="led"]').click();
@@ -703,7 +705,7 @@ for (const language of ['cpp', 'python'])
 
 test('new residential resident opens its own automation request from inside the home', async () => {
   const { page, errors } = await openHome();
-  await page.locator('[data-community-building="residence1"]').click({ timeout: 10000 });
+  await page.locator('[data-community-building="residence1"]').click();
   await page.waitForTimeout(1000);
   await page.keyboard.press('t');
   assert.equal(await modalOpen(page), true);
@@ -719,7 +721,7 @@ test('civic staff offer their own building projects and accept wired programs', 
   for (const b of civicLots) {
     await page.locator('#exploreCommunity').click();
     await settle(page);
-    await page.locator(`[data-community-building="${b.type}"]`).click({ timeout: 10000 });
+    await page.locator(`[data-community-building="${b.type}"]`).click();
     await page.keyboard.press('t');
     assert.equal(await page.textContent('#modalTitle'), 'A chat with ' + b.resident);
     const q = missions.find((m) => m.communityType === b.type);

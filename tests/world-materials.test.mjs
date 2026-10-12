@@ -20,6 +20,7 @@ test('world surfaces recognize explicit finishes, thick grass ground, water and 
   assert.equal(surfaceForMesh(mesh({ material: 'timber' })), SURFACE.timber);
   assert.equal(surfaceForMesh(mesh({ material: 'glass' })), SURFACE.glass);
   assert.equal(surfaceForMesh(mesh({ material: 'fabric' })), SURFACE.fabric);
+  assert.equal(surfaceForMesh(mesh({ surface: 'tile' })), SURFACE.tile);
   assert.equal(surfaceForMesh(mesh({ size: [122, 1, 122], color: '#99b780' })), SURFACE.grass);
   assert.equal(surfaceForMesh(mesh({ terrainFeature: 'river' })), SURFACE.water);
   assert.equal(surfaceForMesh(mesh({ terrainFeature: 'mountain' })), SURFACE.terrain);
@@ -67,7 +68,13 @@ test('visual materials and ground shadows preserve geometry, collisions and rout
   );
   assert.equal(JSON.stringify(m.colliders), colliders);
   assert.equal(JSON.stringify(m.community.sim.map.roads.edges), routes);
-  assert.ok(m.visualShadows.length <= 12);
+  assert.equal(m.visualShadows.length, 21, 'Includes the post office; open-air lots cast none');
+  for (const { building: b } of m.community.civic)
+    assert.ok(
+      m.visualShadows.some(
+        (s) => s.x === m.community.origin.x + b.x && s.z === m.community.origin.z + b.z,
+      ),
+    );
   assert.ok(
     m.visualShadows.every((s) => [s.x, s.z, s.w, s.d, s.h, s.opacity].every(Number.isFinite)),
   );

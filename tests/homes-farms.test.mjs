@@ -360,3 +360,56 @@ test('horses shelter on hot days and misting runs only when the valve is on', ()
     hot = advanceEnvironment(env, valve, {}, 1, { location: farm });
   assert.ok(cooled.temp < hot.temp);
 });
+
+test('every farm has an automatic feed and water station quest that passes at both levels', async () => {
+  const { defaults, program, baseEnv } = await import('../public/missions.js');
+  const { Runtime } = await import('../public/runtime.js');
+  for (const farm of victorianFarms) {
+    assert.ok(createRegionalModel(farm.id).farm.feedStation, farm.id);
+    for (const difficulty of ['beginner', 'advanced']) {
+      const list = adaptMissions(missions, farm, difficulty),
+        m = list.find((q) => q.farmStation);
+      assert.equal(m?.title, 'Automatic Feed & Water Station', farm.id);
+      assert.equal(list.filter((q) => q.farmQuest).length, 1, 'Signature quest kept');
+      const devices = defaults(m.ids, 'ESP32'),
+        runtime = new Runtime(program(m, 'cpp', devices, true), 'cpp', devices, 'ESP32');
+      for (const [name, env, want] of m.scenarios) {
+        const r = runtime.step({ ...baseEnv, ...env });
+        assert.deepEqual(
+          devices.filter((d) => d.output).map((d) => ((r.outputs[d.pin] || 0) > 0 ? 1 : 0)),
+          want,
+          `${farm.id} ${difficulty}: ${name}`,
+        );
+      }
+    }
+  }
+  assert.ok(!adaptMissions(missions, locations[0]).some((q) => q.farmStation));
+});
+
+test('stock eat and drink the station down; the servo and pump refill it; the herd waits there when low', async () => {
+  const farm = victorianFarms.find((f) => f.style === 'sheep');
+  const devices = [
+    { id: 'ultra', pin: 1 },
+    { id: 'servo', pin: 2 },
+  ];
+  let env = { ...baseEnvLite, distance: 30, pond: 80 };
+  for (let i = 0; i < 300; i++) env = advanceEnvironment(env, devices, {}, 1, { location: farm });
+  assert.ok(env.distance > 60 && env.pond < 80, 'Feed and water go down');
+  for (let i = 0; i < 30; i++)
+    env = advanceEnvironment(env, devices, { 2: 1 }, 1, { location: farm });
+  assert.ok(env.distance < 60, 'Servo chute refills the feed');
+  const m = farmModel(farm.id);
+  run(m, devices, {}, { distance: 140, pond: 80 }, 40);
+  const s = m.farm.feedStation;
+  const herd = m.animals.filter((a) => a.kind === 'sheep' && a.paddock[0] < 0);
+  assert.ok(herd.every((a) => a.goalKey === 'feeding'));
+  assert.ok(
+    herd.some((a) => Math.abs(a.x - s.x) < 6 && Math.abs(a.z - s.z) < 6),
+    'Sheep at the station',
+  );
+  run(m, devices, {}, { distance: 25, pond: 80 }, 5);
+  assert.ok(
+    herd.every((a) => a.goalKey === 'home'),
+    'Back to grazing once refilled',
+  );
+});

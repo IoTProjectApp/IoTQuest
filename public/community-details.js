@@ -67,6 +67,63 @@ export function detailCommunity(model, { sim, origin, location, box, objects }) 
       x = (a.x + b.x) / 2,
       z = (a.z + b.z) / 2;
     for (const side of [-1, 1]) {
+      const access = sim.map.farmDriveway?.junction;
+      if (
+        access &&
+        !horizontal &&
+        side === -1 &&
+        x === access.x &&
+        a.z < access.z &&
+        b.z > access.z
+      ) {
+        // Drop the street kerb and edge paint across the farm driveway's mouth.
+        for (const [start, end] of [
+          [a.z + 6.5, access.z - 4],
+          [access.z + 4, b.z - 6.5],
+        ]) {
+          detail(x - 6.15, 0.16, (start + end) / 2, 0.22, 0.18, end - start, '#adafa6');
+          detail(x - 5.7, 0.126, (start + end) / 2, 0.1, 0.012, end - start, '#dedbd0');
+        }
+        continue;
+      }
+      const homeAccess = sim.map.homeDriveway;
+      if (
+        homeAccess &&
+        horizontal &&
+        side === -1 &&
+        z === homeAccess.z &&
+        a.x < homeAccess.x &&
+        b.x > homeAccess.x
+      ) {
+        for (const [start, end] of [
+          [a.x + 6.5, homeAccess.x - homeAccess.width / 2],
+          [homeAccess.x + homeAccess.width / 2, b.x - 6.5],
+        ])
+          if (end > start) {
+            detail((start + end) / 2, 0.16, z - 6.15, end - start, 0.18, 0.22, '#adafa6');
+            detail((start + end) / 2, 0.126, z - 5.7, end - start, 0.012, 0.1, '#dedbd0');
+          }
+        continue;
+      }
+      const stationGaps = (sim.map.stationDriveways || []).filter(
+        (access) =>
+          !horizontal && side === -1 && x === access.roadX && access.z > a.z && access.z < b.z,
+      );
+      if (stationGaps.length) {
+        let start = a.z + 6.5;
+        const spans = [];
+        for (const gap of stationGaps.sort((a, b) => a.z - b.z)) {
+          spans.push([start, gap.z - gap.width / 2]);
+          start = gap.z + gap.width / 2;
+        }
+        spans.push([start, b.z - 6.5]);
+        for (const [start, end] of spans)
+          if (end > start) {
+            detail(x - 6.15, 0.16, (start + end) / 2, 0.22, 0.18, end - start, '#adafa6');
+            detail(x - 5.7, 0.126, (start + end) / 2, 0.1, 0.012, end - start, '#dedbd0');
+          }
+        continue;
+      }
       detail(
         x + (horizontal ? 0 : side * 6.15),
         0.16,
@@ -101,7 +158,14 @@ export function detailCommunity(model, { sim, origin, location, box, objects }) 
     }
   }
   for (const b of sim.map.buildings) {
-    if (b.residential || ['home', 'roads', 'parking'].includes(b.type)) continue;
+    if (
+      b.residential ||
+      b.civic ||
+      b.recreation ||
+      b.regionalNeighbour ||
+      ['home', 'roads', 'parking'].includes(b.type)
+    )
+      continue;
     const h = b.type === 'office' ? 6 : b.type === 'factory' ? 5 : 4,
       front = b.z + b.d / 2;
     detail(
@@ -239,7 +303,7 @@ export function detailCommunity(model, { sim, origin, location, box, objects }) 
           m.community &&
           m.pos[0] === origin.x + b.x &&
           Math.abs(m.pos[1] - (h + 0.1)) < 0.001 &&
-          m.pos[2] === b.z,
+          m.pos[2] === origin.z + b.z,
       );
       if (oldRoof)
         for (const list of [model.roofs, model.objects, objects])
@@ -284,7 +348,7 @@ export function detailCommunity(model, { sim, origin, location, box, objects }) 
       continue;
     if (!prop(x, 0.25, z, 2.4, 0.38, 2.4, desert ? '#ba9877' : '#a6ac9b')) continue;
     detail(x, 0.47, z, 2.1, 0.07, 2.1, '#6e795a');
-    const tree = buildTree(model, origin.x + x, z, 1.05, {
+    const tree = buildTree(model, origin.x + x, origin.z + z, 1.05, {
       style: desert ? 'palm' : location?.iso === 'AUS' ? 'eucalypt' : 'broadleaf',
       detailed: false,
       extra: { community: true, communityDetail: true },

@@ -1,3 +1,4 @@
+import { buildHomeDriveway } from './home-driveway.js';
 import { addSectionResidents } from './section-residents.js';
 // Region-specific geometry augments the shared learning property. Inspiration is
 // labelled in the location card; these are adapted homes, not national archetypes.
@@ -9,6 +10,11 @@ import { homeVariant } from './home-variants.js';
 import { locationById } from './locations.js';
 import { addLandscape } from './landscape.js';
 export function createRegionalModel(id) {
+  const model = createRegionalModelBase(id);
+  buildHomeDriveway(model);
+  return model;
+}
+function createRegionalModelBase(id) {
   const destination = buildDestinationModel(id);
   if (destination) {
     addSectionResidents(destination, locationById(id));

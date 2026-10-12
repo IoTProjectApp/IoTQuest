@@ -3,7 +3,24 @@ import assert from 'node:assert/strict';
 import { createWorldModel } from '../public/world-model.js';
 import { createRegionalModel } from '../public/regions.js';
 import { locations } from '../public/locations.js';
-import { addLandscape, updateLandscape } from '../public/landscape.js';
+import { addLandscape, updateLandscape, riverCurve } from '../public/landscape.js';
+
+test('curved rivers retain endpoints and have continuous, gradual bends', () => {
+  const points = [
+    [-50, -60],
+    [-45, -45],
+    [-51, -30],
+    [-47, -10],
+  ];
+  const curve = riverCurve(points);
+  assert.deepEqual(curve[0], points[0]);
+  assert.deepEqual(curve.at(-1), points.at(-1));
+  for (let i = 1; i < curve.length; i++) {
+    assert.ok(curve[i].every(Number.isFinite));
+    assert.ok(Math.hypot(...curve[i].map((v, k) => v - curve[i - 1][k])) < 6);
+    assert.ok(curve[i][1] > curve[i - 1][1], 'The river cannot double back at a join');
+  }
+});
 import { collides, findFree, toWorld } from '../public/world-math.js';
 
 test('every destination has mountains, a river valley, a lake, wildlife and flying birds', () => {

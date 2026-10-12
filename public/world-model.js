@@ -101,11 +101,11 @@ export function createWorldModel(variant = {}) {
       rotation: [Math.atan2(Math.hypot(dx, dz), dy), Math.atan2(dx, dz), 0],
     });
   };
-  const wallH = (x1, x2, z, gap = null, height = 1.25) => {
+  const wallH = (x1, x2, z, gap = null, height = 1.25, gapWidth = 1.5) => {
     const ranges = gap
       ? [
-          [x1, gap - 0.75],
-          [gap + 0.75, x2],
+          [x1, gap - gapWidth / 2],
+          [gap + gapWidth / 2, x2],
         ]
       : [[x1, x2]];
     for (const [a, b] of ranges)
@@ -194,7 +194,7 @@ export function createWorldModel(variant = {}) {
   // Front wall and three entrances (garage door leaves a wide passage).
   wallH(-13.1, -8.2, -1, -10.5, 0.55);
   wallH(-8.2, -3.4, -1, -5.8, 0.55);
-  wallH(-3.4, 1.4, -1, -1.1, 0.55);
+  wallH(-3.4, 1.4, -1, -1.1, 0.55, 3.2);
   for (const x of [-11.5, -6.7, -1.9]) {
     windows.push(box(x, 1.1, -10.88, 1.35, 0.78, 0.065, '#8abec5', { opacity: 0.68 }));
     box(x, 1.1, -10.81, 0.06, 0.85, 0.1, '#fbf1dc');
@@ -300,6 +300,7 @@ export function createWorldModel(variant = {}) {
   // Fence (post-and-rail, white pickets, a stone wall, a hedge or farm wire) and the entrance gate
   // (openable through student output).
   const fencePost = (x, z, alongX) => {
+    const first = objects.length;
     const run = alongX ? [1.45, 0.12] : [0.12, 1.45];
     switch (variant.fence) {
       case 'picket':
@@ -337,6 +338,8 @@ export function createWorldModel(variant = {}) {
         box(x, 0.62, z, 0.13, 1.3, 0.13, '#b59970');
         for (const y of [0.35, 0.91]) box(x, y, z, run[0], 0.13, run[1], '#c7a97b');
     }
+    for (const part of objects.slice(first))
+      Object.assign(part, { propertyFence: true, fenceSegmentX: x, fenceSegmentZ: z });
   };
   for (let i = -15; i <= 15; i += 1.5) {
     if (Math.abs(i) < 1.6) continue;

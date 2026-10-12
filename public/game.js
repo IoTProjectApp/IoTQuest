@@ -4876,7 +4876,7 @@ if (typeof $('worldCanvas')?.getContext === 'function') {
         $('graphicsMessage').hidden = true;
       },
     });
-    // Keep only the travel globe's WebGL context active on the destination screen.
+    // On the destination screen only the travel globe draws; the world waits with its context.
     if (state.travelScreen) world3d.releaseGraphics();
     $('world').classList.add('is-3d');
     renderSectionResidents();

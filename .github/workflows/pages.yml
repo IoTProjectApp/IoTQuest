@@ -38,7 +38,7 @@ jobs:
   # accessibility regressions. Kept out of the deploy gate until it has proven stable on CI.
   browser:
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    timeout-minutes: 50
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7

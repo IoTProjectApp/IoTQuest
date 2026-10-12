@@ -103,7 +103,6 @@ export class TravelGlobe {
     this.frameId = null;
     this.idleTimer = null;
     this.contextLost = false;
-    this.deliberateLoss = false;
     this.disposed = false;
     this.yaw = radians(95);
     this.pitch = 0.25;
@@ -136,7 +135,13 @@ export class TravelGlobe {
     this.frameId = requestAnimationFrame(this.frame);
   }
   running() {
-    return !this.disposed && !this.contextLost && this.mode === 'globe' && !!this.isActive();
+    return (
+      !this.disposed &&
+      !this.contextLost &&
+      !this.graphicsSuspended &&
+      this.mode === 'globe' &&
+      !!this.isActive()
+    );
   }
   dispose() {
     this.disposed = true;
@@ -278,13 +283,10 @@ export class TravelGlobe {
       );
     });
     on(c, 'webglcontextrestored', () => {
-      // A deliberate suspend (releaseGraphics) never fell back, so it comes back quietly.
-      const deliberate = this.deliberateLoss;
-      this.deliberateLoss = false;
       try {
         this.init();
         this.contextLost = false;
-        if (!deliberate) this.onRestore?.();
+        this.onRestore?.();
         this.wake();
       } catch {
         this.onError?.('3D graphics unavailable. The accessible 2D atlas is ready.');
@@ -364,20 +366,18 @@ export class TravelGlobe {
       }
     });
   }
+  // While a destination is shown the globe stops drawing but keeps its context. Losing and
+  // restoring it needs answers from the GPU, which wait for every frame the 3D world has queued
+  // (seconds on software WebGL), and the page cannot respond to clicks meanwhile.
   releaseGraphics() {
-    if (!this.gl || this.contextLost || typeof this.contextRecovery?.loseContext !== 'function')
-      return false;
+    if (!this.gl || this.disposed || this.graphicsSuspended) return false;
     this.graphicsSuspended = true;
-    this.deliberateLoss = true;
-    this.contextLost = true;
-    this.contextRecovery.loseContext();
     return true;
   }
   restoreGraphics() {
-    if (!this.graphicsSuspended || typeof this.contextRecovery?.restoreContext !== 'function')
-      return false;
+    if (!this.graphicsSuspended) return false;
     this.graphicsSuspended = false;
-    this.contextRecovery.restoreContext();
+    this.wake();
     return true;
   }
   rotate(x, y = 0) {

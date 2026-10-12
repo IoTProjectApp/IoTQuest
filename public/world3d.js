@@ -579,20 +579,20 @@ export class World3D {
       this.frameId = requestAnimationFrame(this.frame);
     });
   }
+  // While the travel globe is shown the world stops drawing but keeps its context. Losing it
+  // needed an answer from the GPU, which waited for every frame still queued (seconds on
+  // software WebGL) while the page ignored clicks, and coming back rebuilt every shader.
   releaseGraphics() {
-    if (!this.gl || this.contextLost || typeof this.contextRecovery?.loseContext !== 'function')
-      return false;
+    if (!this.gl || this.disposed || this.graphicsSuspended) return false;
     this.graphicsSuspended = true;
-    this.contextLost = true;
     cancelAnimationFrame(this.frameId);
-    this.contextRecovery.loseContext();
     return true;
   }
   restoreGraphics() {
-    if (!this.graphicsSuspended || typeof this.contextRecovery?.restoreContext !== 'function')
-      return false;
+    if (!this.graphicsSuspended || this.disposed) return false;
     this.graphicsSuspended = false;
-    this.contextRecovery.restoreContext();
+    cancelAnimationFrame(this.frameId);
+    if (!this.contextLost) this.frameId = requestAnimationFrame(this.frame);
     return true;
   }
   setView(view, focus, zoom = 1) {
@@ -796,7 +796,7 @@ export class World3D {
       : { x: 0, y: 0, visible: false };
   }
   frame(time) {
-    if (this.disposed || this.contextLost) return;
+    if (this.disposed || this.contextLost || this.graphicsSuspended) return;
     // Hidden (another screen, or the Code layout leaves the canvas 0×0): skip drawing and label
     // projection, but keep the loop so the view resumes as soon as it is shown again.
     // The state is read once per frame and shared with render.

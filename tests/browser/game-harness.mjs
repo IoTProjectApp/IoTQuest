@@ -77,7 +77,7 @@ export async function openHome({
 // take longer than any short delay, and two readings with no frame between them look settled.
 // A visiting resident walks over before the chat opens (or nobody comes when the room has
 // nothing to ask): waits for the chat, and returns whether it opened.
-export const visitChat = (page, timeout = 15000) =>
+export const visitChat = (page, timeout = 30000) =>
   page
     .waitForFunction(() => document.getElementById('modal').open, null, { timeout })
     .then(

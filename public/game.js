@@ -1105,7 +1105,9 @@ document.addEventListener('keyup', (e) => keys.delete(directions[e.key]));
 window.addEventListener('blur', () => keys.clear());
 let visitFrame = 0;
 function movementFrame(t) {
-  updateVisit(visitFrame ? Math.min(0.1, (t - visitFrame) / 1000) : 0);
+  // Real elapsed time (up to half a second a frame), so a visitor arrives in about the same time
+  // on a slow machine as on a fast one rather than walking in slow motion.
+  updateVisit(visitFrame ? Math.min(0.5, (t - visitFrame) / 1000) : 0);
   visitFrame = t;
   if (t - moveFrame > 30) {
     for (const dir of keys) move(dir, 0.55);

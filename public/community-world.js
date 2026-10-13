@@ -394,6 +394,82 @@ export function addCommunityWorld(model, location) {
   recreation.push(...openBlocks.items);
   const recreationPeople = addRecreationPeople(model, { recreation, origin, box, sphere });
   const busStops = buildBusStops(model, { sim, origin, box, sphere });
+  // Background people a renderer may draw as rigged characters (see World3D.extraCharacter):
+  // passengers, parents, the gyms, the pool, the court and the football field. Children keep their
+  // figures. clip: an activity played on the spot; moving/still: clips by whether they move.
+  const outdoorGym = openBlocks.items.find((item) => item.people),
+    football = openBlocks.items.find((item) => item.players),
+    court = recreationPeople.find((g) => g.players),
+    pool = recreationPeople.find((g) => g.swimmers),
+    gym = recreationPeople.find((g) => g.runners);
+  model.extraPeople = [
+    ...busStops.flatMap((s) =>
+      s.waiting.map((w, i) => ({ key: `bus:${s.stop.id}:${i}`, person: w.person, woman: i !== 1 })),
+    ),
+    ...recreationPeople
+      .filter((g) => g.parents)
+      .flatMap((g) =>
+        g.parents.map((p, i) => ({ key: `parent:${g.type}:${i}`, person: p, woman: i === 0 })),
+      ),
+    ...(outdoorGym
+      ? [
+          { key: 'outdoorgym:walker', person: outdoorGym.people[1], woman: false, onTheSpot: true },
+          {
+            key: 'outdoorgym:squatter',
+            person: outdoorGym.people[0],
+            woman: true,
+            clip: 'AirSquat',
+          },
+        ]
+      : []),
+    ...(court?.players || []).map((p, i) => ({
+      key: 'basketball:' + i,
+      person: p,
+      woman: i % 2 === 0,
+      moving: 'Jogging',
+      still: () => (court.holder === p ? 'Dribble' : 'Idle'),
+    })),
+    ...(football?.players || []).map((p, i) => ({
+      key: 'football:' + i,
+      person: p,
+      woman: i % 3 === 1,
+      moving: 'Jogging',
+      still: () => (football.kicker === p ? 'SoccerPass' : p.keeper ? 'GoalkeeperIdle' : 'Idle'),
+    })),
+    ...(gym
+      ? [
+          ...gym.runners.map((p, i) => ({
+            key: 'gym:runner:' + i,
+            person: p,
+            woman: i === 1,
+            clip: 'Jogging',
+          })),
+          {
+            key: 'gym:lifter',
+            person: gym.lifter,
+            woman: false,
+            clip: 'KettlebellSwing',
+            standIn: [...gym.lifter.meshes, ...gym.dumbbells],
+          },
+          { key: 'gym:lunger', person: gym.lunger, woman: true, clip: 'AirSquat' },
+        ]
+      : []),
+    // Swimmers have their own simple rig: the character swims where its body is, hips just under
+    // the water (the clip's hips are 1.45 m above its feet).
+    ...(pool?.swimmers || []).map((s, i) => ({
+      key: 'swimmer:' + i,
+      woman: i % 2 === 1,
+      standIn: [s.parts.head, s.parts.body, ...s.parts.arms, ...s.parts.legs],
+      place: () => ({
+        x: s.parts.body.pos[0],
+        y: s.parts.body.pos[1] - 1.42,
+        z: s.parts.body.pos[2],
+        angle: s.parts.body.rotation[1] ? -Math.PI / 2 : Math.PI / 2,
+      }),
+      clip: 'Breaststroke',
+      still: 'TreadingWater',
+    })),
+  ];
   lights.push(...busStops.map((s) => s.lamp));
   const sections = civic.flatMap((building) => building.sections);
   areas.push(...sections.map((section) => section.area));

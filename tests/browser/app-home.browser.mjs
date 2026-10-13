@@ -1,96 +1,145 @@
-import { neighbourProfiles } from '../../public/neighbour-profiles.js';
-import { civicLots } from '../../public/community-civic.js';
-import { victorianFarms } from '../../public/farms.js';
-// Drives the real game in headless Chromium to catch what the DOM-free unit tests cannot:
-// overlapping labels, clipped dialogs, theme contrast and reduced motion.
-// Run with `npm run test:browser` (needs `npx playwright install chromium` once).
-import test, { before, after, afterEach } from 'node:test';
-import assert from 'node:assert/strict';
+// The home, chats, themes, offline play, releases and the three.js renderer in headless Chromium
+// (see game-harness.mjs). Run with `npm run test:browser`.
 import { spawn, execFileSync } from 'node:child_process';
-import { chromium } from 'playwright';
+import { existsSync } from 'node:fs';
 import { missions, defaults, program } from '../../public/missions.js';
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {
+  startGame,
+  browser,
+  origin,
+  openPages,
+  openHome,
+  settle,
+  visitChat,
+  modalOpen,
+  contrast,
+} from './game-harness.mjs';
 
-let server, browser, origin;
-before(async () => {
-  server = spawn(process.execPath, ['scripts/serve.mjs', '0'], {
-    stdio: ['ignore', 'pipe', 'inherit'],
-  });
-  origin = await new Promise((resolve, reject) => {
-    server.stdout.on('data', (d) => {
-      const m = String(d).match(/http:\/\/127\.0\.0\.1:\d+/);
-      if (m) resolve(m[0]);
+startGame();
+
+test('the world is drawn by the renderer under test', async () => {
+  const { page, errors } = await openHome();
+  // three.js needs WebGL 2; the game's own renderer uses WebGL 1. A canvas keeps the context
+  // type it was first given, so this shows which renderer actually started (not a fallback).
+  const webgl2 = await page.evaluate(
+    () => !!document.getElementById('worldCanvas').getContext('webgl2'),
+  );
+  assert.equal(webgl2, process.env.RENDERER === 'three');
+  assert.deepEqual(errors, []);
+});
+test('three.js draws the same kitchen close-up as the WebGL renderer', async () => {
+  const shots = [];
+  for (const renderer of ['webgl', 'three']) {
+    const page = await browser.newPage({
+      viewport: { width: 1000, height: 700 },
+      reducedMotion: 'reduce',
     });
-    server.on('exit', () => reject(Error('The game server stopped before it was ready.')));
-  });
-  // SwiftShader gives headless Chromium a software WebGL, so the 3D world renders anywhere.
-  browser = await chromium.launch({
-    args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader'],
-  });
-});
-after(async () => {
-  await browser?.close();
-  server?.kill();
-});
-// A failed test never reaches its page.close(); a page left open keeps rendering the 3D world and
-// slows every later test, so close whatever openHome opened. A failed test leaves a screenshot
-// and a Playwright trace (DOM snapshots of every step) in test-results/, which CI uploads.
-const openPages = [];
-afterEach(async (t) => {
-  const name = t.name.replace(/[^a-z0-9]+/gi, '-').slice(0, 80);
-  for (const [i, page] of openPages.splice(0).entries()) {
-    const path = t.passed === false ? `test-results/${name}-${i}` : null;
-    if (path) await page.screenshot({ path: path + '.png' }).catch(() => {});
-    await page
-      .context()
-      .tracing.stop(path ? { path: path + '.zip' } : {})
-      .catch(() => {});
-    await page.close().catch(() => {});
+    openPages.push(page);
+    await page.context().tracing.start({ snapshots: true });
+    // After any RENDERER=… init script, so this page uses the renderer named here.
+    await page.addInitScript((r) => (globalThis.IOTQUEST_RENDERER = r), renderer);
+    await page.route(/^https?:\/\/(?!127\.0\.0\.1)/, (route) => route.abort());
+    await page.goto(origin + '/');
+    await page.click('#resumeLegacy');
+    await page.locator('#worldCanvas').waitFor();
+    await settle(page);
+    await page.locator("[data-area='Kitchen']").click();
+    await settle(page);
+    // The canvas's own pixels, read just after the world draws a frame: the world asks for its
+    // next frame at the end of each one, so a frame callback asked for now runs right after it,
+    // while the picture is still in the canvas. Screenshots wait on the browser to compose a
+    // frame, which on CI's software WebGL can take longer than their timeout.
+    shots.push(
+      await page.evaluate(
+        () =>
+          new Promise((resolve) =>
+            requestAnimationFrame(() =>
+              resolve(document.getElementById('worldCanvas').toDataURL().split(',')[1]),
+            ),
+          ),
+      ),
+    );
+    // One 3D world at a time: two rendering together on CI's few cores slow each other until a
+    // single frame takes longer than the screenshot waits.
+    if (renderer === 'webgl') {
+      openPages.splice(openPages.indexOf(page), 1);
+      await page.close();
+    }
   }
+  // Compared in the page: the share of pixels whose colour differs by more than a tenth.
+  const differing = await openPages.at(-1).evaluate(async (images) => {
+    const pixels = async (b64) => {
+      const image = new Image();
+      image.src = 'data:image/png;base64,' + b64;
+      await image.decode();
+      const canvas = new OffscreenCanvas(image.width, image.height),
+        context = canvas.getContext('2d');
+      context.drawImage(image, 0, 0);
+      return context.getImageData(0, 0, image.width, image.height).data;
+    };
+    const [a, b] = await Promise.all(images.map(pixels));
+    // A picture read at the wrong moment is blank, and two blank pictures would match.
+    const colours = (data) => {
+      const seen = new Set();
+      for (let i = 0; i < data.length; i += 4 * 97)
+        seen.add(data[i] * 65536 + data[i + 1] * 256 + data[i + 2]);
+      return seen.size;
+    };
+    if (colours(a) < 200 || colours(b) < 200) return -1;
+    let count = 0;
+    for (let i = 0; i < a.length; i += 4)
+      if (Math.max(...[0, 1, 2].map((c) => Math.abs(a[i + c] - b[i + c]))) > 24) count++;
+    return count / (a.length / 4);
+  }, shots);
+  assert.notEqual(differing, -1, 'both pictures show the kitchen, not a blank canvas');
+  // Residents and traffic still move a little; a missing batch of furniture differs by ~10%.
+  assert.ok(differing < 0.03, `${(differing * 100).toFixed(1)}% of pixels differ`);
 });
-
-async function openHome({
-  colorScheme = 'light',
-  reducedMotion = 'no-preference',
-  width = 1440,
-} = {}) {
-  const page = await browser.newPage({
-    viewport: { width, height: 900 },
-    colorScheme,
-    reducedMotion,
-  });
-  openPages.push(page);
-  await page.context().tracing.start({ snapshots: true });
-  const errors = [];
-  page.on('pageerror', (e) => errors.push(e.message));
-  // Keep tests offline and deterministic: live weather and web fonts are not needed.
-  await page.route(/^https?:\/\/(?!127\.0\.0\.1)/, (route) => route.abort());
-  await page.goto(origin + '/');
-  await page.click('#resumeLegacy');
-  await page.locator('#worldCanvas').waitFor();
-  await settle(page);
-  return { page, errors };
-}
-// Waits until the camera has finished moving, so labels are in their final positions. Readings
-// are a few rendered frames apart rather than a fixed delay: on CI's software WebGL a frame can
-// take longer than any short delay, and two readings with no frame between them look settled.
-async function settle(page) {
-  const positions = () =>
-    page.evaluate(async () => {
-      for (let i = 0; i < 3; i++) await new Promise((resolve) => requestAnimationFrame(resolve));
-      return [...document.querySelectorAll('[data-area], [data-community-building]')]
-        .map((e) => e.style.left + e.style.top + e.style.visibility)
-        .join();
+// The models come from a private repository (scripts/fetch-models.mjs).
+test(
+  'with three.js the dojo loads its five judoka and their animations',
+  {
+    skip: !existsSync('public/models/people/animations.glb') && 'character models not downloaded',
+  },
+  async () => {
+    const page = await browser.newPage({ viewport: { width: 1200, height: 800 } });
+    openPages.push(page);
+    await page.context().tracing.start({ snapshots: true });
+    await page.addInitScript(() => (globalThis.IOTQUEST_RENDERER = 'three'));
+    const errors = [],
+      models = new Set();
+    page.on('pageerror', (e) => errors.push(e.message));
+    page.on('response', (r) => {
+      // Full or light (-low) versions: software WebGL loads the light ones.
+      const m = r.url().match(/\/models\/people\/(\w+)(-low)?\.glb$/);
+      if (m && r.ok()) models.add(m[1]);
     });
-  const deadline = Date.now() + 20000;
-  let last = null;
-  while (Date.now() < deadline) {
-    const now = await positions();
-    if (now && now === last) return;
-    last = now;
-  }
-}
-const modalOpen = (page) => page.evaluate(() => document.getElementById('modal').open);
-
+    await page.route(/^https?:\/\/(?!127\.0\.0\.1)/, (route) => route.abort());
+    await page.goto(origin + '/');
+    await page.click('#resumeLegacy');
+    await page.locator('#worldCanvas').waitFor();
+    await settle(page);
+    await page.locator('#exploreCommunity').click();
+    await settle(page);
+    await page.locator('[data-community-building="dojo"]').click();
+    if (await page.locator('#closeModal').isVisible()) await page.locator('#closeModal').click();
+    // Models load in the background once the dojo's people are first drawn.
+    const deadline = Date.now() + 60000;
+    while (models.size < 6 && Date.now() < deadline) await page.waitForTimeout(250);
+    assert.deepEqual([...models].sort(), [
+      'Adam',
+      'Bryce',
+      'Jody',
+      'Kate',
+      'Shannon',
+      'animations',
+    ]);
+    await settle(page);
+    assert.deepEqual(errors, []);
+  },
+);
 test('every on-screen room button can be clicked in the World view', async () => {
   const { page, errors } = await openHome();
   // The element on top at the centre of each on-screen room button must be that button.
@@ -120,17 +169,25 @@ test('every on-screen room button can be clicked in the World view', async () =>
   );
   assert.deepEqual(blocked, []);
   await page.locator('[data-area="Living room"]').click();
+  // Arriving brings whoever asked for the room's next request (Sam or Jordan) over to chat; after
+  // it, E installs here.
+  assert.equal(await visitChat(page), true);
+  assert.match(await page.textContent('#modalTitle'), /A chat with (Sam|Jordan)/);
+  await page.locator('#closeModal').click();
   assert.equal(await modalOpen(page), false);
   assert.match(await page.textContent('#worldTip'), /install devices/);
   assert.deepEqual(errors, []);
   await page.close();
 });
 
-test('at a room E installs devices and T talks to its resident', async () => {
+test('arriving at a room brings its resident; then E installs devices and T talks to them', async () => {
   const { page, errors } = await openHome();
   await page.locator('[data-area="Bedroom"]').click();
+  assert.equal(await visitChat(page), true, 'Nina comes over to the technician');
+  assert.match(await page.textContent('#modalTitle'), /A chat with Nina/);
+  await page.locator('#closeModal').click();
   await page.keyboard.press('ArrowLeft');
-  assert.equal(await modalOpen(page), false, 'no greeting pops up on the first step');
+  assert.equal(await modalOpen(page), false, 'the chat does not reopen within the room');
   await page.keyboard.press('e');
   assert.equal(await modalOpen(page), false);
   assert.equal(await page.getAttribute('[data-tab].selected', 'data-tab'), 'inventory');
@@ -163,21 +220,6 @@ for (const colorScheme of ['light', 'dark'])
       await page.close();
     });
 
-// WCAG relative luminance contrast between two CSS rgb() colours.
-function contrast(a, b) {
-  const lum = (c) => {
-    const [r, g, bl] = c
-      .match(/[\d.]+/g)
-      .slice(0, 3)
-      .map((v) => {
-        v /= 255;
-        return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
-      });
-    return 0.2126 * r + 0.7152 * g + 0.0722 * bl;
-  };
-  const [hi, lo] = [lum(a), lum(b)].sort((x, y) => y - x);
-  return (hi + 0.05) / (lo + 0.05);
-}
 for (const colorScheme of ['light', 'dark'])
   test(`chat text is readable in the ${colorScheme} theme`, async () => {
     const { page } = await openHome({ colorScheme });
@@ -370,11 +412,13 @@ test('a returning visitor switches to a new deploy whole, never a mix of two rel
     await page.reload();
     release = 'two';
     let offered = false;
-    for (let i = 0; i < 4 && !offered; i++) {
+    // The new worker installs in the background; on CI's slow machines that can take several
+    // reloads and many seconds, so allow up to six reloads of ten seconds each.
+    for (let i = 0; i < 6 && !offered; i++) {
       await page.reload();
       offered = await page
         .locator('#updateBar')
-        .waitFor({ timeout: 3000 })
+        .waitFor({ timeout: 10000 })
         .then(
           () => true,
           () => false,
@@ -556,250 +600,4 @@ test('the test copy at /dev/ runs beside the main site without touching it', asy
     await context.close();
     server.close();
   }
-});
-
-test('Victorian farms render and retain homestead and connected town navigation', async () => {
-  const { page, errors } = await openHome({ reducedMotion: 'reduce' });
-  for (const farm of victorianFarms) {
-    await page.locator('#backToGlobe').click();
-    await page.locator('#continentSelect').selectOption('Oceania');
-    await page.locator('#countrySelect').selectOption('AUS');
-    await page.locator(`[data-location="${farm.id}"]`).click();
-    await page.locator('#enterLocation').click();
-    await page.locator('.layout-switch [data-layout="world"]').click();
-    await page.locator('[data-view="landscape"]').click();
-    await settle(page);
-    assert.equal(await page.locator('#graphicsMessage').isVisible(), false);
-    await page.locator('[data-area="Garden path"]').click();
-    assert.ok((await page.textContent('#location')).includes('Garden path'));
-    await page.locator('#exploreCommunity').click();
-    await settle(page);
-    const shop = page.locator('[data-community-building="shop"]');
-    await shop.focus();
-    await shop.click();
-    assert.ok((await page.textContent('#location')).includes('Shop floor'));
-  }
-  assert.deepEqual(errors, []);
-});
-
-test('world overview keeps building names clear and restores staff labels inside buildings', async () => {
-  const { page, errors } = await openHome({ reducedMotion: 'reduce' });
-  await page.locator('#exploreCommunity').click();
-  await settle(page);
-  assert.equal(
-    await page.locator('#roofToggle').getAttribute('aria-pressed'),
-    'true',
-    'Overview starts with complete building exteriors',
-  );
-  await page.locator('#roofToggle').click();
-  assert.equal(await page.locator('#roofToggle').getAttribute('aria-pressed'), 'false');
-  await page.locator('#roofToggle').click();
-  assert.equal(await page.locator('.section-resident:visible').count(), 0);
-  const school = page.locator('[data-community-building="school"]');
-  await school.focus();
-  await school.click();
-  await page.locator('.layout-switch [data-layout="world"]').click();
-  await settle(page);
-  await page.waitForFunction(
-    () =>
-      getComputedStyle(document.getElementById('resident-civic:school')).visibility === 'visible',
-  );
-  assert.equal(await page.locator('[id="resident-civic:school"]').isVisible(), true);
-  await page.locator('#roofToggle').click();
-  assert.equal(await page.locator('#roofToggle').getAttribute('aria-pressed'), 'true');
-  await page.locator('#roofToggle').click();
-  assert.equal(await page.locator('#roofToggle').getAttribute('aria-pressed'), 'false');
-  assert.deepEqual(errors, []);
-});
-
-test('every new building label opens its project and the technician remains visible', async () => {
-  const { page, errors } = await openHome();
-  for (const [type, area] of Object.entries({
-    shop: 'Shop floor',
-    office: 'Business office',
-    warehouse: 'Loading bay',
-    factory: 'Factory floor',
-    roads: 'Community roads',
-    parking: 'Parking area',
-    residence1: 'Willow house',
-    residence2: 'Courtyard house',
-    residence3: 'Garden cottage',
-    residence4: 'Maple house',
-    residence5: 'Cedar house',
-    residence6: 'Birch house',
-    hospital: 'Community hospital',
-    school: 'Neighbourhood school',
-    police: 'Police station',
-    fire: 'Fire station',
-    pool: 'Riverside swimming pool',
-    gym: 'Riverside gym',
-    dojo: 'Riverside judo dojo',
-    park: 'Riverside fountain park',
-    playground: 'Riverside children’s playground',
-    playground2: 'Meadow children’s playground',
-    basketball: 'Riverside basketball court',
-  })) {
-    await page.locator('#exploreCommunity').click();
-    await settle(page);
-    // Clicks use Playwright's default 30 s: the click itself is instant, but Playwright waits a
-    // few rendered frames around it, and CI's software WebGL draws the community at 1-2 s a frame.
-    await page.locator(`[data-community-building="${type}"]`).click();
-    assert.match(await page.textContent('#location'), new RegExp(area));
-    if (['pool', 'gym', 'dojo', 'park', 'playground', 'playground2', 'basketball'].includes(type)) {
-      await page.locator('[data-install="led"]').click();
-      assert.equal(await page.inputValue('#installArea'), area);
-      await page.locator(type === 'basketball' ? '#confirmInstall' : '#closeModal').click();
-    }
-    assert.equal(await page.getAttribute('[data-tab].selected', 'data-tab'), 'inventory');
-    assert.equal(await page.getAttribute('#adventureScreen', 'data-layout'), 'split');
-    await page.waitForFunction(
-      () => getComputedStyle(document.querySelector('#player')).visibility === 'visible',
-      null,
-      { timeout: 5000 },
-    );
-  }
-  assert.deepEqual(errors, []);
-  await page.close();
-});
-for (const language of ['cpp', 'python'])
-  test(`new factory accepts installation, wiring and ${language} in the actual browser`, async () => {
-    const { page, errors } = await openHome();
-    await page.locator('#communityProgram').click();
-    const q = missions.find((m) => m.communityType === 'factory');
-    for (const id of q.ids) {
-      await page.locator(`[data-install="${id}"]`).click();
-      assert.equal(await page.inputValue('#installArea'), 'Factory floor');
-      await page.locator('#confirmInstall').click();
-      assert.equal(await page.locator(`[data-install="${id}"]`).isDisabled(), true);
-    }
-    await page.locator('[data-tab="wiring"]').click();
-    await page.locator('#connectAll').click();
-    await page.locator('#goCode').click();
-    await page.locator('#languageSelect').selectOption(language);
-    await page.locator('#codeInput').fill(program(q, language, defaults(q.ids, 'ESP32'), true));
-    await page.locator('#runBtn').click();
-    // CI renders the 3D world in software on two cores alongside the program's worker, several
-    // times slower than a laptop, so this wait is generous; a failure shows what the page had.
-    await page
-      .waitForFunction(
-        () =>
-          [...document.querySelectorAll('#liveReadings .live-reading')].some(
-            (row) =>
-              row.textContent.includes('Conveyor motor driver') &&
-              row.querySelector('.output-state')?.textContent === 'ON',
-          ),
-        null,
-        { timeout: 90000 },
-      )
-      .catch(async (e) => {
-        const seen = await page.evaluate(() => ({
-          readings: document.getElementById('liveReadings')?.innerText,
-          serial: document.getElementById('serialText')?.innerText,
-        }));
-        throw Error(e.message + '\n' + JSON.stringify(seen, null, 2));
-      });
-    await page.locator('#stopBtn').click();
-    assert.deepEqual(errors, []);
-    await page.close();
-  });
-
-test('new residential resident opens its own automation request from inside the home', async () => {
-  const { page, errors } = await openHome();
-  await page.locator('[data-community-building="residence1"]').click();
-  await page.waitForTimeout(1000);
-  await page.keyboard.press('t');
-  assert.equal(await modalOpen(page), true);
-  assert.equal(await page.textContent('#modalTitle'), 'A chat with Avery');
-  assert.match(await page.textContent('#modalBody'), /Neighbourhood Porch Lighting/);
-  assert.deepEqual(errors, []);
-  await page.locator('#closeModal').click();
-  await page.close();
-});
-
-test('civic staff offer their own building projects and accept wired programs', async () => {
-  const { page, errors } = await openHome();
-  for (const b of civicLots) {
-    await page.locator('#exploreCommunity').click();
-    await settle(page);
-    await page.locator(`[data-community-building="${b.type}"]`).click();
-    await page.keyboard.press('t');
-    assert.equal(await page.textContent('#modalTitle'), 'A chat with ' + b.resident);
-    const q = missions.find((m) => m.communityType === b.type);
-    assert.ok((await page.textContent('#modalBody')).includes(q.title));
-    await page.locator('#closeModal').click();
-    for (const id of q.ids) {
-      await page.locator(`[data-install="${id}"]`).click();
-      assert.equal(await page.inputValue('#installArea'), b.name);
-      await page.locator('#confirmInstall').click();
-    }
-    await page.locator('[data-tab="wiring"]').click();
-    await page.locator('#connectAll').click();
-    await page.locator('#goCode').click();
-    await page.locator('#languageSelect').selectOption('cpp');
-    await page.locator('#codeInput').fill(program(q, 'cpp', defaults(q.ids, 'ESP32'), true));
-    await page.locator('#runBtn').click();
-    await page.waitForTimeout(500);
-    await page.locator('#stopBtn').click();
-  }
-  assert.deepEqual(errors, []);
-  await page.close();
-});
-
-test('formerly unlabeled Melbourne houses have accessible individual sections', async () => {
-  const { page, errors } = await openHome();
-  await page.locator('#backToGlobe').click();
-  await page.locator('#continentSelect').selectOption('Oceania');
-  await page.locator('#countrySelect').selectOption('AUS');
-  await page.locator('[data-location="fitzroy"]').click();
-  await page.locator('#enterLocation').click();
-  for (const i of [1, 9, 18]) {
-    await page.locator('#exploreCommunity').click();
-    await settle(page);
-    const button = page.locator(`[data-community-building="neighbour${i}"]`);
-    await button.focus();
-    await button.click();
-    assert.ok((await page.textContent('#location')).includes(neighbourProfiles[i - 1].name));
-    await page.locator('[data-install="led"]').click();
-    assert.equal(await page.inputValue('#installArea'), neighbourProfiles[i - 1].name);
-    await page.locator('#closeModal').click();
-    await page.keyboard.press('t');
-    assert.equal(
-      await page.textContent('#modalTitle'),
-      'A chat with ' + neighbourProfiles[i - 1].resident,
-    );
-    await page.locator('#closeModal').click();
-  }
-  assert.deepEqual(errors, []);
-  await page.close();
-});
-
-test('school classrooms and police office, parking and jail open as separate sections', async () => {
-  const { page, errors } = await openHome();
-  for (const [parent, sections] of [
-    ['school', ['schoolClassroom1', 'schoolClassroom2', 'schoolClassroom3']],
-    ['police', ['policeOffice', 'policeParking', 'policeJail']],
-  ]) {
-    await page.locator('#exploreCommunity').click();
-    await settle(page);
-    await page.locator(`[data-community-building="${parent}"]`).click();
-    for (const type of sections) {
-      const target = page.locator(`[data-civic-section="${type}"]`);
-      await target.focus();
-      await target.click();
-      const names = {
-        schoolClassroom1: 'School classroom 1',
-        schoolClassroom2: 'School classroom 2',
-        schoolClassroom3: 'School classroom 3',
-        policeOffice: 'Police office',
-        policeParking: 'Police parking',
-        policeJail: 'Police jail',
-      };
-      assert.ok((await page.textContent('#location')).includes(names[type]));
-      await page.locator('[data-install="led"]').click();
-      assert.equal(await page.inputValue('#installArea'), names[type]);
-      await page.locator('#closeModal').click();
-    }
-  }
-  assert.deepEqual(errors, []);
-  await page.close();
 });

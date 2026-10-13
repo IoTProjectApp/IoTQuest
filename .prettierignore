@@ -3,3 +3,4 @@ public/data
 .openai
 package-lock.json
 public/vendor
+public/models

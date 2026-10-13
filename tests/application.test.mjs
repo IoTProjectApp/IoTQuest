@@ -15,8 +15,14 @@ import {
   conversationQuestions,
   nearestCharacter,
 } from '../public/conversations.js';
-import { residentsForSections, createGreetingTracker } from '../public/section-residents.js';
+import {
+  residentsForSections,
+  createGreetingTracker,
+  isHousehold,
+} from '../public/section-residents.js';
+import { HOME_AREAS } from '../public/home-areas.js';
 import { toWorld, fromWorld } from '../public/world-math.js';
+import { visitRequest, visitEntry, stepToward } from '../public/household-visits.js';
 import { ADC_SIGNALS, ADC_SCALE, outputLevel } from '../public/signals.js';
 import { checkPredictions } from '../public/weather-quests.js';
 import { neededNow, situationReason } from '../public/situation.js';
@@ -184,8 +190,11 @@ class Element {
   showModal() {
     this.open = true;
   }
+  // As in a browser, closing a dialog fires its close event.
   close() {
+    const wasOpen = this.open;
     this.open = false;
+    if (wasOpen) for (const fn of this.listeners.close || []) fn({ type: 'close', target: this });
   }
   scrollIntoView() {}
   setPointerCapture() {}
@@ -335,8 +344,13 @@ function harness(
     nearestCharacter,
     toWorld,
     fromWorld,
+    visitRequest,
+    visitEntry,
+    stepToward,
     residentsForSections,
     createGreetingTracker,
+    isHousehold,
+    HOME_AREAS,
     localSkyDate,
     DEFAULT_OBSERVER,
     missions,
@@ -1384,15 +1398,17 @@ test('the interact shortcut is ignored while a dialog is open', () => {
   h.document.listeners.keydown({ key: 'e', target: { tagName: 'BUTTON' }, preventDefault() {} });
   assert.ok(h.document.getElementById('codeInput'));
 });
-test('pressing E at a room installs devices even with its resident beside the landing point', () => {
+test('arriving at a room brings its resident to chat; afterwards E installs devices there', () => {
   const h = harness();
   h.api.state.travelScreen = false;
   h.api.switchTab('code');
   h.api.enterArea('Bedroom');
+  assert.equal(h.api.getConversation()?.key, 'section:Bedroom');
+  h.document.getElementById('modal').close();
   h.api.interact();
   assert.equal(h.api.getConversation(), null);
   assert.equal(h.api.getTab(), 'inventory');
-  // Arriving next to the resident is already acknowledged, so the first step does not greet.
+  // The visit is under way, so a step within the room does not open the chat again.
   h.api.move('left', 0.55);
   assert.equal(h.api.getConversation(), null);
 });
@@ -2162,12 +2178,15 @@ test('regional conversations use the destination resident names and requests', (
   assert.equal(h.api.state.activeLocation, 'kyoto');
 });
 
-test('approaching a section resident automatically opens its own quest and does not reopen after dismissal', () => {
+test('walking into a room with an unfinished request brings its resident to chat, until the technician walks on', () => {
   const h = harness();
   h.api.state.travelScreen = false;
   h.api.state.player = { x: 77, y: 67 };
   h.api.move('up', 0.5);
-  assert.equal(h.document.getElementById('modalTitle').textContent, 'A chat with Robin');
+  // The plant beds' requests are Maya's: she comes to the technician about them, and says she
+  // looks after them.
+  assert.equal(h.document.getElementById('modalTitle').textContent, 'A chat with Maya');
+  assert.match(h.document.getElementById('modalBody').innerHTML, /I look after the plant beds/);
   assert.match(h.document.getElementById('modalBody').innerHTML, /Plant beds/);
   assert.ok(
     h.document

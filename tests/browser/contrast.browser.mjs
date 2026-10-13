@@ -5,6 +5,7 @@ import test, { before, after, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { chromium } from 'playwright';
+import { useRenderer } from './renderer.mjs';
 
 let server, browser, origin;
 before(async () => {
@@ -18,9 +19,11 @@ before(async () => {
     });
     server.on('exit', () => reject(Error('The game server stopped before it was ready.')));
   });
-  browser = await chromium.launch({
-    args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader'],
-  });
+  browser = useRenderer(
+    await chromium.launch({
+      args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader'],
+    }),
+  );
 });
 after(async () => {
   await browser?.close();

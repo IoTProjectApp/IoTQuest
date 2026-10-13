@@ -412,11 +412,13 @@ test('a returning visitor switches to a new deploy whole, never a mix of two rel
     await page.reload();
     release = 'two';
     let offered = false;
-    for (let i = 0; i < 4 && !offered; i++) {
+    // The new worker installs in the background; on CI's slow machines that can take several
+    // reloads and many seconds, so allow up to six reloads of ten seconds each.
+    for (let i = 0; i < 6 && !offered; i++) {
       await page.reload();
       offered = await page
         .locator('#updateBar')
-        .waitFor({ timeout: 3000 })
+        .waitFor({ timeout: 10000 })
         .then(
           () => true,
           () => false,

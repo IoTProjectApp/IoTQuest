@@ -697,7 +697,7 @@ export class World3D {
     }
     if (this.model.characters)
       for (const person of this.model.extraPeople || []) {
-        const character = this.extraCharacter(person, t);
+        const character = this.extraCharacter(person, t, reduced);
         if (character) this.model.characters.push(character);
       }
     if (!reduced) this.fanAngle += (state.paused ? 0 : simDelta) * 10;
@@ -928,7 +928,7 @@ export class World3D {
   }
   // A background person (model.extraPeople, a jointed figure from figures.js) as a rigged
   // character standing where the figure stands, facing its way; one on a machine walks on the spot.
-  extraCharacter({ key, person, woman, onTheSpot }, t) {
+  extraCharacter({ key, person, woman, onTheSpot }, t, reduced) {
     if (person.meshes.every((m) => m.opacity === 0)) return null;
     const shoes = person.legs.map((l) => l.shoe.pos[1]),
       walk = woman ? 'FemaleWalk' : 'Walking',
@@ -941,9 +941,16 @@ export class World3D {
       y: Math.min(...shoes) - 0.05,
       z: person.origin.z + person.z,
       angle: Math.PI / 2 - yaw,
-      clips: onTheSpot
-        ? [{ name: walk, time: walkTime(walk, t * 0.9), weight: 1 }]
-        : [{ name: 'Idle', time: (t + key.length) % CLIPS.Idle.duration, weight: 1 }],
+      clips:
+        onTheSpot && !reduced
+          ? [{ name: walk, time: walkTime(walk, t * 0.9), weight: 1 }]
+          : [
+              {
+                name: 'Idle',
+                time: reduced ? 0 : (t + key.length) % CLIPS.Idle.duration,
+                weight: 1,
+              },
+            ],
       standIn: person.meshes,
     };
   }
@@ -963,8 +970,9 @@ export class World3D {
       name = actor.name || names[actor.id] || actor.id,
       woman = technician ? state.appearance === '👩🏽‍🔧' : isWoman(actor.id, name),
       walk = woman ? 'FemaleWalk' : 'Walking',
-      idle = { name: 'Idle', time: t % CLIPS.Idle.duration },
-      pace = actor.pace < 0.05 ? 0 : actor.pace;
+      // Reduced motion: people hold a still standing pose.
+      idle = { name: 'Idle', time: state.reduced ? 0 : t % CLIPS.Idle.duration },
+      pace = actor.pace < 0.05 || state.reduced ? 0 : actor.pace;
     return {
       key: actor.id,
       model: technician ? TECHNICIAN[state.appearance] || 'Adam' : castFor(actor.id, name),

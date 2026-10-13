@@ -23,7 +23,8 @@ import {
 import { localSkyDate, DEFAULT_OBSERVER } from './astronomy.js';
 import { Runtime } from './runtime.js';
 import { World3D } from './world3d.js';
-import { toWorld, fromWorld, collides, clearPath } from './world-math.js';
+import { toWorld, fromWorld } from './world-math.js';
+import { visitRequest, visitEntry, stepToward } from './household-visits.js';
 import { ADC_SIGNALS, ADC_SCALE, outputLevel } from './signals.js';
 import { locations, locationById, adaptMissions, progressForLocation } from './locations.js';
 import { WeatherService, advanceEnvironment, servoLevel } from './weather.js';
@@ -4008,15 +4009,14 @@ function householdKey(name) {
   const family = ['Maya', 'Alex', 'Sam'].find((k) => (currentLocation()?.names[k] || k) === name);
   return family || residentsForSections(currentLocation()).find((r) => r.name === name)?.key;
 }
-// The request a visitor comes about: an urgent one, the one in progress, then the next unfinished.
 function roomRequest(area) {
-  const quests = activeMissions(),
-    done = (i) => !!currentCompletions()[missionKey(i)],
-    urgent = new Set(currentNeeds().map((n) => n.index)),
-    open = quests.map((m, i) => i).filter((i) => quests[i].area === area && !done(i));
-  const index =
-    open.find((i) => urgent.has(i)) ?? (open.includes(state.mission) ? state.mission : open[0]);
-  return index === undefined ? null : { index, mission: quests[index] };
+  return visitRequest({
+    quests: activeMissions(),
+    done: (i) => !!currentCompletions()[missionKey(i)],
+    urgent: new Set(currentNeeds().map((n) => n.index)),
+    current: state.mission,
+    area,
+  });
 }
 // In the 3D world the visitor walks over (VISIT_SPEED metres a second) from a few metres away,
 // along a clear line, starts the chat on arrival, and walks back out the same way afterwards.
@@ -4034,35 +4034,10 @@ function leaveVisit() {
   actor.walkTo = visit.entry;
   delete actor.talkPosition;
 }
-// Where a visitor comes from: about 3.5 m beyond where they will stand, seen from the technician,
-// or the nearest direction to that with open floor and a clear line to the spot.
-function visitEntry(sx, sz) {
-  const p = toWorld(state.player),
-    colliders = world3d.model.colliders,
-    away = Math.atan2(sx - p[0], sz - p[2]);
-  for (const turn of [0, 0.6, -0.6, 1.2, -1.2, 1.8, -1.8, 2.5, -2.5, Math.PI]) {
-    const a = away + turn,
-      x = sx + Math.sin(a) * 3.5,
-      z = sz + Math.cos(a) * 3.5;
-    if (!collides(x, z, colliders) && clearPath({ x: sx, z: sz }, { x, z }, colliders))
-      return [x, z];
-  }
-  return [sx, sz];
-}
 // Moves a walking visitor on by dt seconds; called every frame.
 function updateVisit(dt) {
   const actor = visitor();
-  if (!actor?.walkTo) return;
-  const dx = actor.walkTo[0] - actor.x,
-    dz = actor.walkTo[1] - actor.z,
-    d = Math.hypot(dx, dz),
-    step = VISIT_SPEED * dt;
-  if (d > step) {
-    actor.x += (dx / d) * step;
-    actor.z += (dz / d) * step;
-    return;
-  }
-  [actor.x, actor.z] = actor.walkTo;
+  if (!actor?.walkTo || !stepToward(actor, actor.walkTo, VISIT_SPEED, dt)) return;
   actor.walkTo = null;
   if (visit.phase === 'leaving') return endVisit();
   visit.phase = 'here';
@@ -4098,11 +4073,21 @@ function checkVisits() {
         : { x: state.player.x + 4, y: state.player.y },
     );
     const [sx, , sz] = toWorld(spot);
-    visit.entry = visitEntry(sx, sz);
-    visit.phase = 'arriving';
-    [actor.x, actor.z] = visit.entry;
-    Object.assign(actor, { walkTo: [sx, sz], present: true });
-    return;
+    // With reduced motion the visitor is simply there; otherwise they walk over.
+    visit.entry = state.reduced
+      ? null
+      : visitEntry({
+          spot: [sx, sz],
+          from: [toWorld(state.player)[0], toWorld(state.player)[2]],
+          colliders: world3d.model.colliders,
+        });
+    if (visit.entry) {
+      visit.phase = 'arriving';
+      [actor.x, actor.z] = visit.entry;
+      Object.assign(actor, { walkTo: [sx, sz], present: true });
+      return;
+    }
+    Object.assign(actor, { x: sx, z: sz, talkPosition: [sx, sz], present: true });
   }
   openConversation(key, room[0]);
 }
@@ -4124,6 +4109,7 @@ function openConversation(key, area) {
     urgent: Object.fromEntries(currentNeeds().map((n) => [n.index, n.reason.text])),
     // A visit is about the room the technician walked into.
     area: area ?? character?.area,
+    looksAfter: area && area !== character?.area ? area : null,
   });
   activeConversation.section = character?.section;
   // Thanks are said once; chats count towards each of this resident's quests in progress reports.

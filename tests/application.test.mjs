@@ -21,7 +21,8 @@ import {
   isHousehold,
 } from '../public/section-residents.js';
 import { HOME_AREAS } from '../public/home-areas.js';
-import { toWorld, fromWorld, clearPath } from '../public/world-math.js';
+import { toWorld, fromWorld } from '../public/world-math.js';
+import { visitRequest, visitEntry, stepToward } from '../public/household-visits.js';
 import { ADC_SIGNALS, ADC_SCALE, outputLevel } from '../public/signals.js';
 import { checkPredictions } from '../public/weather-quests.js';
 import { neededNow, situationReason } from '../public/situation.js';
@@ -343,8 +344,9 @@ function harness(
     nearestCharacter,
     toWorld,
     fromWorld,
-    collides,
-    clearPath,
+    visitRequest,
+    visitEntry,
+    stepToward,
     residentsForSections,
     createGreetingTracker,
     isHousehold,
@@ -2181,8 +2183,10 @@ test('walking into a room with an unfinished request brings its resident to chat
   h.api.state.travelScreen = false;
   h.api.state.player = { x: 77, y: 67 };
   h.api.move('up', 0.5);
-  // The plant beds' requests are Maya's: she comes to the technician about them.
+  // The plant beds' requests are Maya's: she comes to the technician about them, and says she
+  // looks after them.
   assert.equal(h.document.getElementById('modalTitle').textContent, 'A chat with Maya');
+  assert.match(h.document.getElementById('modalBody').innerHTML, /I look after the plant beds/);
   assert.match(h.document.getElementById('modalBody').innerHTML, /Plant beds/);
   assert.ok(
     h.document

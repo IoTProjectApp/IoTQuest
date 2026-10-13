@@ -12,7 +12,7 @@ import {
 } from '../public/missions.js';
 import { Runtime } from '../public/runtime.js';
 import { createLabState, updateResources } from '../public/lab.js';
-import { sectionResidents } from '../public/section-residents.js';
+import { HOME_AREAS } from '../public/home-areas.js';
 import { componentQuests } from '../public/component-quests.js';
 
 // Quests 18–25 (indices 17–24), after the original 17 and before the logic quests.
@@ -30,11 +30,13 @@ test('component quests keep their numbers (18–25) so saved progress does not m
   assert.deepEqual(missions.slice(first, first + componentQuests.length), componentQuests);
   assert.equal(missions[16].title, 'Utility Room Safety Alert');
 });
-test('each component quest belongs to a section with a resident and has one condition per output', () => {
+test('each component quest is a household request in a home area and has one condition per output', () => {
   for (const q of componentQuests) {
-    const resident = sectionResidents.find(([area]) => area === q.area);
-    assert.ok(resident, q.title + ': unknown area ' + q.area);
-    assert.equal(q.resident, resident[1], q.title);
+    assert.ok(
+      HOME_AREAS.some(([area]) => area === q.area),
+      q.title + ': unknown area ' + q.area,
+    );
+    assert.ok(['Maya', 'Alex', 'Sam', 'Nina', 'Jordan'].includes(q.resident), q.title);
     const outputs = q.ids.filter((id) => components.find((c) => c.id === id).output);
     assert.equal(q.conditions.length, outputs.length, q.title);
     for (const [, , expected] of q.scenarios)

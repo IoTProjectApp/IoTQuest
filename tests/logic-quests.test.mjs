@@ -10,7 +10,7 @@ import {
 } from '../public/missions.js';
 import { Runtime } from '../public/runtime.js';
 import { createLabState, updateResources } from '../public/lab.js';
-import { sectionResidents } from '../public/section-residents.js';
+import { HOME_AREAS } from '../public/home-areas.js';
 import { logicQuests } from '../public/logic-quests.js';
 import { componentQuests } from '../public/component-quests.js';
 
@@ -33,9 +33,14 @@ test('logic quests come after the component quests (26–33), keeping earlier nu
   assert.deepEqual(missions.slice(first, first + logicQuests.length), logicQuests);
 });
 
-test('each logic quest belongs to a section with a resident', () => {
-  for (const q of logicQuests)
-    assert.equal(q.resident, sectionResidents.find(([area]) => area === q.area)?.[1], q.title);
+test('each logic quest is a household request in a home area', () => {
+  for (const q of logicQuests) {
+    assert.ok(
+      HOME_AREAS.some(([area]) => area === q.area),
+      q.title + ': unknown area ' + q.area,
+    );
+    assert.ok(['Maya', 'Alex', 'Sam', 'Nina', 'Jordan'].includes(q.resident), q.title);
+  }
 });
 
 for (const board of ['ESP32', 'Raspberry Pi Pico'])

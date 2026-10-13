@@ -26,7 +26,7 @@ test('the world is drawn by the renderer under test', async () => {
   const webgl2 = await page.evaluate(
     () => !!document.getElementById('worldCanvas').getContext('webgl2'),
   );
-  assert.equal(webgl2, process.env.RENDERER === 'three');
+  assert.equal(webgl2, process.env.RENDERER !== 'webgl');
   assert.deepEqual(errors, []);
 });
 test('three.js draws the same kitchen close-up as the WebGL renderer', async () => {

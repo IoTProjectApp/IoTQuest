@@ -11,6 +11,18 @@ export const CLIPS = {
   TakedownAttacker: { duration: 3.5, end: [-0.164, 0.798] },
   TakedownVictim: { duration: 3.5, end: [-0.142, -1.143] },
   GettingUp: { duration: 8.333, start: [0.045, -0.214], end: [0.085, 0.469] },
+  Jogging: { duration: 2.567, stride: 4.817 },
+  Talking: { duration: 10.267 },
+  TalkingAsk: { duration: 3.767 },
+  SittingIdle: { duration: 2.967 },
+  Dribble: { duration: 2.1 },
+  Breaststroke: { duration: 5 },
+  TreadingWater: { duration: 3 },
+  KettlebellSwing: { duration: 1.967 },
+  OverheadSquat: { duration: 1.867 },
+  AirSquat: { duration: 1.867 },
+  SoccerPass: { duration: 1.6 },
+  GoalkeeperIdle: { duration: 4.633 },
 };
 // The time a walk clip has reached after `distance` metres (negative walks backwards).
 export function walkTime(clip, distance) {

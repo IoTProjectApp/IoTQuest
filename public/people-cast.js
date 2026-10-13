@@ -3,8 +3,23 @@
 // title (or chosen where the name could be either), with a fixed pick per person so neighbours
 // vary but nobody changes from one visit to the next.
 
-export const WOMEN = ['Sophie', 'Kate', 'Megan', 'Elizabeth', 'Martha', 'Jody', 'Shannon'];
-export const MEN = ['Brian', 'Bryce', 'Josh', 'Alex', 'Adam'];
+export const WOMEN = [
+  'Sophie',
+  'Kate',
+  'Megan',
+  'Elizabeth',
+  'Martha',
+  'Jody',
+  'Shannon',
+  'Louise',
+];
+export const MEN = ['Brian', 'Bryce', 'Josh', 'Alex', 'Adam', 'James', 'Leonard'];
+// Roles with a uniform: hospital scrubs, the lifeguard's red suit, an office suit.
+const UNIFORMED = {
+  'civic:hospital': 'Chad',
+  'recreation:pool': 'Jennifer',
+  'worker:business-office:1': 'Louise',
+};
 
 // The technician, by the appearance chosen in the settings.
 export const TECHNICIAN = { '🧑‍🔧': 'Adam', '👩🏽‍🔧': 'Sophie', '👨🏻‍🔧': 'Alex' };
@@ -24,7 +39,8 @@ const FEMALE_NAMES = new Set(
 );
 const FEMALE_IDS = new Set([
   'Maya',
-  'civic:hospital',
+  'recreation:pool',
+  'worker:business-office:1',
   'civic:school',
   'civic-section:schoolClassroom1',
   'civic-section:schoolClassroom3',
@@ -48,6 +64,7 @@ export function isWoman(id, name) {
 // without one, a given gender).
 export function castFor(id, name, woman = isWoman(id, name)) {
   if (HOUSEHOLD[id]) return HOUSEHOLD[id];
+  if (UNIFORMED[id]) return UNIFORMED[id];
   if (id === 'Sam') return FEMALE_NAMES.has(name) ? 'Jody' : 'Brian';
   const pool = woman ? WOMEN : MEN;
   return pool[hash(id) % pool.length];

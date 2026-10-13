@@ -465,6 +465,9 @@ function updateFootball(item, time, reduced) {
     into = t - k * PASS,
     holder = holderFor(players, k),
     receiver = holderFor(players, k + 1);
+  // For renderers drawing rigged players: who has the ball, and who is kicking it this moment.
+  item.holder = holder;
+  item.kicker = Math.abs(into - DRIBBLE) < 0.25 ? holder : null;
   // The ball: at the holder's feet while dribbling, then rolling to the receiver.
   let [bx, bz] = footOf(holder);
   if (into > DRIBBLE) {

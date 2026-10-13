@@ -697,7 +697,7 @@ export class World3D {
     }
     if (this.model.characters)
       for (const person of this.model.extraPeople || []) {
-        const character = this.extraCharacter(person, t, reduced);
+        const character = this.extraCharacter(person, t, realDt, reduced);
         if (character) this.model.characters.push(character);
       }
     if (!reduced) this.fanAngle += (state.paused ? 0 : simDelta) * 10;
@@ -926,32 +926,55 @@ export class World3D {
     );
     garageDoor.pos[1] = (env.door || garageVehicle ? 2.2 : 0.38) + garageFloor - 0.23;
   }
-  // A background person (model.extraPeople, a jointed figure from figures.js) as a rigged
-  // character standing where the figure stands, facing its way; one on a machine walks on the spot.
-  extraCharacter({ key, person, woman, onTheSpot }, t, reduced) {
-    if (person.meshes.every((m) => m.opacity === 0)) return null;
-    const shoes = person.legs.map((l) => l.shoe.pos[1]),
-      walk = woman ? 'FemaleWalk' : 'Walking',
-      yaw = person.torso.rotation[1];
+  // A background person (model.extraPeople) as a rigged character where their figure is (or
+  // where entry.place() says, for the swimmers' own rig). entry.clip: an activity looped on the
+  // spot; onTheSpot: walking on a machine; otherwise entry.moving while they move, at the pace
+  // they move, and entry.still (or a function choosing it) while they do not.
+  extraCharacter(entry, t, dt, reduced) {
+    const { key, person, woman } = entry,
+      standIn = entry.standIn || person.meshes;
+    if (standIn.every((m) => m.opacity === 0)) return null;
+    const at = entry.place
+      ? entry.place()
+      : {
+          x: person.origin.x + person.x,
+          // Feet on whatever the figure stands on (the pavement, a machine's pedals).
+          y: Math.min(...person.legs.map((l) => l.shoe.pos[1])) - 0.05,
+          z: person.origin.z + person.z,
+          angle: Math.PI / 2 - person.torso.rotation[1],
+        };
+    const moved = entry.lastAt ? Math.hypot(at.x - entry.lastAt[0], at.z - entry.lastAt[1]) : 0;
+    entry.lastAt = [at.x, at.z];
+    entry.walked = (entry.walked || 0) + Math.min(moved, 3.5 * dt);
+    const speed = dt > 0 && moved < 1 ? moved / dt : 0;
+    entry.pace =
+      (entry.pace || 0) + (Math.min(1, speed / 1.5) - (entry.pace || 0)) * Math.min(1, dt * 6);
+    const loop = (name, rate = 1) => ({
+      name,
+      time: reduced ? 0 : (t * rate + key.length) % CLIPS[name].duration,
+    });
+    const still = typeof entry.still === 'function' ? entry.still() : entry.still || 'Idle',
+      walk = woman ? 'FemaleWalk' : 'Walking';
+    let clips;
+    if (reduced) clips = [{ ...loop(entry.clip && !entry.place ? 'Idle' : still), weight: 1 }];
+    else if (entry.clip) clips = [{ ...loop(entry.clip), weight: 1 }];
+    else if (entry.onTheSpot) clips = [{ name: walk, time: walkTime(walk, t * 0.9), weight: 1 }];
+    else {
+      const moving = entry.moving || walk,
+        pace = entry.pace < 0.05 ? 0 : entry.pace;
+      clips = pace
+        ? [
+            { name: moving, time: walkTime(moving, entry.walked), weight: pace },
+            { ...loop(still), weight: 1 - pace },
+          ]
+        : [{ ...loop(still), weight: 1 }];
+    }
     return {
       key,
       model: castFor(key, '', woman),
-      x: person.origin.x + person.x,
-      // Feet on whatever the figure stands on (the pavement, a machine's pedals).
-      y: Math.min(...shoes) - 0.05,
-      z: person.origin.z + person.z,
-      angle: Math.PI / 2 - yaw,
-      clips:
-        onTheSpot && !reduced
-          ? [{ name: walk, time: walkTime(walk, t * 0.9), weight: 1 }]
-          : [
-              {
-                name: 'Idle',
-                time: reduced ? 0 : (t + key.length) % CLIPS.Idle.duration,
-                weight: 1,
-              },
-            ],
-      standIn: person.meshes,
+      ...at,
+      clips,
+      standIn,
     };
   }
   // A resident as a rigged character (see three-characters.js), with their jointed actor as the
@@ -960,18 +983,19 @@ export class World3D {
   residentCharacter(actor, x, z, heading, floor, t, dt, names, state) {
     const moved = actor.lastAt ? Math.hypot(x - actor.lastAt[0], z - actor.lastAt[1]) : 0;
     actor.lastAt = [x, z];
-    // Feet keep pace up to a brisk walk; the technician moves at a jog, so beyond that the walk
-    // does not speed up further.
-    actor.walked = (actor.walked || 0) + Math.min(moved, 1.6 * dt);
+    const technician = actor.id === 'player';
+    // Feet keep pace with the ground: residents up to a brisk walk, the technician (who moves at a
+    // jog and jogs) up to a run.
+    actor.walked = (actor.walked || 0) + Math.min(moved, (technician ? 3.5 : 1.6) * dt);
     // A jump (a visit, a new routine spot) is not walking.
     const speed = dt > 0 && moved < 1 ? moved / dt : 0;
     actor.pace = (actor.pace || 0) + (Math.min(1, speed) - (actor.pace || 0)) * Math.min(1, dt * 6);
-    const technician = actor.id === 'player',
-      name = actor.name || names[actor.id] || actor.id,
+    const name = actor.name || names[actor.id] || actor.id,
       woman = technician ? state.appearance === '👩🏽‍🔧' : isWoman(actor.id, name),
-      walk = woman ? 'FemaleWalk' : 'Walking',
-      // Reduced motion: people hold a still standing pose.
-      idle = { name: 'Idle', time: state.reduced ? 0 : t % CLIPS.Idle.duration },
+      walk = technician ? 'Jogging' : woman ? 'FemaleWalk' : 'Walking',
+      // Someone in conversation talks with their hands; reduced motion holds everyone still.
+      gesture = state.talkingNpc === actor.id ? 'Talking' : 'Idle',
+      idle = { name: gesture, time: state.reduced ? 0 : t % CLIPS[gesture].duration },
       pace = actor.pace < 0.05 || state.reduced ? 0 : actor.pace;
     return {
       key: actor.id,

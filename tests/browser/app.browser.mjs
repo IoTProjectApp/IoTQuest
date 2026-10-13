@@ -122,7 +122,10 @@ test('three.js draws the same kitchen close-up as the WebGL renderer', async () 
     await settle(page);
     await page.locator("[data-area='Kitchen']").click();
     await settle(page);
-    shots.push((await page.locator('#worldCanvas').screenshot()).toString('base64'));
+    // A page screenshot clipped to the canvas: an element screenshot first waits for the canvas
+    // to stay put over several rendered frames, which on CI's software WebGL outlasts its timeout.
+    const clip = await page.locator('#worldCanvas').boundingBox();
+    shots.push((await page.screenshot({ clip })).toString('base64'));
   }
   // Compared in the page: the share of pixels whose colour differs by more than a tenth.
   const differing = await openPages.at(-1).evaluate(async (images) => {

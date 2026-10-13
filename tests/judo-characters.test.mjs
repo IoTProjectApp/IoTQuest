@@ -116,8 +116,13 @@ test('the world builds characters only for a renderer that draws them', () => {
       const world = new World3D(canvas, { getState: () => state, createRenderer: fake(draws) });
       world.render(1, 0.016);
       const people = frames.at(-1).characters;
-      assert.equal(people.length, draws ? 5 : 0);
-      if (draws) assert.deepEqual(people.map((p) => p.model).sort(), Object.values(CAST).sort());
+      if (!draws) assert.equal(people.length, 0);
+      else {
+        // The judo class, plus residents and background people (see people-cast.test.mjs).
+        const judoka = people.filter((p) => p.key in CAST);
+        assert.deepEqual(judoka.map((p) => p.model).sort(), Object.values(CAST).sort());
+        assert.ok(people.length > judoka.length);
+      }
     }
   } finally {
     globalThis.requestAnimationFrame = raf;

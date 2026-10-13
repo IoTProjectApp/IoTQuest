@@ -9,7 +9,8 @@ import { clone } from './vendor/three-addons/SkeletonUtils.js';
 //
 // A character: { key, model ('Adam'…), x, y, z (feet, model space), angle (the direction faced,
 // radians, 0 = +x, as figures.js), clips: [{ name, time, weight }] (blended by weight), standIn
-// (the meshes drawn while it loads), belt (optional colour) }.
+// (the meshes drawn while it loads), belt (optional colour), carry (optional colour: a toolbox in
+// the right hand), scale (optional; the technician is drawn a little larger to stand out) }.
 //
 // Each model comes in full detail and a light version (-low, about 15% of the triangles): people
 // far from the camera use the light one, and on software WebGL everyone does, because skinning
@@ -65,7 +66,10 @@ export class ThreeCharacters {
   create(state, gltf) {
     const root = clone(gltf.scene);
     root.traverse((o) => {
-      if (o.isSkinnedMesh) o.frustumCulled = false;
+      if (!o.isSkinnedMesh) return;
+      o.frustumCulled = false;
+      // The textures carry the colour; Mixamo's grey base colour would only darken them.
+      for (const m of [].concat(o.material)) m.color.set(0xffffff);
     });
     const hips = root.getObjectByName('mixamorigHips');
     const person = {
@@ -92,6 +96,20 @@ export class ThreeCharacters {
       belt.position.set(0, 0.07 / scale, 0.01 / scale);
       hips.add(belt);
       person.belt = belt;
+    }
+    const hand = root.getObjectByName('mixamorigRightHand');
+    if (state.carry && hand) {
+      root.updateMatrixWorld(true);
+      const scale = hand.getWorldScale(new THREE.Vector3()).x;
+      const box = new THREE.Mesh(
+        new THREE.BoxGeometry(0.34, 0.2, 0.14),
+        new THREE.MeshStandardMaterial({ color: state.carry, roughness: 0.55 }),
+      );
+      // Held by its handle below the hand.
+      box.scale.setScalar(1 / scale);
+      box.position.set(0, 0.16 / scale, 0);
+      hand.add(box);
+      person.carry = box;
     }
     this.parent.add(root, person.shadow);
     return person;
@@ -122,6 +140,9 @@ export class ThreeCharacters {
       seen.add(state.key);
       person.root.visible = person.shadow.visible = true;
       person.root.position.set(state.x, state.y, state.z);
+      person.root.scale.setScalar(state.scale || 1);
+      person.shadow.scale.setScalar(state.scale || 1);
+      if (person.carry && state.carry) person.carry.material.color.set(state.carry);
       // Models face +z; angle 0 faces +x.
       person.root.rotation.y = Math.PI / 2 - state.angle;
       for (const action of person.actions.values()) action.setEffectiveWeight(0);
@@ -153,8 +174,10 @@ export class ThreeCharacters {
     const person = this.people.get(key);
     person.root.removeFromParent();
     person.shadow.removeFromParent();
-    person.belt?.geometry.dispose();
-    person.belt?.material.dispose();
+    for (const part of [person.belt, person.carry]) {
+      part?.geometry.dispose();
+      part?.material.dispose();
+    }
     this.people.delete(key);
   }
   dispose() {

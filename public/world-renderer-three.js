@@ -213,10 +213,11 @@ export class ThreeWorldRenderer {
       .addScaledVector(new THREE.Vector3(...sun.direction), 50);
     this.sunLight.target.position.set(...camera.target);
     this.sunLight.color.setRGB(...sun.color, THREE.SRGBColorSpace);
-    this.sunLight.intensity = 2.4 * sun.strength * frame.day;
+    this.sunLight.intensity = 3.4 * sun.strength * frame.day;
     this.skyLight.color.setRGB(...frame.fog, THREE.SRGBColorSpace);
     this.skyLight.groundColor.setRGB(0.32, 0.3, 0.24, THREE.SRGBColorSpace);
-    this.skyLight.intensity = 0.25 + 1.1 * frame.day;
+    // Generous fill, as the game's own shader lights its scenes: people should read clearly.
+    this.skyLight.intensity = 0.7 + 1.9 * frame.day;
     // Visible objects, opaque and blended, with the shape each is drawn with at its size on screen.
     const visible = frustumTest(frame.matrix, frame.pixelScale),
       opaque = new Map(),
@@ -224,8 +225,9 @@ export class ThreeWorldRenderer {
       keys = new Map();
     // People on screen and large enough to see: only they are loaded and drawn (skinning is the
     // costly part on software WebGL); the rest keep their stand-in figures, culled like any object.
-    const shown = (frame.characters || []).filter((c) =>
-      visible({ pos: [c.x, c.y + 0.9, c.z], size: [1.2, 1.9, 1.2] }),
+    // People under about 14 pixels across (the town overview) stay as their simple figures.
+    const shown = (frame.characters || []).filter(
+      (c) => visible({ pos: [c.x, c.y + 0.9, c.z], size: [1.2, 1.9, 1.2] }) >= 14,
     );
     const hidden = this.characters.update(shown, frame.eye);
     for (const m of frame.objects) {

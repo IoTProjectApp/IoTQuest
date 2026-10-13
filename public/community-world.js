@@ -394,6 +394,22 @@ export function addCommunityWorld(model, location) {
   recreation.push(...openBlocks.items);
   const recreationPeople = addRecreationPeople(model, { recreation, origin, box, sphere });
   const busStops = buildBusStops(model, { sim, origin, box, sphere });
+  // Background people a renderer may draw as rigged characters (see World3D): those standing
+  // about or walking on the spot. Sports, swimming, exercises and children keep their figures.
+  const outdoorGym = openBlocks.items.find((item) => item.people);
+  model.extraPeople = [
+    ...busStops.flatMap((s) =>
+      s.waiting.map((w, i) => ({ key: `bus:${s.stop.id}:${i}`, person: w.person, woman: i !== 1 })),
+    ),
+    ...recreationPeople
+      .filter((g) => g.parents)
+      .flatMap((g) =>
+        g.parents.map((p, i) => ({ key: `parent:${g.type}:${i}`, person: p, woman: i === 0 })),
+      ),
+    ...(outdoorGym
+      ? [{ key: 'outdoorgym:walker', person: outdoorGym.people[1], woman: false, onTheSpot: true }]
+      : []),
+  ];
   lights.push(...busStops.map((s) => s.lamp));
   const sections = civic.flatMap((building) => building.sections);
   areas.push(...sections.map((section) => section.area));

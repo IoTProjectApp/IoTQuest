@@ -123,10 +123,20 @@ test('three.js draws the same kitchen close-up as the WebGL renderer', async () 
     await settle(page);
     await page.locator("[data-area='Kitchen']").click();
     await settle(page);
-    // A page screenshot clipped to the canvas: an element screenshot first waits for the canvas
-    // to stay put over several rendered frames, which on CI's software WebGL outlasts its timeout.
-    const clip = await page.locator('#worldCanvas').boundingBox();
-    shots.push((await page.screenshot({ clip })).toString('base64'));
+    // The canvas's own pixels, read just after the world draws a frame: the world asks for its
+    // next frame at the end of each one, so a frame callback asked for now runs right after it,
+    // while the picture is still in the canvas. Screenshots wait on the browser to compose a
+    // frame, which on CI's software WebGL can take longer than their timeout.
+    shots.push(
+      await page.evaluate(
+        () =>
+          new Promise((resolve) =>
+            requestAnimationFrame(() =>
+              resolve(document.getElementById('worldCanvas').toDataURL().split(',')[1]),
+            ),
+          ),
+      ),
+    );
     // One 3D world at a time: two rendering together on CI's few cores slow each other until a
     // single frame takes longer than the screenshot waits.
     if (renderer === 'webgl') {
@@ -146,11 +156,20 @@ test('three.js draws the same kitchen close-up as the WebGL renderer', async () 
       return context.getImageData(0, 0, image.width, image.height).data;
     };
     const [a, b] = await Promise.all(images.map(pixels));
+    // A picture read at the wrong moment is blank, and two blank pictures would match.
+    const colours = (data) => {
+      const seen = new Set();
+      for (let i = 0; i < data.length; i += 4 * 97)
+        seen.add(data[i] * 65536 + data[i + 1] * 256 + data[i + 2]);
+      return seen.size;
+    };
+    if (colours(a) < 200 || colours(b) < 200) return -1;
     let count = 0;
     for (let i = 0; i < a.length; i += 4)
       if (Math.max(...[0, 1, 2].map((c) => Math.abs(a[i + c] - b[i + c]))) > 24) count++;
     return count / (a.length / 4);
   }, shots);
+  assert.notEqual(differing, -1, 'both pictures show the kitchen, not a blank canvas');
   // Residents and traffic still move a little; a missing batch of furniture differs by ~10%.
   assert.ok(differing < 0.03, `${(differing * 100).toFixed(1)}% of pixels differ`);
 });

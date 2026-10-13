@@ -8,6 +8,7 @@ import test, { before, after, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn, execFileSync } from 'node:child_process';
 import { chromium } from 'playwright';
+import { useRenderer } from './renderer.mjs';
 import { missions, defaults, program } from '../../public/missions.js';
 
 let server, browser, origin;
@@ -23,9 +24,11 @@ before(async () => {
     server.on('exit', () => reject(Error('The game server stopped before it was ready.')));
   });
   // SwiftShader gives headless Chromium a software WebGL, so the 3D world renders anywhere.
-  browser = await chromium.launch({
-    args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader'],
-  });
+  browser = useRenderer(
+    await chromium.launch({
+      args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader'],
+    }),
+  );
 });
 after(async () => {
   await browser?.close();
@@ -91,6 +94,56 @@ async function settle(page) {
 }
 const modalOpen = (page) => page.evaluate(() => document.getElementById('modal').open);
 
+test('the world is drawn by the renderer under test', async () => {
+  const { page, errors } = await openHome();
+  // three.js needs WebGL 2; the game's own renderer uses WebGL 1. A canvas keeps the context
+  // type it was first given, so this shows which renderer actually started (not a fallback).
+  const webgl2 = await page.evaluate(
+    () => !!document.getElementById('worldCanvas').getContext('webgl2'),
+  );
+  assert.equal(webgl2, process.env.RENDERER === 'three');
+  assert.deepEqual(errors, []);
+});
+test('three.js draws the same kitchen close-up as the WebGL renderer', async () => {
+  const shots = [];
+  for (const renderer of ['webgl', 'three']) {
+    const page = await browser.newPage({
+      viewport: { width: 1000, height: 700 },
+      reducedMotion: 'reduce',
+    });
+    openPages.push(page);
+    await page.context().tracing.start({ snapshots: true });
+    // After any RENDERER=… init script, so this page uses the renderer named here.
+    await page.addInitScript((r) => (globalThis.IOTQUEST_RENDERER = r), renderer);
+    await page.route(/^https?:\/\/(?!127\.0\.0\.1)/, (route) => route.abort());
+    await page.goto(origin + '/');
+    await page.click('#resumeLegacy');
+    await page.locator('#worldCanvas').waitFor();
+    await settle(page);
+    await page.locator("[data-area='Kitchen']").click();
+    await settle(page);
+    shots.push((await page.locator('#worldCanvas').screenshot()).toString('base64'));
+  }
+  // Compared in the page: the share of pixels whose colour differs by more than a tenth.
+  const differing = await openPages.at(-1).evaluate(async (images) => {
+    const pixels = async (b64) => {
+      const image = new Image();
+      image.src = 'data:image/png;base64,' + b64;
+      await image.decode();
+      const canvas = new OffscreenCanvas(image.width, image.height),
+        context = canvas.getContext('2d');
+      context.drawImage(image, 0, 0);
+      return context.getImageData(0, 0, image.width, image.height).data;
+    };
+    const [a, b] = await Promise.all(images.map(pixels));
+    let count = 0;
+    for (let i = 0; i < a.length; i += 4)
+      if (Math.max(...[0, 1, 2].map((c) => Math.abs(a[i + c] - b[i + c]))) > 24) count++;
+    return count / (a.length / 4);
+  }, shots);
+  // Residents and traffic still move a little; a missing batch of furniture differs by ~10%.
+  assert.ok(differing < 0.03, `${(differing * 100).toFixed(1)}% of pixels differ`);
+});
 test('every on-screen room button can be clicked in the World view', async () => {
   const { page, errors } = await openHome();
   // The element on top at the centre of each on-screen room button must be that button.

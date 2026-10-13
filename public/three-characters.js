@@ -36,6 +36,11 @@ export class ThreeCharacters {
       depthWrite: false,
     });
     this.clips = null;
+  }
+  // The animations, shared by everyone, load with the first person seen.
+  loadClips() {
+    if (this.clipsRequested) return;
+    this.clipsRequested = true;
     this.load('animations').then(
       (gltf) => (this.clips = new Map(gltf.animations.map((c) => [c.name, c]))),
       () => (this.clips = new Map()),
@@ -96,6 +101,7 @@ export class ThreeCharacters {
   update(states, eye) {
     const hidden = new Set(),
       seen = new Set();
+    if (states.length) this.loadClips();
     for (const state of states) {
       let person = this.people.get(state.key);
       const distance = Math.hypot(state.x - eye[0], state.y - eye[1], state.z - eye[2]),

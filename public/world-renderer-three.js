@@ -217,12 +217,17 @@ export class ThreeWorldRenderer {
     this.skyLight.color.setRGB(...frame.fog, THREE.SRGBColorSpace);
     this.skyLight.groundColor.setRGB(0.32, 0.3, 0.24, THREE.SRGBColorSpace);
     this.skyLight.intensity = 0.25 + 1.1 * frame.day;
-    const hidden = this.characters.update(frame.characters || [], frame.eye);
     // Visible objects, opaque and blended, with the shape each is drawn with at its size on screen.
     const visible = frustumTest(frame.matrix, frame.pixelScale),
       opaque = new Map(),
       transparent = [],
       keys = new Map();
+    // People on screen and large enough to see: only they are loaded and drawn (skinning is the
+    // costly part on software WebGL); the rest keep their stand-in figures, culled like any object.
+    const shown = (frame.characters || []).filter((c) =>
+      visible({ pos: [c.x, c.y + 0.9, c.z], size: [1.2, 1.9, 1.2] }),
+    );
+    const hidden = this.characters.update(shown, frame.eye);
     for (const m of frame.objects) {
       if (hidden.has(m)) continue;
       const alpha = (m.opacity ?? 1) * color(m.color)[3];

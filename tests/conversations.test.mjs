@@ -140,3 +140,23 @@ test('chat markup escapes names and uses its own bubble classes, not the map spr
   assert.match(html, /class="chat-message from-technician"/);
   assert.doesNotMatch(html, /class="chat-message (resident|technician)"/);
 });
+
+test('a household member visiting about a room they look after says so first', () => {
+  const visit = createConversation({
+    key: 'Sam',
+    resident: 'Sam',
+    quests: missions,
+    area: 'Kitchen',
+    looksAfter: 'Kitchen',
+  });
+  assert.match(visit.messages[0].text, /^Hello! I look after the kitchen\. /);
+  assert.ok(visit.requests.every((r) => r.mission.area === 'Kitchen'));
+  // A room's own resident (Nina in the bedroom) just says hello.
+  const own = createConversation({
+    key: 'section:Bedroom',
+    resident: 'Nina',
+    quests: missions,
+    area: 'Bedroom',
+  });
+  assert.doesNotMatch(own.messages[0].text, /look after/);
+});

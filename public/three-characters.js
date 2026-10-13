@@ -23,12 +23,18 @@ const FAR = 16,
   NEAR = 13;
 
 export class ThreeCharacters {
-  constructor(parent, { lowDetail = false } = {}) {
+  // shadows: cast real shadows from the sun (a renderer with shadow maps on); otherwise each
+  // person has a soft round shade under them.
+  constructor(parent, { lowDetail = false, shadows = false } = {}) {
     this.parent = parent;
     this.lowDetail = lowDetail;
+    this.shadows = shadows;
     this.loader = new GLTFLoader();
     this.models = new Map();
     this.people = new Map();
+    // The world is drawn by the game's own shader, which cannot receive three.js shadows, so
+    // each person's shadow falls on a patch of ground under them that shows only the shadow.
+    // A soft round shade under everyone keeps them on the ground at night and under cloud too.
     this.shadowGeometry = new THREE.CircleGeometry(0.34, 24).rotateX(-Math.PI / 2);
     this.shadowMaterial = new THREE.MeshBasicMaterial({
       color: 0x1d2a20,
@@ -36,6 +42,10 @@ export class ThreeCharacters {
       opacity: 0.22,
       depthWrite: false,
     });
+    if (shadows) {
+      this.sunShadowGeometry = new THREE.PlaneGeometry(4, 4).rotateX(-Math.PI / 2);
+      this.sunShadowMaterial = new THREE.ShadowMaterial({ opacity: 0.45, depthWrite: false });
+    }
     this.clips = null;
   }
   // The animations, shared by everyone, load with the first person seen.
@@ -68,6 +78,7 @@ export class ThreeCharacters {
     root.traverse((o) => {
       if (!o.isSkinnedMesh) return;
       o.frustumCulled = false;
+      o.castShadow = this.shadows;
       // The textures carry the colour; Mixamo's grey base colour would only darken them.
       for (const m of [].concat(o.material)) m.color.set(0xffffff);
     });
@@ -80,6 +91,12 @@ export class ThreeCharacters {
       actions: new Map(),
       shadow: new THREE.Mesh(this.shadowGeometry, this.shadowMaterial),
     };
+    if (this.shadows) {
+      // Shows only the shadow the person casts in the sun.
+      const sunShadow = new THREE.Mesh(this.sunShadowGeometry, this.sunShadowMaterial);
+      sunShadow.receiveShadow = true;
+      person.shadow.add(sunShadow);
+    }
     if (state.belt && hips) {
       // Sized in metres although the skeleton is in centimetres (the model is scaled by 0.01).
       root.updateMatrixWorld(true);
@@ -163,7 +180,9 @@ export class ThreeCharacters {
       person.root.updateMatrixWorld(true);
       const at = person.hips ? person.hips.getWorldPosition(new THREE.Vector3()) : null;
       if (at) this.parent.worldToLocal(at);
-      person.shadow.position.set(at ? at.x : state.x, state.y + 0.012, at ? at.z : state.z);
+      // A little above the floor height: paths and rugs are drawn slightly raised, and a shadow
+      // at floor level would be hidden under them.
+      person.shadow.position.set(at ? at.x : state.x, state.y + 0.07, at ? at.z : state.z);
       for (const mesh of state.standIn || []) hidden.add(mesh);
     }
     for (const [key, person] of this.people)
@@ -184,6 +203,8 @@ export class ThreeCharacters {
     for (const key of [...this.people.keys()]) this.remove(key);
     this.shadowGeometry.dispose();
     this.shadowMaterial.dispose();
+    this.sunShadowGeometry?.dispose();
+    this.sunShadowMaterial?.dispose();
     for (const { gltf } of this.models.values())
       gltf?.scene.traverse((o) => {
         if (!o.isMesh) return;

@@ -13,7 +13,7 @@ import { fileURLToPath } from 'node:url';
 
 const REPOSITORY = 'IoTProjectApp/iotquest-models';
 // The models this version of the game is built and tested with.
-const COMMIT = '3ac314fde89dc419ee4f2d96bb4a9dc029c387e6';
+const COMMIT = 'fc8d66615da05d839f691d9dfe73ef28a2e01a1e';
 const OUT = fileURLToPath(new URL('../public/models/people/', import.meta.url));
 const STAMP = OUT + '.commit';
 

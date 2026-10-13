@@ -42,17 +42,22 @@ jobs:
 
   # Drives the real game in headless Chromium (software WebGL) to catch layout, theme and
   # accessibility regressions. Kept out of the deploy gate until it has proven stable on CI.
-  # Runs once per world renderer: the game's own WebGL renderer and the three.js one that is
-  # being brought level with it (?renderer=three).
-  browser:
-    # The WebGL run keeps the plain name "browser", which branch protection requires.
-    name: ${{ matrix.renderer == 'webgl' && 'browser' || format('browser ({0})', matrix.renderer) }}
+  # Runs once per world renderer (the game's own WebGL renderer and the three.js one being
+  # brought level with it, ?renderer=three), each in two parts that run side by side.
+  browser-part:
+    name: browser part (${{ matrix.renderer }}, ${{ matrix.part }})
     runs-on: ubuntu-latest
     timeout-minutes: 50
     strategy:
       fail-fast: false
       matrix:
         renderer: [webgl, three]
+        part: [home, world]
+        include:
+          - part: home
+            files: tests/browser/app-home.browser.mjs tests/browser/contrast.browser.mjs tests/browser/teacher.browser.mjs
+          - part: world
+            files: tests/browser/app-world.browser.mjs
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
@@ -65,7 +70,7 @@ jobs:
         env:
           MODELS_TOKEN: ${{ secrets.MODELS_TOKEN }}
       - name: Run browser tests
-        run: npm run test:browser
+        run: node --test ${{ matrix.files }}
         env:
           RENDERER: ${{ matrix.renderer }}
       # Screenshots and traces of failed tests, also when the job times out; open a trace with
@@ -74,10 +79,20 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: browser-test-failures-${{ matrix.renderer }}
+          name: browser-test-failures-${{ matrix.renderer }}-${{ matrix.part }}
           path: test-results/
           retention-days: 7
           if-no-files-found: ignore
+
+  # The single "browser" check that branch protection requires: passes only when every part
+  # passed on both renderers.
+  browser:
+    needs: browser-part
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Every browser part passed
+        run: test "${{ needs.browser-part.result }}" = success
 
   # Pages holds one site, so every deploy rebuilds both branches from their latest commits (each
   # passed these checks before it could be merged). One deploy at a time, so a main deploy and a

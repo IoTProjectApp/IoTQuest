@@ -18,12 +18,15 @@ import { fileURLToPath } from 'node:url';
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
 const SOURCE = ROOT + 'assets-src/mixamo/';
 const OUT = ROOT + 'public/models/people/';
-// Clips whose hips travel is removed so the game moves the character itself (walks, stances);
-// the others keep it, because the movement is the point (a throw, getting up).
-const IN_PLACE = ['Walking', 'FemaleWalk', 'Idle', 'FightingIdle', 'Bow'];
+// Clips that keep their hips travel, because the movement is the point (a throw, a fall, getting
+// up); every other clip has it removed so the game moves the character itself.
+const KEEP_TRAVEL = ['TakedownAttacker', 'TakedownVictim', 'GettingUp'];
 
 const characters = (await readdir(SOURCE)).filter((f) => f.endsWith('.fbx'));
 const animations = (await readdir(SOURCE + 'animations')).filter((f) => f.endsWith('.fbx'));
+const IN_PLACE = animations
+  .map((f) => f.replace(/\.fbx$/, ''))
+  .filter((name) => !KEEP_TRAVEL.includes(name));
 await mkdir(OUT, { recursive: true });
 
 // Files reach the page from a small local server: the largest character is 87 MB, more than

@@ -24,6 +24,7 @@ import { localSkyDate, DEFAULT_OBSERVER } from './astronomy.js';
 import { Runtime } from './runtime.js';
 import { World3D } from './world3d.js';
 import { toWorld, fromWorld } from './world-math.js';
+import { visitRequest, visitEntry, stepToward } from './household-visits.js';
 import { ADC_SIGNALS, ADC_SCALE, outputLevel } from './signals.js';
 import { locations, locationById, adaptMissions, progressForLocation } from './locations.js';
 import { WeatherService, advanceEnvironment, servoLevel } from './weather.js';
@@ -1102,7 +1103,12 @@ document.addEventListener('keydown', (e) => {
 });
 document.addEventListener('keyup', (e) => keys.delete(directions[e.key]));
 window.addEventListener('blur', () => keys.clear());
+let visitFrame = 0;
 function movementFrame(t) {
+  // Real elapsed time (up to half a second a frame), so a visitor arrives in about the same time
+  // on a slow machine as on a fast one rather than walking in slow motion.
+  updateVisit(visitFrame ? Math.min(0.5, (t - visitFrame) / 1000) : 0);
+  visitFrame = t;
   if (t - moveFrame > 30) {
     for (const dir of keys) move(dir, 0.55);
     moveFrame = t;
@@ -4005,26 +4011,46 @@ function householdKey(name) {
   const family = ['Maya', 'Alex', 'Sam'].find((k) => (currentLocation()?.names[k] || k) === name);
   return family || residentsForSections(currentLocation()).find((r) => r.name === name)?.key;
 }
-// The request a visitor comes about: an urgent one, the one in progress, then the next unfinished.
 function roomRequest(area) {
-  const quests = activeMissions(),
-    done = (i) => !!currentCompletions()[missionKey(i)],
-    urgent = new Set(currentNeeds().map((n) => n.index)),
-    open = quests.map((m, i) => i).filter((i) => quests[i].area === area && !done(i));
-  const index =
-    open.find((i) => urgent.has(i)) ?? (open.includes(state.mission) ? state.mission : open[0]);
-  return index === undefined ? null : { index, mission: quests[index] };
+  return visitRequest({
+    quests: activeMissions(),
+    done: (i) => !!currentCompletions()[missionKey(i)],
+    urgent: new Set(currentNeeds().map((n) => n.index)),
+    current: state.mission,
+    area,
+  });
 }
+// In the 3D world the visitor walks over (VISIT_SPEED metres a second) from a few metres away,
+// along a clear line, starts the chat on arrival, and walks back out the same way afterwards.
+const VISIT_SPEED = 1.3;
+const visitor = () => visit && world3d?.model.actors.find((a) => a.id === visit.key);
 function endVisit() {
-  const actor = world3d?.model.actors.find((a) => a.id === visit?.key);
-  if (actor) actor.present = false;
+  const actor = visitor();
+  if (actor) Object.assign(actor, { present: false, walkTo: null });
   visit = null;
+}
+function leaveVisit() {
+  const actor = visitor();
+  if (!actor || !visit.entry) return endVisit();
+  visit.phase = 'leaving';
+  actor.walkTo = visit.entry;
+  delete actor.talkPosition;
+}
+// Moves a walking visitor on by dt seconds; called every frame.
+function updateVisit(dt) {
+  const actor = visitor();
+  if (!actor?.walkTo || !stepToward(actor, actor.walkTo, VISIT_SPEED, dt)) return;
+  actor.walkTo = null;
+  if (visit.phase === 'leaving') return endVisit();
+  visit.phase = 'here';
+  actor.talkPosition = [actor.x, actor.z];
+  if (!$('modal').open && !state.travelScreen) openConversation(visit.key, visit.area);
 }
 function checkVisits() {
   if (state.travelScreen || view === 'sky') return;
-  if (visit) {
+  if (visit && visit.phase !== 'leaving') {
     if (areaDistance(areas.find((a) => a[0] === visit.area)) > VISIT_LEAVE && !$('modal').open)
-      endVisit();
+      leaveVisit();
     return;
   }
   if ($('modal').open) return;
@@ -4034,7 +4060,9 @@ function checkVisits() {
   const request = room && roomRequest(room[0]);
   const key = request && householdKey(request.mission.resident);
   if (!key) return;
-  visit = { key, area: room[0] };
+  // Someone still walking out of the last room is simply gone once the next one is entered.
+  if (visit) endVisit();
+  visit = { key, area: room[0], phase: 'here' };
   const actor = world3d?.model.actors.find((a) => a.id === key);
   if (actor) {
     // A step from the technician towards the middle of the room, clear of walls and furniture.
@@ -4046,9 +4074,22 @@ function checkVisits() {
         ? { x: state.player.x + (dx / d) * 4, y: state.player.y + (dy / d) * 4 }
         : { x: state.player.x + 4, y: state.player.y },
     );
-    [actor.x, , actor.z] = toWorld(spot);
-    actor.talkPosition = [actor.x, actor.z];
-    actor.present = true;
+    const [sx, , sz] = toWorld(spot);
+    // With reduced motion the visitor is simply there; otherwise they walk over.
+    visit.entry = state.reduced
+      ? null
+      : visitEntry({
+          spot: [sx, sz],
+          from: [toWorld(state.player)[0], toWorld(state.player)[2]],
+          colliders: world3d.model.colliders,
+        });
+    if (visit.entry) {
+      visit.phase = 'arriving';
+      [actor.x, actor.z] = visit.entry;
+      Object.assign(actor, { walkTo: [sx, sz], present: true });
+      return;
+    }
+    Object.assign(actor, { x: sx, z: sz, talkPosition: [sx, sz], present: true });
   }
   openConversation(key, room[0]);
 }
@@ -4070,6 +4111,7 @@ function openConversation(key, area) {
     urgent: Object.fromEntries(currentNeeds().map((n) => [n.index, n.reason.text])),
     // A visit is about the room the technician walked into.
     area: area ?? character?.area,
+    looksAfter: area && area !== character?.area ? area : null,
   });
   activeConversation.section = character?.section;
   // Thanks are said once; chats count towards each of this resident's quests in progress reports.

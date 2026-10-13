@@ -32,6 +32,8 @@ export function createConversation({
   thanked = {},
   urgent = {},
   area = null,
+  // A household member visiting about a room they look after says so first.
+  looksAfter = null,
 }) {
   const requests = quests
     .map((mission, index) => ({ mission, index, complete: !!completed[index] }))
@@ -60,7 +62,9 @@ export function createConversation({
         speaker: 'resident',
         text: thanks.length
           ? `${thanks.map(thankYou).join(' ')} ${selected?.complete ? '' : 'Next, ' + hello}`.trim()
-          : 'Hello! ' + hello,
+          : 'Hello! ' +
+            (looksAfter ? `I look after the ${looksAfter.toLowerCase()}. ` : '') +
+            hello,
       },
     ],
   };

@@ -206,6 +206,7 @@ function updateBasketball(g, t, reduced) {
   });
   // Possession: who holds the ball, and what the ball is doing.
   const holder = into < 2 ? passer : into < 2.6 ? null : into < 4.4 ? shooter : null;
+  g.holder = holder;
   for (const p of g.players) {
     const [tx, tz] = targets.get(p);
     const dx = tx - p.px,

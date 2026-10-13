@@ -3,6 +3,8 @@ import { WebGLWorldRenderer, color } from './world-renderer-webgl.js';
 import { addCommunityWorld, updateCommunityWorld, STREET_LIGHT_LEVEL } from './community-world.js';
 import { updateLandscape } from './landscape.js';
 import { isHousehold } from './section-residents.js';
+import { castFor, isWoman, TECHNICIAN } from './people-cast.js';
+import { CLIPS, walkTime } from './character-clips.js';
 import { addDeviceDetails } from './device-objects.js';
 import { locationById } from './locations.js';
 import { skyTime, DEFAULT_OBSERVER } from './astronomy.js';
@@ -603,6 +605,8 @@ export class World3D {
     }
     this.lastPlayer = [...p];
     const motion = env.motion && !reduced;
+    // Local names for Maya, Alex and Sam, which decide who plays them.
+    const names = locationById(state.locationId)?.names || {};
     for (const actor of this.model.actors) {
       let ax = actor.x,
         az = actor.z,
@@ -661,6 +665,10 @@ export class World3D {
       const skin = appearance === '👩🏽‍🔧' ? '#b78968' : appearance === '👨🏻‍🔧' ? '#e0b992' : '#cba885';
       // The household is only seen when visiting the technician or talking to them.
       const away = isHousehold(actor.id) && !actor.present && state.talkingNpc !== actor.id;
+      if (this.model.characters && !actor.judoka && !away)
+        this.model.characters.push(
+          this.residentCharacter(actor, ax, az, angle, floor, t, realDt, names, state),
+        );
       for (const part of actor.parts) {
         part.baseOpacity ??= part.opacity ?? 1;
         part.opacity = away ? 0 : part.baseOpacity;
@@ -684,6 +692,11 @@ export class World3D {
         }
       }
     }
+    if (this.model.characters)
+      for (const person of this.model.extraPeople || []) {
+        const character = this.extraCharacter(person, t);
+        if (character) this.model.characters.push(character);
+      }
     if (!reduced) this.fanAngle += (state.paused ? 0 : simDelta) * 10;
     let gate = 0,
       blinds = 0;
@@ -909,6 +922,66 @@ export class World3D {
         vehicle.z + this.model.community.origin.z < garageDoor.pos[2] + 5,
     );
     garageDoor.pos[1] = (env.door || garageVehicle ? 2.2 : 0.38) + garageFloor - 0.23;
+  }
+  // A background person (model.extraPeople, a jointed figure from figures.js) as a rigged
+  // character standing where the figure stands, facing its way; one on a machine walks on the spot.
+  extraCharacter({ key, person, woman, onTheSpot }, t) {
+    if (person.meshes.every((m) => m.opacity === 0)) return null;
+    const shoes = person.legs.map((l) => l.shoe.pos[1]),
+      walk = woman ? 'FemaleWalk' : 'Walking',
+      yaw = person.torso.rotation[1];
+    return {
+      key,
+      model: castFor(key, '', woman),
+      x: person.origin.x + person.x,
+      // Feet on whatever the figure stands on (the pavement, a machine's pedals).
+      y: Math.min(...shoes) - 0.05,
+      z: person.origin.z + person.z,
+      angle: Math.PI / 2 - yaw,
+      clips: onTheSpot
+        ? [{ name: walk, time: walkTime(walk, t * 0.9), weight: 1 }]
+        : [{ name: 'Idle', time: (t + key.length) % CLIPS.Idle.duration, weight: 1 }],
+      standIn: person.meshes,
+    };
+  }
+  // A resident as a rigged character (see three-characters.js), with their jointed actor as the
+  // stand-in: walking at the pace they move (blended into standing as they slow), otherwise
+  // standing, facing where the actor faces.
+  residentCharacter(actor, x, z, heading, floor, t, dt, names, state) {
+    const moved = actor.lastAt ? Math.hypot(x - actor.lastAt[0], z - actor.lastAt[1]) : 0;
+    actor.lastAt = [x, z];
+    // Feet keep pace up to a brisk walk; the technician moves at a jog, so beyond that the walk
+    // does not speed up further.
+    actor.walked = (actor.walked || 0) + Math.min(moved, 1.6 * dt);
+    // A jump (a visit, a new routine spot) is not walking.
+    const speed = dt > 0 && moved < 1 ? moved / dt : 0;
+    actor.pace = (actor.pace || 0) + (Math.min(1, speed) - (actor.pace || 0)) * Math.min(1, dt * 6);
+    const technician = actor.id === 'player',
+      name = actor.name || names[actor.id] || actor.id,
+      woman = technician ? state.appearance === '👩🏽‍🔧' : isWoman(actor.id, name),
+      walk = woman ? 'FemaleWalk' : 'Walking',
+      idle = { name: 'Idle', time: t % CLIPS.Idle.duration },
+      pace = actor.pace < 0.05 ? 0 : actor.pace;
+    return {
+      key: actor.id,
+      model: technician ? TECHNICIAN[state.appearance] || 'Adam' : castFor(actor.id, name),
+      x,
+      y: floor,
+      // The technician carries their toolbox, in the colour chosen in the settings, and is drawn a
+      // little larger than the residents so the player finds them at a glance.
+      carry: technician ? state.color : undefined,
+      scale: technician ? 1.15 : 1,
+      z,
+      // Actors face (sin, cos) of their heading; characters face (cos, sin) of their angle.
+      angle: Math.atan2(Math.cos(heading), Math.sin(heading)),
+      clips: pace
+        ? [
+            { name: walk, time: walkTime(walk, actor.walked), weight: pace },
+            { ...idle, weight: 1 - pace },
+          ]
+        : [{ ...idle, weight: 1 }],
+      standIn: actor.parts,
+    };
   }
   // Works out what this frame shows (camera, sun, fog, the nearest lamps and shadow casters) and
   // has the renderer draw it.

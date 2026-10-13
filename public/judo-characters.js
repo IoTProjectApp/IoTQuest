@@ -1,5 +1,8 @@
 import { JUDO_PAIRS } from './judo-dojo.js';
 import { instructorAt } from './judo-class.js';
+import { CLIPS, walkTime } from './character-clips.js';
+
+export { CLIPS };
 
 // The judo class as rigged characters playing motion-captured clips (see three-characters.js),
 // for renderers that draw them; the jointed figures in judo-class.js stand in until then. Each
@@ -8,18 +11,6 @@ import { instructorAt } from './judo-class.js';
 // walking back to their spots. Partners always face each other, so the next round simply swaps
 // who throws. The instructor walks the same round as the jointed figure.
 
-// Clip lengths and hips travel, from public/models/people/animations.json (a test checks they
-// match). Travel is in metres in the character's frame: [sideways, forward].
-export const CLIPS = {
-  Bow: { duration: 2.733 },
-  FightingIdle: { duration: 3.3 },
-  Idle: { duration: 8.333 },
-  Walking: { duration: 1.233, stride: 1.274 },
-  FemaleWalk: { duration: 1.167, stride: 1.41 },
-  TakedownAttacker: { duration: 3.5, end: [-0.164, 0.798] },
-  TakedownVictim: { duration: 3.5, end: [-0.142, -1.143] },
-  GettingUp: { duration: 8.333, start: [0.045, -0.214], end: [0.085, 0.469] },
-};
 // Who plays whom, matched to each judoka's name, and the gap between partners at the start.
 export const CAST = {
   'recreation:dojo': 'Kate',
@@ -52,12 +43,6 @@ const play = (name, time, since, previous) => {
       ]
     : [{ name, time, weight: 1 }];
 };
-// The clip time a walk has reached after `distance` metres, so the feet keep pace with the ground.
-const walkTime = (clip, distance) =>
-  ((((distance / CLIPS[clip].stride) * CLIPS[clip].duration) % CLIPS[clip].duration) +
-    CLIPS[clip].duration) %
-  CLIPS[clip].duration;
-
 // One partner's place and clips at time c into the round. facing: +1 faces +z, -1 faces -z.
 function partner(spot, facing, attacking, c) {
   // A character's own frame turned into the dojo's: [sideways, forward] to [x, z]. Models face

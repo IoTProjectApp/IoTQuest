@@ -127,6 +127,12 @@ test('three.js draws the same kitchen close-up as the WebGL renderer', async () 
     // to stay put over several rendered frames, which on CI's software WebGL outlasts its timeout.
     const clip = await page.locator('#worldCanvas').boundingBox();
     shots.push((await page.screenshot({ clip })).toString('base64'));
+    // One 3D world at a time: two rendering together on CI's few cores slow each other until a
+    // single frame takes longer than the screenshot waits.
+    if (renderer === 'webgl') {
+      openPages.splice(openPages.indexOf(page), 1);
+      await page.close();
+    }
   }
   // Compared in the page: the share of pixels whose colour differs by more than a tenth.
   const differing = await openPages.at(-1).evaluate(async (images) => {

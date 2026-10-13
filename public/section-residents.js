@@ -1,26 +1,16 @@
 import { toWorld, fromWorld, findFree, clearPath } from './world-math.js';
 
+// The household is five people: Maya, Alex and Sam (world-model.js), and Nina and Jordan, who
+// each look after a room and greet the technician there. The other rooms' requests come from
+// whichever of Maya, Alex and Sam looks after them (the quests' resident).
+// Maya, Alex, Sam and the room residents: they come to the technician when needed (see visits in
+// game.js) rather than waiting about the house.
+export const isHousehold = (id) =>
+  ['Maya', 'Alex', 'Sam'].includes(id) || id.startsWith('section:');
 export const sectionResidents = [
   ['Bedroom', 'Nina', 19, 17],
-  ['Bathroom', 'Omar', 30, 15],
-  ['Kitchen', 'Priya', 35, 31],
-  ['Utility room', 'Theo', 48, 12],
   ['Living room', 'Jordan', 20, 35],
-  ['Garage', 'Casey', 50, 30],
-  ['Greenhouse', 'Ivy', 80, 20],
-  ['Water tank', 'Morgan', 91, 43],
-  ['Plant beds', 'Robin', 77, 64],
-  ['Garden path', 'Eden', 43, 60],
-  ['Entrance', 'Jamie', 32, 51],
 ];
-const farmNames = {
-  Greenhouse: 'Livestock shelter',
-  'Water tank': 'Farm water supply',
-  'Plant beds': 'Crop garden',
-  'Garden path': 'Farm lane',
-  Garage: 'Farm workshop',
-  Entrance: 'Stock entrance',
-};
 export function residentsForSections(location, overrides = {}) {
   return sectionResidents.map(([area, name, x, y], index) => {
     [x, y] = overrides[area] || location?.areaOverrides?.[area] || [x, y];
@@ -29,7 +19,7 @@ export function residentsForSections(location, overrides = {}) {
       key: 'section:' + area,
       area,
       name,
-      section: location?.farm ? farmNames[area] || area : area,
+      section: area,
       x: pos[0],
       z: pos[2],
       color: ['#737fb0', '#a47665', '#668c79', '#ae9563'][index % 4],

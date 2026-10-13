@@ -32,7 +32,7 @@ export const logicQuests = [
     title: 'Welcome Either Way',
     sectionQuest: true,
     area: 'Entrance',
-    resident: 'Jamie',
+    resident: 'Alex',
     role: 'Entrance resident',
     quote:
       'Sometimes the motion sensor misses me, but I always open the door. Light the porch if either one notices me.',
@@ -55,7 +55,7 @@ export const logicQuests = [
     title: 'Kitchen Fume Fan',
     sectionQuest: true,
     area: 'Kitchen',
-    resident: 'Priya',
+    resident: 'Sam',
     role: 'Kitchen resident',
     quote:
       'When I boil pasta the air gets steamy, and when I roast it gets hot. Run the extractor fan for either one.',
@@ -79,7 +79,7 @@ export const logicQuests = [
     title: 'Bathroom Night Path',
     sectionQuest: true,
     area: 'Bathroom',
-    resident: 'Omar',
+    resident: 'Sam',
     role: 'Bathroom resident',
     quote:
       'At night I want a soft light when I walk in, but it should not switch on in daylight when I do not need it.',
@@ -102,7 +102,7 @@ export const logicQuests = [
     title: 'Pond Overflow Warning',
     sectionQuest: true,
     area: 'Water tank',
-    resident: 'Morgan',
+    resident: 'Sam',
     role: 'Water tank resident',
     quote:
       'After big storms the pond can overflow. Open the drain valve when it gets high, and sound the buzzer if it is about to spill.',
@@ -126,7 +126,7 @@ export const logicQuests = [
     title: 'Frost or Flood',
     sectionQuest: true,
     area: 'Plant beds',
-    resident: 'Robin',
+    resident: 'Maya',
     role: 'Plant beds resident',
     quote:
       'My seedlings fear two things: frost and flooding rain. Warn me if it drops to freezing or the rain gets very heavy.',
@@ -151,7 +151,7 @@ export const logicQuests = [
     title: 'Safe Garage Door',
     sectionQuest: true,
     area: 'Garage',
-    resident: 'Casey',
+    resident: 'Alex',
     role: 'Garage resident',
     quote:
       'The garage door should open when my car pulls up close, but never while the alarm is armed, in case someone else drives in.',

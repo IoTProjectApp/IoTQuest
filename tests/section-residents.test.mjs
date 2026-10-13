@@ -6,28 +6,56 @@ import { locations, adaptMissions } from '../public/locations.js';
 import { missions, defaults, validate, program, baseEnv } from '../public/missions.js';
 import { collides } from '../public/world-math.js';
 import { createConversation } from '../public/conversations.js';
+import { HOME_AREAS } from '../public/home-areas.js';
 import { Runtime } from '../public/runtime.js';
 
 for (const location of [null, ...locations]) {
-  test(`${location?.id || 'legacy'}: every section has an accessible resident and its own requests`, () => {
+  test(`${location?.id || 'legacy'}: a household of five gives every room's requests`, () => {
     const model = createRegionalModel(location?.id);
-    const residents = model.actors.filter((a) => a.area);
-    assert.equal(residents.length, 11);
-    assert.equal(new Set(residents.map((a) => a.name)).size, 11);
-    for (const resident of residents) {
+    // Nina and Jordan greet the technician in their own rooms; Maya, Alex and Sam (renamed at some
+    // destinations) look after the other rooms.
+    const greeters = model.actors.filter((a) => a.area);
+    assert.deepEqual(
+      greeters.map((a) => [a.area, a.name]),
+      [
+        ['Bedroom', 'Nina'],
+        ['Living room', 'Jordan'],
+      ],
+    );
+    for (const resident of greeters) {
       assert.equal(collides(resident.x, resident.z, model.colliders), false, resident.area);
       assert.ok(
         resident.x >= -13.44 && resident.x <= 14.08 && resident.z >= -10.4 && resident.z <= 12.1,
       );
-      for (const level of ['beginner', 'advanced']) {
+    }
+    const family = ['Maya', 'Alex', 'Sam'].map((key) => location?.names?.[key] || key);
+    const household = [...family, 'Nina', 'Jordan'];
+    for (const level of ['beginner', 'advanced']) {
+      const quests = adaptMissions(missions, location, level);
+      for (const [area] of HOME_AREAS) {
+        const requests = quests.filter((m) => m.area === area);
+        assert.ok(requests.length, area + ' has quests');
+        for (const m of requests)
+          assert.ok(household.includes(m.resident), `${m.title}: ${m.resident}`);
+      }
+      // Each greeter's chat offers their room's requests; each family member's offers theirs.
+      for (const resident of greeters) {
         const chat = createConversation({
           key: resident.id,
           resident: resident.name,
           area: resident.area,
-          quests: adaptMissions(missions, location, level),
+          quests,
         });
-        assert.ok(chat.requests.length, resident.area + ' has quests');
-        assert.ok(chat.requests.every((r) => r.mission.area === resident.area));
+        assert.ok(
+          chat.requests.length && chat.requests.every((r) => r.mission.area === resident.area),
+        );
+      }
+      for (const name of family) {
+        const chat = createConversation({ key: name, resident: name, quests });
+        assert.ok(
+          chat.requests.length && chat.requests.every((r) => r.mission.resident === name),
+          name,
+        );
       }
     }
   });
@@ -78,10 +106,4 @@ test('automatic greetings do not pass through walls', () => {
   const wall = [{ x: 0, z: 0.5, w: 3, d: 0.1 }];
   assert.equal(tracker.approach({ x: 0, z: 1 }, characters, true, wall), null);
   assert.ok(tracker.approach({ x: 0, z: 0.2 }, characters, true, wall));
-});
-test('farm residents identify working farm stations rather than house-only labels', () => {
-  const location = locations.find((l) => l.farm);
-  const residents = residentsForSections(location);
-  assert.equal(residents.find((r) => r.area === 'Water tank').section, 'Farm water supply');
-  assert.equal(residents.find((r) => r.area === 'Plant beds').section, 'Crop garden');
 });

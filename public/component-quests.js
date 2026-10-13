@@ -56,7 +56,7 @@ export const componentQuests = [
     title: 'Driveway Gate',
     sectionQuest: true,
     area: 'Entrance',
-    resident: 'Jamie',
+    resident: 'Alex',
     role: 'Entrance resident',
     quote:
       'When my car pulls up close to the gate, could it open by itself? It should stay shut when nothing is there.',
@@ -79,7 +79,7 @@ export const componentQuests = [
     title: 'Mood Light Dial',
     sectionQuest: true,
     area: 'Utility room',
-    resident: 'Theo',
+    resident: 'Alex',
     role: 'Utility room resident',
     quote:
       'I would love a dial by the door: turn it past halfway and the light comes on, turn it back and it goes off.',
@@ -101,7 +101,7 @@ export const componentQuests = [
     title: 'Garden Water Manager',
     sectionQuest: true,
     area: 'Water tank',
-    resident: 'Morgan',
+    resident: 'Sam',
     role: 'Water tank resident',
     quote:
       'The tank feeds both the garden and the fish pond. Water dry soil and top up a low pond, but never drain the tank below its reserve.',
@@ -125,7 +125,7 @@ export const componentQuests = [
     title: 'Storm Lockdown',
     sectionQuest: true,
     area: 'Garden path',
-    resident: 'Eden',
+    resident: 'Alex',
     role: 'Garden path resident',
     quote:
       'Strong wind slams the garden gate, and heavy rain floods the path. Leave the gate open when it’s calm, and give me a warning when the rain gets heavy.',
@@ -149,7 +149,7 @@ export const componentQuests = [
     title: 'Greenhouse Climate Control',
     sectionQuest: true,
     area: 'Greenhouse',
-    resident: 'Ivy',
+    resident: 'Maya',
     role: 'Greenhouse resident',
     quote:
       'Muggy air makes my seedlings mouldy, but venting freezing air would kill them. And on gloomy days they need extra light.',
@@ -174,7 +174,7 @@ export const componentQuests = [
     title: 'Night Watch',
     sectionQuest: true,
     area: 'Garage',
-    resident: 'Casey',
+    resident: 'Alex',
     role: 'Garage resident',
     quote:
       'Light the porch when someone moves outside, and if the garage door opens while the alarm is armed, sound the buzzer.',

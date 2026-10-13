@@ -3,7 +3,8 @@ import { migrateNeighbourAreas } from './neighbour-profiles.js';
 import { civicLots } from './community-civic.js';
 import { residentialLots } from './community-residences.js';
 import { communityStations, COMMUNITY_ORIGIN } from './community-world.js';
-import { residentsForSections, createGreetingTracker } from './section-residents.js';
+import { residentsForSections, createGreetingTracker, isHousehold } from './section-residents.js';
+import { HOME_AREAS } from './home-areas.js';
 import {
   createConversation,
   chooseRequest,
@@ -87,19 +88,7 @@ const CHANNEL = globalThis.IOTQUEST_CHANNEL || '',
   EVIDENCE_LIMIT = 50,
   FULL_TEST_EVIDENCE = 5,
   IMPORT_BACKUPS = 3;
-const areas = [
-  ['Bedroom', 19, 17],
-  ['Bathroom', 30, 15],
-  ['Kitchen', 35, 31],
-  ['Utility room', 48, 12],
-  ['Living room', 20, 35],
-  ['Garage', 50, 30],
-  ['Greenhouse', 80, 20],
-  ['Water tank', 91, 43],
-  ['Plant beds', 77, 64],
-  ['Garden path', 43, 60],
-  ['Entrance', 32, 51],
-];
+const areas = HOME_AREAS.map((a) => [...a]);
 const baseAreas = areas.map((a) => [...a]);
 let saved = {};
 try {
@@ -910,6 +899,7 @@ function enterArea(name, { keepProject = false } = {}) {
   }
   updatePlayer();
   $('world').focus();
+  checkVisits();
 }
 function setMapView() {
   $('world').classList.toggle('sky-view', view === 'sky');
@@ -3919,7 +3909,7 @@ function residentialResidents(engine = world3d) {
 function characterPositions(engine = world3d) {
   if (engine)
     return engine.model.actors
-      .filter((a) => a.id !== 'player')
+      .filter((a) => a.id !== 'player' && (!isHousehold(a.id) || a.present))
       .map((actor) => {
         const body = actor.parts.find((p) => p.local[1] === 0.8) || actor.parts[0];
         return {
@@ -3990,10 +3980,11 @@ function renderSectionResidents() {
     .forEach((b) => (b.onclick = () => openConversation(b.dataset.sectionNpc)));
 }
 function checkResidentGreetings() {
+  checkVisits();
   const p = toWorld(state.player);
   const character = greetingTracker.approach(
     { x: p[0], z: p[2] },
-    characterPositions().filter((c) => c.area),
+    characterPositions().filter((c) => c.area && !isHousehold(c.key)),
     !state.travelScreen && !$('modal').open && view !== 'sky',
     world3d?.model.colliders || [],
   );
@@ -4002,7 +3993,66 @@ function checkResidentGreetings() {
     openConversation(character.key);
   }
 }
-function openConversation(key) {
+// Household visits: Maya, Alex, Sam, Nina and Jordan do not wait about the house. Walking into a
+// room or garden area with an unfinished request brings whoever asked for it to the technician,
+// a step away, and the chat opens on that room's request; they leave when the technician walks on.
+const VISIT_ENTER = 7,
+  VISIT_LEAVE = 11;
+let visit = null;
+const areaDistance = (a) => Math.hypot(a[1] - state.player.x, a[2] - state.player.y);
+// The household member a quest's resident name refers to (names differ at some destinations).
+function householdKey(name) {
+  const family = ['Maya', 'Alex', 'Sam'].find((k) => (currentLocation()?.names[k] || k) === name);
+  return family || residentsForSections(currentLocation()).find((r) => r.name === name)?.key;
+}
+// The request a visitor comes about: an urgent one, the one in progress, then the next unfinished.
+function roomRequest(area) {
+  const quests = activeMissions(),
+    done = (i) => !!currentCompletions()[missionKey(i)],
+    urgent = new Set(currentNeeds().map((n) => n.index)),
+    open = quests.map((m, i) => i).filter((i) => quests[i].area === area && !done(i));
+  const index =
+    open.find((i) => urgent.has(i)) ?? (open.includes(state.mission) ? state.mission : open[0]);
+  return index === undefined ? null : { index, mission: quests[index] };
+}
+function endVisit() {
+  const actor = world3d?.model.actors.find((a) => a.id === visit?.key);
+  if (actor) actor.present = false;
+  visit = null;
+}
+function checkVisits() {
+  if (state.travelScreen || view === 'sky') return;
+  if (visit) {
+    if (areaDistance(areas.find((a) => a[0] === visit.area)) > VISIT_LEAVE && !$('modal').open)
+      endVisit();
+    return;
+  }
+  if ($('modal').open) return;
+  const room = areas
+    .filter((a) => areaDistance(a) <= VISIT_ENTER)
+    .sort((a, b) => areaDistance(a) - areaDistance(b))[0];
+  const request = room && roomRequest(room[0]);
+  const key = request && householdKey(request.mission.resident);
+  if (!key) return;
+  visit = { key, area: room[0] };
+  const actor = world3d?.model.actors.find((a) => a.id === key);
+  if (actor) {
+    // A step from the technician towards the middle of the room, clear of walls and furniture.
+    const dx = room[1] - state.player.x,
+      dy = room[2] - state.player.y,
+      d = Math.hypot(dx, dy);
+    const spot = world3d.findFree(
+      d > 1
+        ? { x: state.player.x + (dx / d) * 4, y: state.player.y + (dy / d) * 4 }
+        : { x: state.player.x + 4, y: state.player.y },
+    );
+    [actor.x, , actor.z] = toWorld(spot);
+    actor.talkPosition = [actor.x, actor.z];
+    actor.present = true;
+  }
+  openConversation(key, room[0]);
+}
+function openConversation(key, area) {
   const character = characterPositions().find((c) => c.key === key);
   const player = toWorld(state.player);
   greetingTracker.acknowledge({ x: player[0], z: player[2] }, characterPositions());
@@ -4018,7 +4068,8 @@ function openConversation(key) {
     thanked: Object.fromEntries(quests.map((m, i) => [i, !!done(i)?.thanked])),
     // A resident opens with whatever the current conditions make urgent.
     urgent: Object.fromEntries(currentNeeds().map((n) => [n.index, n.reason.text])),
-    area: character?.area,
+    // A visit is about the room the technician walked into.
+    area: area ?? character?.area,
   });
   activeConversation.section = character?.section;
   // Thanks are said once; chats count towards each of this resident's quests in progress reports.
@@ -4465,6 +4516,7 @@ function showLocation() {
   $('travelScreen').hidden = true;
   $('adventureScreen').hidden = false;
   const location = currentLocation();
+  endVisit();
   world3d?.setRegion(state.activeLocation);
   setCommunityDensity();
   for (let i = 0; i < areas.length; i++) {
@@ -4699,8 +4751,12 @@ function projectWorldLabels(engine) {
             ? 'alexNpc'
             : 'samNpc',
     );
-    // The overview identifies buildings. People get names in the closer building views.
-    if (engine.communityView) {
+    // The overview identifies buildings. People get names in the closer building views, and a
+    // household member only while visiting the technician.
+    if (
+      engine.communityView ||
+      (isHousehold(actor.id) && !actor.present && activeConversation?.key !== actor.id)
+    ) {
       if (residentEl) residentEl.style.visibility = 'hidden';
       continue;
     }

@@ -21,7 +21,7 @@ import {
   isHousehold,
 } from '../public/section-residents.js';
 import { HOME_AREAS } from '../public/home-areas.js';
-import { toWorld, fromWorld } from '../public/world-math.js';
+import { toWorld, fromWorld, clearPath } from '../public/world-math.js';
 import { ADC_SIGNALS, ADC_SCALE, outputLevel } from '../public/signals.js';
 import { checkPredictions } from '../public/weather-quests.js';
 import { neededNow, situationReason } from '../public/situation.js';
@@ -343,6 +343,8 @@ function harness(
     nearestCharacter,
     toWorld,
     fromWorld,
+    collides,
+    clearPath,
     residentsForSections,
     createGreetingTracker,
     isHousehold,

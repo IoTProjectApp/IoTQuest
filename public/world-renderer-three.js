@@ -52,8 +52,26 @@ export class ThreeWorldRenderer {
     this.scene.add(this.batches);
     // Rigged people (frame.characters), lit by the game's sun and sky.
     this.drawsCharacters = true;
-    this.characters = new ThreeCharacters(this.world, { lowDetail: this.software });
+    // Real shadows for people where the GPU can afford them; software WebGL keeps soft shades.
+    this.three.shadowMap.enabled = !this.software;
+    this.three.shadowMap.type = THREE.PCFSoftShadowMap;
+    this.characters = new ThreeCharacters(this.world, {
+      lowDetail: this.software,
+      shadows: !this.software,
+    });
     this.sunLight = new THREE.DirectionalLight();
+    // The shadow covers the people near the camera's target.
+    Object.assign(this.sunLight.shadow.camera, {
+      left: -20,
+      right: 20,
+      top: 20,
+      bottom: -20,
+      near: 1,
+      far: 120,
+    });
+    this.sunLight.shadow.mapSize.set(2048, 2048);
+    this.sunLight.shadow.bias = -0.0005;
+    this.sunLight.shadow.normalBias = 0.02;
     this.skyLight = new THREE.HemisphereLight();
     this.scene.add(this.sunLight, this.sunLight.target, this.skyLight);
     this.clear = new THREE.Color();
@@ -214,6 +232,8 @@ export class ThreeWorldRenderer {
     this.sunLight.target.position.set(...camera.target);
     this.sunLight.color.setRGB(...sun.color, THREE.SRGBColorSpace);
     this.sunLight.intensity = 3.4 * sun.strength * frame.day;
+    // No shadows from a sun that has set (or under thick cloud).
+    this.sunLight.castShadow = this.three.shadowMap.enabled && sun.strength * frame.day > 0.08;
     this.skyLight.color.setRGB(...frame.fog, THREE.SRGBColorSpace);
     this.skyLight.groundColor.setRGB(0.32, 0.3, 0.24, THREE.SRGBColorSpace);
     // Generous fill, as the game's own shader lights its scenes: people should read clearly.

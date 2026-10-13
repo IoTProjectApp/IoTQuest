@@ -77,6 +77,15 @@ async function openHome({
 // Waits until the camera has finished moving, so labels are in their final positions. Readings
 // are a few rendered frames apart rather than a fixed delay: on CI's software WebGL a frame can
 // take longer than any short delay, and two readings with no frame between them look settled.
+// A visiting resident walks over before the chat opens (or nobody comes when the room has
+// nothing to ask): waits for the chat, and returns whether it opened.
+const visitChat = (page, timeout = 15000) =>
+  page
+    .waitForFunction(() => document.getElementById('modal').open, null, { timeout })
+    .then(
+      () => true,
+      () => false,
+    );
 async function settle(page) {
   const positions = () =>
     page.evaluate(async () => {
@@ -245,8 +254,9 @@ test('every on-screen room button can be clicked in the World view', async () =>
   );
   assert.deepEqual(blocked, []);
   await page.locator('[data-area="Living room"]').click();
-  // Arriving brings whoever asked for the room's next request (Sam or Jordan) to chat; after it,
-  // E installs here.
+  // Arriving brings whoever asked for the room's next request (Sam or Jordan) over to chat; after
+  // it, E installs here.
+  assert.equal(await visitChat(page), true);
   assert.match(await page.textContent('#modalTitle'), /A chat with (Sam|Jordan)/);
   await page.locator('#closeModal').click();
   assert.equal(await modalOpen(page), false);
@@ -258,7 +268,7 @@ test('every on-screen room button can be clicked in the World view', async () =>
 test('arriving at a room brings its resident; then E installs devices and T talks to them', async () => {
   const { page, errors } = await openHome();
   await page.locator('[data-area="Bedroom"]').click();
-  assert.equal(await modalOpen(page), true, 'Nina comes to the technician');
+  assert.equal(await visitChat(page), true, 'Nina comes over to the technician');
   assert.match(await page.textContent('#modalTitle'), /A chat with Nina/);
   await page.locator('#closeModal').click();
   await page.keyboard.press('ArrowLeft');
@@ -704,8 +714,8 @@ test('Victorian farms render and retain homestead and connected town navigation'
     assert.equal(await page.locator('#graphicsMessage').isVisible(), false);
     await page.locator('[data-area="Garden path"]').click();
     assert.ok((await page.textContent('#location')).includes('Garden path'));
-    // Whoever asked for the path's requests comes to chat on arrival.
-    if (await modalOpen(page)) await page.locator('#closeModal').click();
+    // Whoever asked for the path's requests comes over to chat.
+    if (await visitChat(page)) await page.locator('#closeModal').click();
     await page.locator('#exploreCommunity').click();
     await settle(page);
     const shop = page.locator('[data-community-building="shop"]');

@@ -626,8 +626,11 @@ export class World3D {
         [ax, az] = actor.talkPosition;
         angle = Math.atan2(p[0] - ax, p[2] - az);
       } else if (actor.present) {
-        // A household member visiting the technician stands where they arrived, facing them.
-        angle = Math.atan2(p[0] - ax, p[2] - az);
+        // A household member visiting the technician walks over, then stands facing them.
+        if (actor.walkTo) {
+          angle = Math.atan2(actor.walkTo[0] - ax, actor.walkTo[1] - az);
+          phase = reduced ? 0 : t * 8;
+        } else angle = Math.atan2(p[0] - ax, p[2] - az);
       } else if (state.routine?.actors?.[actor.id]) {
         const target = state.routine.actors[actor.id];
         actor.x +=

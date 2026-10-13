@@ -23,7 +23,7 @@ import {
 import { localSkyDate, DEFAULT_OBSERVER } from './astronomy.js';
 import { Runtime } from './runtime.js';
 import { World3D } from './world3d.js';
-import { toWorld, fromWorld } from './world-math.js';
+import { toWorld, fromWorld, collides, clearPath } from './world-math.js';
 import { ADC_SIGNALS, ADC_SCALE, outputLevel } from './signals.js';
 import { locations, locationById, adaptMissions, progressForLocation } from './locations.js';
 import { WeatherService, advanceEnvironment, servoLevel } from './weather.js';
@@ -1102,7 +1102,10 @@ document.addEventListener('keydown', (e) => {
 });
 document.addEventListener('keyup', (e) => keys.delete(directions[e.key]));
 window.addEventListener('blur', () => keys.clear());
+let visitFrame = 0;
 function movementFrame(t) {
+  updateVisit(visitFrame ? Math.min(0.1, (t - visitFrame) / 1000) : 0);
+  visitFrame = t;
   if (t - moveFrame > 30) {
     for (const dir of keys) move(dir, 0.55);
     moveFrame = t;
@@ -4015,16 +4018,62 @@ function roomRequest(area) {
     open.find((i) => urgent.has(i)) ?? (open.includes(state.mission) ? state.mission : open[0]);
   return index === undefined ? null : { index, mission: quests[index] };
 }
+// In the 3D world the visitor walks over (VISIT_SPEED metres a second) from a few metres away,
+// along a clear line, starts the chat on arrival, and walks back out the same way afterwards.
+const VISIT_SPEED = 1.3;
+const visitor = () => visit && world3d?.model.actors.find((a) => a.id === visit.key);
 function endVisit() {
-  const actor = world3d?.model.actors.find((a) => a.id === visit?.key);
-  if (actor) actor.present = false;
+  const actor = visitor();
+  if (actor) Object.assign(actor, { present: false, walkTo: null });
   visit = null;
+}
+function leaveVisit() {
+  const actor = visitor();
+  if (!actor || !visit.entry) return endVisit();
+  visit.phase = 'leaving';
+  actor.walkTo = visit.entry;
+  delete actor.talkPosition;
+}
+// Where a visitor comes from: about 3.5 m beyond where they will stand, seen from the technician,
+// or the nearest direction to that with open floor and a clear line to the spot.
+function visitEntry(sx, sz) {
+  const p = toWorld(state.player),
+    colliders = world3d.model.colliders,
+    away = Math.atan2(sx - p[0], sz - p[2]);
+  for (const turn of [0, 0.6, -0.6, 1.2, -1.2, 1.8, -1.8, 2.5, -2.5, Math.PI]) {
+    const a = away + turn,
+      x = sx + Math.sin(a) * 3.5,
+      z = sz + Math.cos(a) * 3.5;
+    if (!collides(x, z, colliders) && clearPath({ x: sx, z: sz }, { x, z }, colliders))
+      return [x, z];
+  }
+  return [sx, sz];
+}
+// Moves a walking visitor on by dt seconds; called every frame.
+function updateVisit(dt) {
+  const actor = visitor();
+  if (!actor?.walkTo) return;
+  const dx = actor.walkTo[0] - actor.x,
+    dz = actor.walkTo[1] - actor.z,
+    d = Math.hypot(dx, dz),
+    step = VISIT_SPEED * dt;
+  if (d > step) {
+    actor.x += (dx / d) * step;
+    actor.z += (dz / d) * step;
+    return;
+  }
+  [actor.x, actor.z] = actor.walkTo;
+  actor.walkTo = null;
+  if (visit.phase === 'leaving') return endVisit();
+  visit.phase = 'here';
+  actor.talkPosition = [actor.x, actor.z];
+  if (!$('modal').open && !state.travelScreen) openConversation(visit.key, visit.area);
 }
 function checkVisits() {
   if (state.travelScreen || view === 'sky') return;
-  if (visit) {
+  if (visit && visit.phase !== 'leaving') {
     if (areaDistance(areas.find((a) => a[0] === visit.area)) > VISIT_LEAVE && !$('modal').open)
-      endVisit();
+      leaveVisit();
     return;
   }
   if ($('modal').open) return;
@@ -4034,7 +4083,9 @@ function checkVisits() {
   const request = room && roomRequest(room[0]);
   const key = request && householdKey(request.mission.resident);
   if (!key) return;
-  visit = { key, area: room[0] };
+  // Someone still walking out of the last room is simply gone once the next one is entered.
+  if (visit) endVisit();
+  visit = { key, area: room[0], phase: 'here' };
   const actor = world3d?.model.actors.find((a) => a.id === key);
   if (actor) {
     // A step from the technician towards the middle of the room, clear of walls and furniture.
@@ -4046,9 +4097,12 @@ function checkVisits() {
         ? { x: state.player.x + (dx / d) * 4, y: state.player.y + (dy / d) * 4 }
         : { x: state.player.x + 4, y: state.player.y },
     );
-    [actor.x, , actor.z] = toWorld(spot);
-    actor.talkPosition = [actor.x, actor.z];
-    actor.present = true;
+    const [sx, , sz] = toWorld(spot);
+    visit.entry = visitEntry(sx, sz);
+    visit.phase = 'arriving';
+    [actor.x, actor.z] = visit.entry;
+    Object.assign(actor, { walkTo: [sx, sz], present: true });
+    return;
   }
   openConversation(key, room[0]);
 }

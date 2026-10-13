@@ -579,6 +579,9 @@ export class World3D {
         : dt * state.speed,
     );
     this.lastSimClockMs = state.simClockMs;
+    // Rebuilt every frame by whatever animates people (judo-characters.js), when the renderer
+    // draws rigged characters; otherwise only the stand-in figures are animated.
+    this.model.characters = this.renderer.drawsCharacters ? [] : null;
     updateCommunityWorld(this.model, state, simDelta);
     if (state.paused) dt = 0;
     const realDt = Math.min(0.1, Math.max(0, dt || 0));
@@ -1046,6 +1049,9 @@ export class World3D {
       fogOffset: this.communityView ? Math.max(0, this.currentDistance - 35) : 0,
       lights: candidates.slice(0, 8).map((lamp) => ({ ...lamp, range: lamp.range ?? 5.5 })),
       objects: this.model.objects,
+      // Rigged people for renderers that draw them (see three-characters.js); the others draw
+      // each one's stand-in figure, which is already among the objects.
+      characters: this.model.characters || [],
     });
     this.onFrame?.(this, s);
   }

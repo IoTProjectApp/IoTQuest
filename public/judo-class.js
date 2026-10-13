@@ -318,7 +318,8 @@ function updatePair(pair, t, reduced) {
 
 // The instructor's round: watch the first pair, the second, then both from behind the mat,
 // turning to face the pair on arrival. Walks are at 1.3 m/s.
-const WATCH = 4;
+const WATCH = 4,
+  WALK_SPEED = 1.3;
 const ROUND = [
   { x: -1.5, z: -4.2, target: JUDO_PAIRS[0] },
   { x: 3.5, z: -4.2, target: JUDO_PAIRS[1] },
@@ -333,32 +334,43 @@ const LEGS = ROUND.map((stop, i) => {
     stop,
     next,
     dir: Math.atan2(next.z - stop.z, next.x - stop.x),
-    walk: Math.hypot(next.x - stop.x, next.z - stop.z) / 1.3,
+    walk: Math.hypot(next.x - stop.x, next.z - stop.z) / WALK_SPEED,
   };
 });
 const PERIOD = LEGS.reduce((sum, l) => sum + WATCH + l.walk, 0);
+
+// Where the instructor is on their round at time t: position, the direction faced, how far into
+// a walk (stride, 0 standing to 1 walking) and the distance walked so far on this leg.
+export function instructorAt(t, reduced) {
+  let s = reduced ? 0 : t % PERIOD;
+  for (const { stop, next, dir, walk } of LEGS) {
+    if (s < WATCH) return { x: stop.x, z: stop.z, angle: stop.facing, stride: 0, walked: 0 };
+    s -= WATCH;
+    if (s < walk) {
+      const k = s / walk;
+      return {
+        x: lerp(stop.x, next.x, k),
+        z: lerp(stop.z, next.z, k),
+        angle: turn(turn(stop.facing, dir, smooth(0, 0.12, k)), next.facing, smooth(0.88, 1, k)),
+        stride: smooth(0, 0.6, s) * (1 - smooth(walk - 0.6, walk, s)),
+        walked: s * WALK_SPEED,
+      };
+    }
+    s -= walk;
+  }
+}
 
 function updateInstructor(judo, t, reduced) {
   const p = judo.instructor,
     talking = talkAngle(p);
   if (talking !== null) return put(p, p.x, p.z, talking, STAND);
-  const folded = { ...FOLDED, lean: Math.sin(t * 0.7) * 0.02 };
-  let s = reduced ? 0 : t % PERIOD;
-  for (const { stop, next, dir, walk } of LEGS) {
-    if (s < WATCH) return put(p, stop.x, stop.z, stop.facing, folded);
-    s -= WATCH;
-    if (s < walk) {
-      const k = s / walk,
-        angle = turn(turn(stop.facing, dir, smooth(0, 0.12, k)), next.facing, smooth(0.88, 1, k)),
-        stride = smooth(0, 0.6, s) * (1 - smooth(walk - 0.6, walk, s));
-      return put(
-        p,
-        lerp(stop.x, next.x, k),
-        lerp(stop.z, next.z, k),
-        angle,
-        mix(folded, gaitPose(s * 5.5, 0.05), stride),
-      );
-    }
-    s -= walk;
-  }
+  const folded = { ...FOLDED, lean: Math.sin(t * 0.7) * 0.02 },
+    { x, z, angle, stride, walked } = instructorAt(t, reduced);
+  put(
+    p,
+    x,
+    z,
+    angle,
+    stride ? mix(folded, gaitPose((walked / WALK_SPEED) * 5.5, 0.05), stride) : folded,
+  );
 }

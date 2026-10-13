@@ -1,5 +1,6 @@
 import * as THREE from './vendor/three.module.min.js';
 import { geometry } from './world-geometry.js';
+import { ThreeCharacters } from './three-characters.js';
 import {
   VERTEX,
   FRAGMENT,
@@ -40,7 +41,8 @@ export class ThreeWorldRenderer {
     // World3D sizes the canvas itself (one pixel per CSS pixel on software WebGL).
     this.three.setPixelRatio(1);
     this.gl = this.three.getContext();
-    this.maxPixelRatio = isSoftwareRenderer(this.gl) ? 1 : 2;
+    this.software = isSoftwareRenderer(this.gl);
+    this.maxPixelRatio = this.software ? 1 : 2;
     this.scene = new THREE.Scene();
     this.camera = new THREE.PerspectiveCamera();
     // three.js objects live in model space under this group, flipped for mirrored homes.
@@ -48,6 +50,12 @@ export class ThreeWorldRenderer {
     this.scene.add(this.world);
     this.batches = new THREE.Group();
     this.scene.add(this.batches);
+    // Rigged people (frame.characters), lit by the game's sun and sky.
+    this.drawsCharacters = true;
+    this.characters = new ThreeCharacters(this.world, { lowDetail: this.software });
+    this.sunLight = new THREE.DirectionalLight();
+    this.skyLight = new THREE.HemisphereLight();
+    this.scene.add(this.sunLight, this.sunLight.target, this.skyLight);
     this.clear = new THREE.Color();
     this.uniforms = {
       uViewProjection: { value: new THREE.Matrix4() },
@@ -198,12 +206,30 @@ export class ThreeWorldRenderer {
     this.camera.far = camera.far;
     this.camera.updateProjectionMatrix();
     this.world.scale.x = camera.mirrored ? -1 : 1;
+    // The same sun as the game's shader: its direction, colour and strength, dimmed at night.
+    const sun = frame.sun;
+    this.sunLight.position
+      .set(...camera.target)
+      .addScaledVector(new THREE.Vector3(...sun.direction), 50);
+    this.sunLight.target.position.set(...camera.target);
+    this.sunLight.color.setRGB(...sun.color, THREE.SRGBColorSpace);
+    this.sunLight.intensity = 2.4 * sun.strength * frame.day;
+    this.skyLight.color.setRGB(...frame.fog, THREE.SRGBColorSpace);
+    this.skyLight.groundColor.setRGB(0.32, 0.3, 0.24, THREE.SRGBColorSpace);
+    this.skyLight.intensity = 0.25 + 1.1 * frame.day;
     // Visible objects, opaque and blended, with the shape each is drawn with at its size on screen.
     const visible = frustumTest(frame.matrix, frame.pixelScale),
       opaque = new Map(),
       transparent = [],
       keys = new Map();
+    // People on screen and large enough to see: only they are loaded and drawn (skinning is the
+    // costly part on software WebGL); the rest keep their stand-in figures, culled like any object.
+    const shown = (frame.characters || []).filter((c) =>
+      visible({ pos: [c.x, c.y + 0.9, c.z], size: [1.2, 1.9, 1.2] }),
+    );
+    const hidden = this.characters.update(shown, frame.eye);
     for (const m of frame.objects) {
+      if (hidden.has(m)) continue;
       const alpha = (m.opacity ?? 1) * color(m.color)[3];
       if (alpha < 0.001) continue;
       const pixels = visible(m);
@@ -266,6 +292,7 @@ export class ThreeWorldRenderer {
     for (const mesh of this.slots.values()) mesh.geometry.dispose();
     for (const g of Object.values(this.geometries)) g.dispose();
     for (const m of this.materials.values()) m.dispose();
+    this.characters.dispose();
     this.three.dispose();
   }
 }

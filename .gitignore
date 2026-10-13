@@ -43,3 +43,9 @@ next-env.d.ts
 
 # browser test failure screenshots and traces
 /test-results/
+
+# Source art (Mixamo FBX downloads); only converted, compressed models are committed.
+assets-src/
+# Character models: downloaded from the private IoTProjectApp/iotquest-models by
+# scripts/fetch-models.mjs (Mixamo files may not be published in this public repository).
+public/models/

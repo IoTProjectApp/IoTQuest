@@ -4989,13 +4989,13 @@ function startWorld(createRenderer) {
     $('graphicsMessage').hidden = false;
   }
 }
-// ?renderer=three draws the world with three.js instead, while it is being brought level with
-// the WebGL renderer (the browser tests set IOTQUEST_RENDERER to the same effect). The world then
-// starts once three.js has loaded. three.js needs WebGL 2 and is not stored for offline play, so
-// the game falls back to its own renderer when it cannot load or start.
+// The world is drawn with three.js, which adds the rigged, animated people; the world starts
+// once three.js has loaded. ?renderer=webgl uses the game's own WebGL renderer instead (the
+// browser tests set IOTQUEST_RENDERER to the same effect). three.js needs WebGL 2, so the game
+// also falls back to its own renderer when three.js cannot load or start.
 if (
-  /[?&]renderer=three(&|$)/.test(globalThis.location?.search || '') ||
-  globalThis.IOTQUEST_RENDERER === 'three'
+  !/[?&]renderer=webgl(&|$)/.test(globalThis.location?.search || '') &&
+  globalThis.IOTQUEST_RENDERER !== 'webgl'
 )
   import('./world-renderer-three.js').then(
     ({ ThreeWorldRenderer }) =>

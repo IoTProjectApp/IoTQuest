@@ -13,7 +13,7 @@ import {
   color,
 } from './world-renderer-webgl.js';
 
-// The world drawn through three.js (turned on with ?renderer=three). The game's own objects are
+// The world drawn through three.js (the default; ?renderer=webgl uses world-renderer-webgl.js). The game's own objects are
 // drawn with the game's own shader in instanced batches, exactly as the WebGL renderer draws them,
 // so the two look the same; three.js objects such as rigged characters can then share the scene
 // and its depth buffer. Takes the same frame description as WebGLWorldRenderer.render.

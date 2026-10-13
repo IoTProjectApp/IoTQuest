@@ -1,5 +1,6 @@
-// RENDERER=three npm run test:browser runs the browser tests against the three.js renderer:
-// every page starts with the game told to use it, as ?renderer=three does.
+// RENDERER=webgl npm run test:browser runs the browser tests against the game's own WebGL
+// renderer (every page starts with the game told to use it, as ?renderer=webgl does);
+// RENDERER=three, or no RENDERER, against the three.js renderer, the default.
 export function useRenderer(browser) {
   const renderer = process.env.RENDERER;
   if (!renderer) return browser;

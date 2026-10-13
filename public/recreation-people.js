@@ -1,5 +1,6 @@
 import { figure, placeFigure, gaitPose, standPose, sitPose, handOf, SKIN } from './figures.js';
 import { addJudoClass, updateJudoClass } from './judo-class.js';
+import { judoCharacters } from './judo-characters.js';
 
 // Visitors for the recreation areas: a 3-on-3 basketball game, lap swimmers, gym-goers, the judo
 // class and children with their parents at both playgrounds. Coordinates are local to each lot's
@@ -26,7 +27,7 @@ export function addRecreationPeople(model, { recreation, origin, box, sphere }) 
       item.furniture.push(...p.meshes);
       return p;
     };
-    const group = { type: b.type, item, lotOrigin };
+    const group = { type: b.type, item, lotOrigin, model };
     if (b.type === 'basketball') {
       group.players = [
         ['#d0703f', '#2c3134'],
@@ -105,7 +106,11 @@ export function updateRecreationPeople(groups, time, reduced) {
   const t = reduced ? 0 : time;
   for (const g of groups) {
     if (g.players) updateBasketball(g, t, reduced);
-    if (g.judo) updateJudoClass(g.judo, t, reduced);
+    if (g.judo) {
+      updateJudoClass(g.judo, t, reduced);
+      // Rigged characters, for a renderer that draws them (model.characters is then a list).
+      g.model.characters?.push(...judoCharacters(g.judo, t, reduced));
+    }
     if (g.swimmers) for (const s of g.swimmers) updateSwimmer(g, s, t);
     if (g.runners)
       for (const [i, r] of g.runners.entries())

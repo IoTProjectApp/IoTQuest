@@ -7,6 +7,7 @@ import { victorianFarms } from '../../public/farms.js';
 import test, { before, after, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn, execFileSync } from 'node:child_process';
+import { existsSync } from 'node:fs';
 import { chromium } from 'playwright';
 import { useRenderer } from './renderer.mjs';
 import { missions, defaults, program } from '../../public/missions.js';
@@ -144,6 +145,49 @@ test('three.js draws the same kitchen close-up as the WebGL renderer', async () 
   // Residents and traffic still move a little; a missing batch of furniture differs by ~10%.
   assert.ok(differing < 0.03, `${(differing * 100).toFixed(1)}% of pixels differ`);
 });
+// The models come from a private repository (scripts/fetch-models.mjs).
+test(
+  'with three.js the dojo loads its five judoka and their animations',
+  {
+    skip: !existsSync('public/models/people/animations.glb') && 'character models not downloaded',
+  },
+  async () => {
+    const page = await browser.newPage({ viewport: { width: 1200, height: 800 } });
+    openPages.push(page);
+    await page.context().tracing.start({ snapshots: true });
+    await page.addInitScript(() => (globalThis.IOTQUEST_RENDERER = 'three'));
+    const errors = [],
+      models = new Set();
+    page.on('pageerror', (e) => errors.push(e.message));
+    page.on('response', (r) => {
+      // Full or light (-low) versions: software WebGL loads the light ones.
+      const m = r.url().match(/\/models\/people\/(\w+)(-low)?\.glb$/);
+      if (m && r.ok()) models.add(m[1]);
+    });
+    await page.route(/^https?:\/\/(?!127\.0\.0\.1)/, (route) => route.abort());
+    await page.goto(origin + '/');
+    await page.click('#resumeLegacy');
+    await page.locator('#worldCanvas').waitFor();
+    await settle(page);
+    await page.locator('#exploreCommunity').click();
+    await settle(page);
+    await page.locator('[data-community-building="dojo"]').click();
+    if (await page.locator('#closeModal').isVisible()) await page.locator('#closeModal').click();
+    // Models load in the background once the dojo's people are first drawn.
+    const deadline = Date.now() + 60000;
+    while (models.size < 6 && Date.now() < deadline) await page.waitForTimeout(250);
+    assert.deepEqual([...models].sort(), [
+      'Adam',
+      'Bryce',
+      'Jody',
+      'Kate',
+      'Shannon',
+      'animations',
+    ]);
+    await settle(page);
+    assert.deepEqual(errors, []);
+  },
+);
 test('every on-screen room button can be clicked in the World view', async () => {
   const { page, errors } = await openHome();
   // The element on top at the centre of each on-screen room button must be that button.

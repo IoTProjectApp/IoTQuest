@@ -29,6 +29,12 @@ jobs:
           node-version: ${{ matrix.node }}
       - name: Check formatting
         run: npm run check
+      # From the private IoTProjectApp/iotquest-models (a read-only token in the MODELS_TOKEN
+      # secret); without it, as on pull requests from forks, the model tests are skipped.
+      - name: Download character models
+        run: node scripts/fetch-models.mjs
+        env:
+          MODELS_TOKEN: ${{ secrets.MODELS_TOKEN }}
       - name: Run tests
         run: npm test
       - name: Build
@@ -52,6 +58,10 @@ jobs:
           node-version: 22
       - run: npm ci
       - run: npx playwright install --with-deps chromium
+      - name: Download character models
+        run: node scripts/fetch-models.mjs
+        env:
+          MODELS_TOKEN: ${{ secrets.MODELS_TOKEN }}
       - name: Run browser tests
         run: npm run test:browser
         env:
@@ -96,6 +106,14 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: 22
+      # Each branch downloads the character models it was tested with, once it has the script.
+      - name: Download character models
+        run: |
+          for branch in main dev; do
+            if [ -f $branch/scripts/fetch-models.mjs ]; then node $branch/scripts/fetch-models.mjs; fi
+          done
+        env:
+          MODELS_TOKEN: ${{ secrets.MODELS_TOKEN }}
       - name: Build main and dev
         run: |
           node main/scripts/build.mjs

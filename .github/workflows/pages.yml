@@ -36,9 +36,17 @@ jobs:
 
   # Drives the real game in headless Chromium (software WebGL) to catch layout, theme and
   # accessibility regressions. Kept out of the deploy gate until it has proven stable on CI.
+  # Runs once per world renderer: the game's own WebGL renderer and the three.js one that is
+  # being brought level with it (?renderer=three).
   browser:
+    # The WebGL run keeps the plain name "browser", which branch protection requires.
+    name: ${{ matrix.renderer == 'webgl' && 'browser' || format('browser ({0})', matrix.renderer) }}
     runs-on: ubuntu-latest
     timeout-minutes: 50
+    strategy:
+      fail-fast: false
+      matrix:
+        renderer: [webgl, three]
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
@@ -48,13 +56,15 @@ jobs:
       - run: npx playwright install --with-deps chromium
       - name: Run browser tests
         run: npm run test:browser
+        env:
+          RENDERER: ${{ matrix.renderer }}
       # Screenshots and traces of failed tests, also when the job times out; open a trace with
       # `npx playwright show-trace`.
       - name: Upload failure traces
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: browser-test-failures
+          name: browser-test-failures-${{ matrix.renderer }}
           path: test-results/
           retention-days: 7
           if-no-files-found: ignore

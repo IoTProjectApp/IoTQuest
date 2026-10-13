@@ -54,6 +54,9 @@ if (channel) {
 // Offline support: stamp the service worker with every built file and a content version, so
 // installed copies update on the next visit after a deploy.
 const files = await listFiles('dist/client');
+// The three.js renderer only loads with ?renderer=three while it is being brought level with the
+// WebGL renderer, so students do not download it; offline, the game falls back to WebGL.
+const UNCACHED = new Set(['sw.js', 'world-renderer-three.js', 'vendor/three.module.min.js']);
 const version = createHash('sha256');
 for (const f of files) version.update(f).update(await readFile('dist/client/' + f));
 await writeFile(
@@ -66,7 +69,7 @@ await writeFile(
     .replace(
       'const PRECACHE = [];',
       'const PRECACHE = ' +
-        JSON.stringify(['./', ...files.filter((f) => f !== 'sw.js').map((f) => './' + f)]) +
+        JSON.stringify(['./', ...files.filter((f) => !UNCACHED.has(f)).map((f) => './' + f)]) +
         ';',
     ),
 );

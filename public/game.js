@@ -4831,9 +4831,12 @@ function worldControlBoxes(engine) {
     : [];
   return (controlBoxes = { key, rect, blocked });
 }
-if (typeof $('worldCanvas')?.getContext === 'function') {
+// The 3D world. createRenderer, when given, picks the renderer (see world-renderer-three.js).
+function startWorld(createRenderer) {
+  if (typeof $('worldCanvas')?.getContext !== 'function') return;
   try {
     world3d = new World3D($('worldCanvas'), {
+      createRenderer,
       getState: () => ({
         devices: project().devices,
         env: state.env,
@@ -4888,6 +4891,30 @@ if (typeof $('worldCanvas')?.getContext === 'function') {
     $('graphicsMessage').hidden = false;
   }
 }
+// ?renderer=three draws the world with three.js instead, while it is being brought level with
+// the WebGL renderer (the browser tests set IOTQUEST_RENDERER to the same effect). The world then
+// starts once three.js has loaded. three.js needs WebGL 2 and is not stored for offline play, so
+// the game falls back to its own renderer when it cannot load or start.
+if (
+  /[?&]renderer=three(&|$)/.test(globalThis.location?.search || '') ||
+  globalThis.IOTQUEST_RENDERER === 'three'
+)
+  import('./world-renderer-three.js').then(
+    ({ ThreeWorldRenderer }) =>
+      startWorld((canvas) => {
+        try {
+          return new ThreeWorldRenderer(canvas);
+        } catch (e) {
+          console.warn('three.js renderer unavailable, using WebGL:', e.message);
+          return null;
+        }
+      }),
+    (e) => {
+      console.warn('three.js renderer did not load, using WebGL:', e.message);
+      startWorld();
+    },
+  );
+else startWorld();
 // Structured, local WebMCP tools for the game’s primary learning journey.
 if (navigator.modelContext?.registerTool) {
   navigator.modelContext.registerTool({

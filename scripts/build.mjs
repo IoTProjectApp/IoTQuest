@@ -61,6 +61,7 @@ const UNCACHED = new Set([
   'sw.js',
   'world-renderer-three.js',
   'three-characters.js',
+  'three-outfits.js',
   'vendor/three.module.min.js',
 ]);
 const uncached = (f) =>

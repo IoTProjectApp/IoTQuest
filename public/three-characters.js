@@ -1,6 +1,7 @@
 import * as THREE from './vendor/three.module.min.js';
 import { GLTFLoader } from './vendor/three-addons/GLTFLoader.js';
 import { clone } from './vendor/three-addons/SkeletonUtils.js';
+import { Outfits } from './three-outfits.js';
 
 // Rigged, animated people for the three.js renderer. The game describes each person every frame
 // and this draws them, loading each character model (public/models/people, converted from Mixamo
@@ -10,7 +11,8 @@ import { clone } from './vendor/three-addons/SkeletonUtils.js';
 // A character: { key, model ('Adam'…), x, y, z (feet, model space), angle (the direction faced,
 // radians, 0 = +x, as figures.js), clips: [{ name, time, weight }] (blended by weight), standIn
 // (the meshes drawn while it loads), belt (optional colour), carry (optional colour: a toolbox in
-// the right hand), scale (optional; the technician is drawn a little larger to stand out) }.
+// the right hand), scale (optional; the technician is drawn a little larger to stand out), outfit
+// (optional: recoloured clothes, work wear and badges, see character-outfits.js) }.
 //
 // Each model comes in full detail and a light version (-low, about 15% of the triangles): people
 // far from the camera use the light one, and on software WebGL everyone does, because skinning
@@ -46,6 +48,7 @@ export class ThreeCharacters {
       this.sunShadowGeometry = new THREE.PlaneGeometry(4, 4).rotateX(-Math.PI / 2);
       this.sunShadowMaterial = new THREE.ShadowMaterial({ opacity: 0.45, depthWrite: false });
     }
+    this.outfits = new Outfits({ shadows });
     this.clips = null;
   }
   // The animations, shared by everyone, load with the first person seen.
@@ -82,6 +85,7 @@ export class ThreeCharacters {
       // The textures carry the colour; Mixamo's grey base colour would only darken them.
       for (const m of [].concat(o.material)) m.color.set(0xffffff);
     });
+    this.outfits.dress(root, state.file, state.outfit);
     const hips = root.getObjectByName('mixamorigHips');
     const person = {
       model: state.model,
@@ -150,7 +154,7 @@ export class ThreeCharacters {
         if (!person || person.model !== state.model) continue;
       } else if (person?.file !== file) {
         if (person) this.remove(state.key);
-        person = this.create(state, entry.gltf);
+        person = this.create({ ...state, file }, entry.gltf);
         person.file = file;
         this.people.set(state.key, person);
       }
@@ -205,6 +209,7 @@ export class ThreeCharacters {
     this.shadowMaterial.dispose();
     this.sunShadowGeometry?.dispose();
     this.sunShadowMaterial?.dispose();
+    this.outfits.dispose();
     for (const { gltf } of this.models.values())
       gltf?.scene.traverse((o) => {
         if (!o.isMesh) return;

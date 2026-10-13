@@ -1,5 +1,6 @@
 // Converts Mixamo FBX downloads (assets-src/mixamo, not committed) into the compressed glTF the
-// three.js renderer loads (public/models/people). Run with: node scripts/convert-mixamo.mjs
+// three.js renderer loads (public/models/people). Run with: node scripts/convert-mixamo.mjs, or
+// node scripts/convert-mixamo.mjs James Kate to convert only those characters (and no animations).
 //
 // Characters (FBX, with skin, T-pose) become one .glb each, without animations: colour maps at
 // 1024 px and normal maps at 512 px as JPEG, specular maps dropped (glTF has no use for them),
@@ -22,7 +23,10 @@ const OUT = ROOT + 'public/models/people/';
 // up); every other clip has it removed so the game moves the character itself.
 const KEEP_TRAVEL = ['TakedownAttacker', 'TakedownVictim', 'GettingUp'];
 
-const characters = (await readdir(SOURCE)).filter((f) => f.endsWith('.fbx'));
+const only = process.argv.slice(2);
+const characters = (await readdir(SOURCE)).filter(
+  (f) => f.endsWith('.fbx') && (!only.length || only.includes(f.replace(/\.fbx$/, ''))),
+);
 const animations = (await readdir(SOURCE + 'animations')).filter((f) => f.endsWith('.fbx'));
 const IN_PLACE = animations
   .map((f) => f.replace(/\.fbx$/, ''))
@@ -81,6 +85,11 @@ for (const file of characters) {
     console.log('  ' + (suffix || 'full') + ': ' + report);
   }
 }
+if (only.length) {
+  await browser.close();
+  server.close();
+  process.exit(0);
+}
 console.log('animations');
 const { glb, clips } = await page.evaluate(
   ([files, inPlace]) => globalThis.convertAnimations(files, inPlace),
@@ -101,17 +110,24 @@ async function setup() {
   const { MeshoptSimplifier } = await import('/meshoptimizer/meshopt_simplifier.js');
   await MeshoptSimplifier.ready;
   // Keeps a share of a mesh's triangles (texture seams are respected), then drops the vertices no
-  // longer used, so they are neither stored nor skinned.
+  // longer used, so they are neither stored nor skinned. A mesh with several materials keeps a
+  // share of each material's triangles, in its own group (without groups the exporter would
+  // write none of them).
   const simplify = (geometry, keep) => {
-    const index = new Uint32Array(geometry.index.array),
-      target = Math.floor((index.length * keep) / 3) * 3;
-    const [kept] = MeshoptSimplifier.simplify(
-      index,
-      new Float32Array(geometry.attributes.position.array),
-      3,
-      target,
-      0.05,
-    );
+    const positions = new Float32Array(geometry.attributes.position.array),
+      all = geometry.index.array,
+      parts = geometry.groups.length
+        ? geometry.groups
+        : [{ start: 0, count: all.length, materialIndex: 0 }];
+    const groups = [],
+      kept = [];
+    for (const { start, count, materialIndex } of parts) {
+      const index = new Uint32Array(all.subarray(start, start + count)),
+        target = Math.floor((index.length * keep) / 3) * 3;
+      const [part] = MeshoptSimplifier.simplify(index, positions, 3, target, 0.05);
+      groups.push({ start: kept.length, count: part.length, materialIndex });
+      kept.push(...part);
+    }
     const remap = new Map(),
       order = [];
     const indices = kept.map((v) => {
@@ -131,7 +147,7 @@ async function setup() {
       out.setAttribute(name, new THREE.BufferAttribute(array, size, attribute.normalized));
     }
     out.setIndex(Array.from(indices));
-    out.groups = [];
+    out.groups = geometry.groups.length ? groups : [];
     return out;
   };
   // Embedded textures are 4096 px PNGs; decoding a character's nine at once runs the page out

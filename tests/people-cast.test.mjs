@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { castFor, isWoman, WOMEN, MEN } from '../public/people-cast.js';
 import { createRegionalModel } from '../public/regions.js';
 import { addCommunityWorld } from '../public/community-world.js';
@@ -84,5 +84,24 @@ test(
     } finally {
       globalThis.requestAnimationFrame = raf;
     }
+  },
+);
+
+test(
+  'every character model, full and light, has meshes to draw',
+  {
+    skip: !existsSync('public/models/people/animations.json') && 'character models not downloaded',
+  },
+  () => {
+    for (const name of [...WOMEN, ...MEN, 'Chad', 'Jennifer'])
+      for (const file of [name, name + '-low']) {
+        const glb = readFileSync(`public/models/people/${file}.glb`),
+          json = JSON.parse(glb.subarray(20, 20 + glb.readUInt32LE(12)).toString());
+        assert.ok(json.meshes?.length > 0, file + ' has no meshes');
+        assert.ok(
+          json.meshes.every((m) => m.primitives.length > 0),
+          file + ' has an empty mesh',
+        );
+      }
   },
 );

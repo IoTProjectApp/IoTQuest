@@ -4,6 +4,7 @@ import { createRegionalModel } from '../public/regions.js';
 import { locations } from '../public/locations.js';
 import { addCommunityWorld, updateCommunityWorld } from '../public/community-world.js';
 import { collides } from '../public/world-math.js';
+import { updateJudoClass } from '../public/judo-class.js';
 
 test('pool and gym occupy separate connected plots with safe entrances at every destination', () => {
   for (const location of [undefined, ...locations]) {
@@ -170,6 +171,40 @@ test('judo dojo has safe street access, a walkable tatami and a furnished changi
   );
   assert.equal(dojo.lamp.emission, 1);
   assert.equal(c.recreation.find((r) => r.building.type === 'gym').lamp.emission, 0);
+});
+
+test('the judo class moves smoothly, stays on the tatami and never sinks into the mat', () => {
+  const model = createRegionalModel('legacy');
+  const c = addCommunityWorld(model);
+  const { judo } = c.recreationPeople.find((g) => g.judo);
+  const { mat } = c.recreation.find((r) => r.building.type === 'dojo');
+  const people = [judo.instructor, ...judo.pairs.flatMap((p) => p.people)];
+  const parts = (p) => [...p.meshes, p.belt, p.hair];
+  let last = null;
+  // Two full pair cycles at 60 fps: the fastest real motion (feet at the top of a throw) moves
+  // about 0.16 m a frame, so anything faster is a pose snapping rather than moving.
+  for (let t = 0; t < 19.2; t += 1 / 60) {
+    updateJudoClass(judo, t, false);
+    const now = people.map((p) => parts(p).map((m) => [...m.pos]));
+    for (const [i, p] of people.entries()) {
+      assert.ok(Math.abs(p.actor.x - mat.x) < mat.w / 2, `${p.actor.name} on the mat at ${t}`);
+      assert.ok(Math.abs(p.actor.z - mat.z) < mat.d / 2, `${p.actor.name} on the mat at ${t}`);
+      for (const [j, m] of p.meshes.entries()) {
+        const half =
+          (Math.abs(Math.cos(m.rotation[0])) * m.size[1] +
+            Math.abs(Math.sin(m.rotation[0])) * m.size[2]) /
+          2;
+        assert.ok(m.pos[1] - half > 0.25, `${p.actor.name} part ${j} sinks at ${t.toFixed(2)}`);
+      }
+      if (last)
+        for (const [j, pos] of now[i].entries())
+          assert.ok(
+            Math.hypot(...pos.map((v, k) => v - last[i][j][k])) < 0.2,
+            `${p.actor.name} part ${j} snaps at ${t.toFixed(2)}`,
+          );
+    }
+    last = now;
+  }
 });
 
 test('park paths remain clear around the fountain and the court has two horizontal hoops', () => {

@@ -29,6 +29,16 @@ const mix = (p, q, s) => ({
   bob: 0,
 });
 const pose = (legs, arms, lean) => ({ legs, arms, lean, bob: 0 });
+// How far into a turn-in entry the pair is (0 to 1): three drilled entries, then the throw's.
+const entry = (c) => {
+  if (c < 0.8) return 0;
+  if (c >= 5) return smooth(5, 5.4, c);
+  const r = ((c - 0.8) % REP) / REP;
+  return smooth(0, 0.35, r) * (1 - smooth(0.6, 0.95, r));
+};
+// Starting and stopping a short walk: the gait fades in and out so the limbs never snap.
+const stroll = (from, to, s, phase) =>
+  mix(mix(from, to, s), gaitPose(phase), Math.sin(Math.PI * s));
 
 const STAND = standPose();
 // Knees soft, right foot forward; right hand on the partner's lapel, left on their sleeve.
@@ -112,6 +122,8 @@ const BREAKFALL = pose(
   ],
   0,
 );
+// Arms raised just before they slap down on landing.
+const SLAP = { ...BREAKFALL, arms: BREAKFALL.arms.map(() => [1.1, 0]) };
 const SQUAT = pose(
   [
     [1.6, 2.3],
@@ -197,6 +209,17 @@ function put(p, x, z, angle, pose, roll = 0, hip = null) {
       ];
       m.rotation = [m.rotation[0] + roll, m.rotation[1], 0];
     }
+    // Rest on the mat rather than through it: lift the body by however far its lowest point sinks.
+    const low = Math.min(
+      ...p.meshes.map(
+        (m) =>
+          m.pos[1] -
+          (Math.abs(Math.cos(m.rotation[0])) * m.size[1] +
+            Math.abs(Math.sin(m.rotation[0])) * m.size[2]) /
+            2,
+      ),
+    );
+    if (low < MAT) for (const m of p.meshes) m.pos[1] += MAT - low;
     p.x = hip[0];
     p.z = hip[2];
   }
@@ -229,33 +252,17 @@ function updatePair(pair, t, reduced) {
   // The thrower: grips, three entries, the throw, then steps back to become the partner.
   if (c < 0.8) put(tori, pair.x, at(0), ahead, mix(STAND, GRIP, smooth(0, 0.8, c)));
   else if (c < 6.2) {
-    const e =
-        c < 5
-          ? smooth(0, 0.35, ((c - 0.8) % REP) / REP) *
-            (1 - smooth(0.6, 0.95, ((c - 0.8) % REP) / REP))
-          : smooth(5, 5.4, c),
+    const e = entry(c),
       stance = c < 5.4 ? mix(GRIP, ENTRY, e) : mix(ENTRY, THROW, smooth(5.4, 6, c));
     put(tori, pair.x, at(STEP_IN * e), ahead + Math.PI * e, stance);
   } else if (c < 8.4) put(tori, pair.x, at(STEP_IN), back, mix(THROW, HOLD, smooth(6.2, 7, c)));
   else {
     const s = smooth(8.4, 9.2, c);
-    put(
-      tori,
-      pair.x,
-      at(lerp(STEP_IN, JUDO_GAP, s)),
-      back,
-      s < 1 ? mix(gaitPose(-(c - 8.4) * 7), STAND, s) : STAND,
-    );
+    put(tori, pair.x, at(lerp(STEP_IN, JUDO_GAP, s)), back, stroll(HOLD, STAND, s, -(c - 8.4) * 7));
   }
   // The partner: pulled forward on each entry, thrown over the back, breakfalls and gets up.
   if (c < 5.4) {
-    const e =
-      c < 0.8
-        ? 0
-        : c < 5
-          ? smooth(0, 0.35, ((c - 0.8) % REP) / REP) *
-            (1 - smooth(0.6, 0.95, ((c - 0.8) % REP) / REP))
-          : smooth(5, 5.4, c);
+    const e = entry(c);
     put(
       uke,
       pair.x,
@@ -265,22 +272,26 @@ function updatePair(pair, t, reduced) {
     );
   } else if (c < 6.2) {
     const s = smooth(5.4, 6.2, c);
-    put(uke, pair.x, at(JUDO_GAP), back, FLIGHT, 1.5 * Math.PI * s, [
-      pair.x,
-      lerp(HIP, LYING, s) + Math.sin(Math.PI * s) * 0.55,
-      at(lerp(JUDO_GAP - 0.1, LAND, s)),
-    ]);
-  } else if (c < 7.4) {
-    const slap = 1 - smooth(6.2, 6.4, c);
     put(
       uke,
       pair.x,
-      at(LAND),
+      at(JUDO_GAP),
       back,
-      mix(BREAKFALL, { ...BREAKFALL, arms: BREAKFALL.arms.map(() => [1.1, 0]) }, slap),
-      1.5 * Math.PI,
-      [pair.x, LYING, at(LAND)],
+      mix(mix(PULLED, FLIGHT, smooth(5.4, 5.7, c)), SLAP, smooth(5.85, 6.2, c)),
+      1.5 * Math.PI * s,
+      [
+        pair.x,
+        lerp(HIP, LYING, s) + Math.sin(Math.PI * s) * 0.55,
+        at(lerp(JUDO_GAP - 0.1, LAND, s)),
+      ],
     );
+  } else if (c < 7.4) {
+    const slap = 1 - smooth(6.2, 6.4, c);
+    put(uke, pair.x, at(LAND), back, mix(BREAKFALL, SLAP, slap), 1.5 * Math.PI, [
+      pair.x,
+      LYING,
+      at(LAND),
+    ]);
   } else if (c < 8.4) {
     const g = smooth(7.4, 8.4, c);
     put(
@@ -300,46 +311,52 @@ function updatePair(pair, t, reduced) {
       pair.x,
       at(lerp(LAND - 0.35, 0, s)),
       turn(back, ahead, smooth(8.4, 8.8, c)),
-      c > 8.8 && s < 1 ? gaitPose((c - 8.8) * 8) : STAND,
+      stroll(STAND, STAND, s, (c - 8.8) * 8),
     );
   }
 }
 
-// The instructor's round: watch the first pair, the second, then both from behind the mat.
+// The instructor's round: watch the first pair, the second, then both from behind the mat,
+// turning to face the pair on arrival. Walks are at 1.3 m/s.
+const WATCH = 4;
 const ROUND = [
-  { x: -1.5, z: -4.2, watch: 0 },
-  { x: 3.5, z: -4.2, watch: 1 },
-  { x: 1, z: 2.6, watch: null },
-];
+  { x: -1.5, z: -4.2, target: JUDO_PAIRS[0] },
+  { x: 3.5, z: -4.2, target: JUDO_PAIRS[1] },
+  { x: 1, z: 2.6, target: { x: 1, z: -1 } },
+].map((stop) => ({
+  ...stop,
+  facing: Math.atan2(stop.target.z + JUDO_GAP / 2 - stop.z, stop.target.x - stop.x),
+}));
+const LEGS = ROUND.map((stop, i) => {
+  const next = ROUND[(i + 1) % ROUND.length];
+  return {
+    stop,
+    next,
+    dir: Math.atan2(next.z - stop.z, next.x - stop.x),
+    walk: Math.hypot(next.x - stop.x, next.z - stop.z) / 1.3,
+  };
+});
+const PERIOD = LEGS.reduce((sum, l) => sum + WATCH + l.walk, 0);
+
 function updateInstructor(judo, t, reduced) {
   const p = judo.instructor,
     talking = talkAngle(p);
   if (talking !== null) return put(p, p.x, p.z, talking, STAND);
-  const facing = (stop) => {
-    const pair = stop.watch === null ? { x: 1, z: -1 } : judo.pairs[stop.watch];
-    return Math.atan2(pair.z + JUDO_GAP / 2 - stop.z, pair.x - stop.x);
-  };
-  const legs = ROUND.map((stop, i) => {
-    const next = ROUND[(i + 1) % ROUND.length];
-    return { stop, next, walk: Math.hypot(next.x - stop.x, next.z - stop.z) / 1.3 };
-  });
-  const period = legs.reduce((sum, l) => sum + 4 + l.walk, 0);
-  let s = reduced ? 0 : t % period;
-  for (const { stop, next, walk } of legs) {
-    if (s < 4) {
-      return put(p, stop.x, stop.z, facing(stop), { ...FOLDED, lean: Math.sin(t * 0.7) * 0.02 });
-    }
-    s -= 4;
+  const folded = { ...FOLDED, lean: Math.sin(t * 0.7) * 0.02 };
+  let s = reduced ? 0 : t % PERIOD;
+  for (const { stop, next, dir, walk } of LEGS) {
+    if (s < WATCH) return put(p, stop.x, stop.z, stop.facing, folded);
+    s -= WATCH;
     if (s < walk) {
       const k = s / walk,
-        dir = Math.atan2(next.z - stop.z, next.x - stop.x),
-        angle = turn(turn(facing(stop), dir, smooth(0, 0.12, k)), facing(next), smooth(0.88, 1, k));
+        angle = turn(turn(stop.facing, dir, smooth(0, 0.12, k)), next.facing, smooth(0.88, 1, k)),
+        stride = smooth(0, 0.6, s) * (1 - smooth(walk - 0.6, walk, s));
       return put(
         p,
         lerp(stop.x, next.x, k),
         lerp(stop.z, next.z, k),
         angle,
-        gaitPose(s * 5.5, 0.05),
+        mix(folded, gaitPose(s * 5.5, 0.05), stride),
       );
     }
     s -= walk;

@@ -25,7 +25,7 @@ export const sectionQuests = [
     title: 'Bathroom Ventilation',
     sectionQuest: true,
     area: 'Bathroom',
-    resident: 'Omar',
+    resident: 'Sam',
     role: 'Bathroom resident',
     quote:
       'The bathroom gets damp after a shower. Can the extractor fan clear the air and stop once it dries?',
@@ -47,7 +47,7 @@ export const sectionQuests = [
     title: 'Kitchen Heat Extractor',
     sectionQuest: true,
     area: 'Kitchen',
-    resident: 'Priya',
+    resident: 'Sam',
     role: 'Kitchen resident',
     quote:
       'Cooking warms the kitchen. Please run the extractor only when the temperature needs it.',
@@ -69,7 +69,7 @@ export const sectionQuests = [
     title: 'Utility Room Safety Alert',
     sectionQuest: true,
     area: 'Utility room',
-    resident: 'Theo',
+    resident: 'Alex',
     role: 'Utility caretaker',
     quote:
       'Please warn me if this service door opens while the safety switch is armed. It should stay quiet while I’m working on it.',

@@ -245,17 +245,24 @@ test('every on-screen room button can be clicked in the World view', async () =>
   );
   assert.deepEqual(blocked, []);
   await page.locator('[data-area="Living room"]').click();
+  // Arriving brings whoever asked for the room's next request (Sam or Jordan) to chat; after it,
+  // E installs here.
+  assert.match(await page.textContent('#modalTitle'), /A chat with (Sam|Jordan)/);
+  await page.locator('#closeModal').click();
   assert.equal(await modalOpen(page), false);
   assert.match(await page.textContent('#worldTip'), /install devices/);
   assert.deepEqual(errors, []);
   await page.close();
 });
 
-test('at a room E installs devices and T talks to its resident', async () => {
+test('arriving at a room brings its resident; then E installs devices and T talks to them', async () => {
   const { page, errors } = await openHome();
   await page.locator('[data-area="Bedroom"]').click();
+  assert.equal(await modalOpen(page), true, 'Nina comes to the technician');
+  assert.match(await page.textContent('#modalTitle'), /A chat with Nina/);
+  await page.locator('#closeModal').click();
   await page.keyboard.press('ArrowLeft');
-  assert.equal(await modalOpen(page), false, 'no greeting pops up on the first step');
+  assert.equal(await modalOpen(page), false, 'the chat does not reopen within the room');
   await page.keyboard.press('e');
   assert.equal(await modalOpen(page), false);
   assert.equal(await page.getAttribute('[data-tab].selected', 'data-tab'), 'inventory');
@@ -697,6 +704,8 @@ test('Victorian farms render and retain homestead and connected town navigation'
     assert.equal(await page.locator('#graphicsMessage').isVisible(), false);
     await page.locator('[data-area="Garden path"]').click();
     assert.ok((await page.textContent('#location')).includes('Garden path'));
+    // Whoever asked for the path's requests comes to chat on arrival.
+    if (await modalOpen(page)) await page.locator('#closeModal').click();
     await page.locator('#exploreCommunity').click();
     await settle(page);
     const shop = page.locator('[data-community-building="shop"]');

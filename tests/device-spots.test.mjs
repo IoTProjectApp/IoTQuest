@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { createRegionalModel } from '../public/regions.js';
 import { locations } from '../public/locations.js';
 import { missions, components } from '../public/missions.js';
-import { sectionResidents } from '../public/section-residents.js';
+import { HOME_AREAS } from '../public/home-areas.js';
 import {
   deviceSpots,
   toWorld,
@@ -15,7 +15,7 @@ import {
   DEVICE_GAP,
 } from '../public/world-math.js';
 
-const base = sectionResidents.map(([area, , x, y]) => [area, x, y]);
+const base = HOME_AREAS;
 const homes = ['legacy', ...locations.map((l) => l.id)].map((id) => {
   const model = createRegionalModel(id),
     location = locations.find((l) => l.id === id);

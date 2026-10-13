@@ -2,6 +2,7 @@ import { prepareWorldMaterials, worldSunlight } from './world-materials.js';
 import { WebGLWorldRenderer, color } from './world-renderer-webgl.js';
 import { addCommunityWorld, updateCommunityWorld, STREET_LIGHT_LEVEL } from './community-world.js';
 import { updateLandscape } from './landscape.js';
+import { isHousehold } from './section-residents.js';
 import { addDeviceDetails } from './device-objects.js';
 import { locationById } from './locations.js';
 import { skyTime, DEFAULT_OBSERVER } from './astronomy.js';
@@ -620,6 +621,9 @@ export class World3D {
         }
         [ax, az] = actor.talkPosition;
         angle = Math.atan2(p[0] - ax, p[2] - az);
+      } else if (actor.present) {
+        // A household member visiting the technician stands where they arrived, facing them.
+        angle = Math.atan2(p[0] - ax, p[2] - az);
       } else if (state.routine?.actors?.[actor.id]) {
         const target = state.routine.actors[actor.id];
         actor.x +=
@@ -640,6 +644,7 @@ export class World3D {
         actor.id === 'Maya' &&
         !motion &&
         env.motion &&
+        !actor.present &&
         state.talkingNpc !== actor.id &&
         !state.routine?.actors?.[actor.id]
       ) {
@@ -654,7 +659,11 @@ export class World3D {
             ? 0.21
             : 0);
       const skin = appearance === '👩🏽‍🔧' ? '#b78968' : appearance === '👨🏻‍🔧' ? '#e0b992' : '#cba885';
+      // The household is only seen when visiting the technician or talking to them.
+      const away = isHousehold(actor.id) && !actor.present && state.talkingNpc !== actor.id;
       for (const part of actor.parts) {
+        part.baseOpacity ??= part.opacity ?? 1;
+        part.opacity = away ? 0 : part.baseOpacity;
         let [lx, ly, lz] = part.local,
           limb = phase ? Math.sin(phase) * 0.32 * (part.side || 1) : 0;
         if (state.talkingNpc === actor.id && part.limb === 'arm' && part.side === -1 && !reduced)

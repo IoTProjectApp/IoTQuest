@@ -1,5 +1,12 @@
 import { buildFacingBench } from './outdoor-seating.js';
 
+// Where each practice pair stands (lot-local) and the gripping gap between partners along +z.
+export const JUDO_PAIRS = [
+  { x: -1.5, z: -1.4 },
+  { x: 3.5, z: -1.4 },
+];
+export const JUDO_GAP = 0.75;
+
 export function buildJudoDojo(model, { b, origin, box }) {
   const furniture = [];
   const add = (x, y, z, w, h, d, color, extra = {}) => {
@@ -83,6 +90,8 @@ export function buildJudoDojo(model, { b, origin, box }) {
   for (const x of [-12, -11.3]) prop(x, 1.23, 4.5, 0.4, 0.15, 0.7, '#637680');
   const lamp = add(-11, 3.25, 0, 1.8, 0.1, 0.5, '#eadeb6', { emission: 0 });
   const indicator = prop(-11.3, 1.9, -6.3, 0.6, 0.4, 0.12, '#547572', { emission: 0 });
+  // The judoka are drawn as jointed figures in judo-class.js; their actor bodies stay hidden so
+  // labels, chat and the dojo quest still find them.
   const judoka = (id, name, role, x, z, heading, belt, skin) => {
     model.addActor(id, origin.x + b.x + x, origin.z + b.z + z, '#e7e4d9', skin);
     const actor = model.actors.at(-1);
@@ -94,42 +103,35 @@ export function buildJudoDojo(model, { b, origin, box }) {
       section: b.name,
       heading,
       judoka: true,
+      belt,
+      skin,
     });
     for (const part of actor.parts) {
       if (part.limb === 'leg') part.color = '#e7e4d9';
-      if (part.shape === 'box' && part.local[1] === 0.11) part.color = skin;
+      part.opacity = 0;
     }
-    const detail = (pos, size, color) => {
-      const mesh = model.mesh('box', [...pos], size, color, {
-        actor: id,
-        local: [...pos],
-        surface: 'fabric',
-        dojoUniform: true,
-      });
-      actor.parts.push(mesh);
-    };
-    detail([0, 0.64, 0], [0.46, 0.065, 0.31], belt);
-    detail([0.04, 0.53, 0.17], [0.07, 0.2, 0.035], belt);
-    detail([0, 0.91, 0.15], [0.04, 0.28, 0.025], '#c9c6b7');
     return actor;
   };
-  const instructor = judoka('recreation:dojo', b.resident, b.role, 1, -7, 0, '#343d42', '#c79878');
+  const instructor = judoka('recreation:dojo', b.resident, b.role, 1, -7, 0, '#24292c', '#c79878');
+  // Students practise in two pairs, each partner facing the other across a gripping gap.
   const students = [
-    [-2, -3, 'Ava Chen'],
-    [4, -3, 'Leo Martin'],
-    [-2, 1, 'Mia Patel'],
-    [4, 1, 'Noah Brooks'],
-  ].map(([x, z, name], i) =>
-    judoka(
+    ['Ava Chen', '#d9b95c', '#d2aa87'],
+    ['Leo Martin', '#d68a3c', '#a77d5e'],
+    ['Mia Patel', '#5f9a55', '#a8714f'],
+    ['Noah Brooks', '#3f6fa8', '#e0b993'],
+  ].map(([name, belt, skin], i) => {
+    const pair = JUDO_PAIRS[i >> 1],
+      second = i % 2;
+    return judoka(
       'dojo:student:' + i,
       name,
       'Judo student',
-      x,
-      z,
-      Math.atan2(1 - x, -7 - z),
-      i < 2 ? '#eee5d1' : '#d9b95c',
-      i % 2 ? '#a77d5e' : '#d2aa87',
-    ),
-  );
+      pair.x,
+      pair.z + second * JUDO_GAP,
+      second ? Math.PI : 0,
+      belt,
+      skin,
+    );
+  });
   return { building: b, lamp, indicator, sections: [], furniture, mat, instructor, students };
 }

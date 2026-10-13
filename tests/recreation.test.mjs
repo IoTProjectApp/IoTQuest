@@ -141,11 +141,13 @@ test('judo dojo has safe street access, a walkable tatami and a furnished changi
     model.actors.filter((a) => a.area === b.name && a.role === 'Judo instructor').length,
     1,
   );
-  for (const student of dojo.students) {
+  for (const [i, student] of dojo.students.entries()) {
     assert.ok(Math.abs(student.x - dojo.mat.x) < dojo.mat.w / 2 - 2);
     assert.ok(Math.abs(student.z - dojo.mat.z) < dojo.mat.d / 2 - 2);
-    const dx = dojo.instructor.x - student.x,
-      dz = dojo.instructor.z - student.z;
+    // Students practise in pairs, each facing their partner.
+    const partner = dojo.students[i ^ 1],
+      dx = partner.x - student.x,
+      dz = partner.z - student.z;
     assert.ok(
       (Math.sin(student.heading) * dx + Math.cos(student.heading) * dz) / Math.hypot(dx, dz) >
         0.999,

@@ -1,6 +1,7 @@
 import { JUDO_PAIRS } from './judo-dojo.js';
 import { instructorAt } from './judo-class.js';
 import { CLIPS, walkTime } from './character-clips.js';
+import { JUDO_GI } from './character-outfits.js';
 
 export { CLIPS };
 
@@ -118,6 +119,7 @@ export function judoCharacters(judo, t, reduced) {
       clips,
       standIn: [...person.meshes, person.belt, person.hair],
       belt: person.actor.belt,
+      outfit: JUDO_GI,
     });
   // Someone in conversation stands and faces the technician (as world3d turns their actor).
   const talking = (person) => {

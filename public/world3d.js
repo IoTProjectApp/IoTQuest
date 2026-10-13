@@ -5,6 +5,7 @@ import { updateLandscape } from './landscape.js';
 import { isHousehold } from './section-residents.js';
 import { castFor, isWoman, TECHNICIAN } from './people-cast.js';
 import { CLIPS, walkTime } from './character-clips.js';
+import { outfitFor, TECHNICIAN_OUTFIT } from './character-outfits.js';
 import { addDeviceDetails } from './device-objects.js';
 import { locationById } from './locations.js';
 import { skyTime, DEFAULT_OBSERVER } from './astronomy.js';
@@ -972,6 +973,7 @@ export class World3D {
     return {
       key,
       model: castFor(key, '', woman),
+      outfit: outfitFor(key),
       ...at,
       clips,
       standIn,
@@ -1006,6 +1008,9 @@ export class World3D {
       // little larger than the residents so the player finds them at a glance.
       carry: technician ? state.color : undefined,
       scale: technician ? 1.15 : 1,
+      // Work wear for the technician (a hi-vis vest and a hard hat); everyone else dressed as their
+      // own.
+      outfit: technician ? TECHNICIAN_OUTFIT : outfitFor(actor.id),
       z,
       // Actors face (sin, cos) of their heading; characters face (cos, sin) of their angle.
       angle: Math.atan2(Math.cos(heading), Math.sin(heading)),

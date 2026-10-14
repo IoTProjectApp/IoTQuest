@@ -5,6 +5,24 @@ const MAX_NESTING = 100,
   MAX_CALL_DEPTH = 30;
 // Python blocks may use any consistent indentation width (four spaces is the convention).
 // Each block header (a line ending in `:`) must be followed by a more indented line.
+// Functions the simulator provides through `from iotquest import ...` in MicroPython.
+export const IOTQUEST_FUNCTIONS = [
+  'mqttConnect',
+  'mqttPublish',
+  'mqttSubscribe',
+  'mqttRead',
+  'mqttConnected',
+  'mqttReconnect',
+  'mqttLastDelivery',
+  'memoryRead',
+  'memoryWrite',
+  'jsonField',
+  'jsonFieldCount',
+];
+const IOTQUEST_NAMES = IOTQUEST_FUNCTIONS.join('|'),
+  IOTQUEST_IMPORT = new RegExp(
+    '^from iotquest import (' + IOTQUEST_NAMES + ')(,\\s*(' + IOTQUEST_NAMES + '))*$',
+  );
 export function pythonToC(source) {
   const out = [],
     stack = [0];
@@ -55,12 +73,7 @@ export function pythonToC(source) {
         )
       )
         continue;
-      if (
-        /^from iotquest import (mqttConnect|mqttPublish|mqttSubscribe|mqttRead|mqttConnected|mqttReconnect|mqttLastDelivery)(,\s*(mqttConnect|mqttPublish|mqttSubscribe|mqttRead|mqttConnected|mqttReconnect|mqttLastDelivery))*$/.test(
-          line,
-        )
-      )
-        continue;
+      if (IOTQUEST_IMPORT.test(line)) continue;
       if (/^(import |from )/.test(line))
         throw Error('Supported imports: machine Pin, ADC, PWM and time.');
       let dedented = false;
@@ -180,6 +193,7 @@ const types = new Set([
   'int16_t',
   'uint32_t',
   'int32_t',
+  'String',
 ]);
 const numeric = (v) => (typeof v === 'boolean' ? Number(v) : v);
 // Maps the words of a C declaration to a storage kind used to apply integer semantics.
@@ -698,6 +712,8 @@ export class Runtime {
     } else this.prelude = this.ast.filter((n) => n.kind !== 'function');
     this.initialized = false;
     this.broker = new SimulatedBroker();
+    // Values kept by memoryWrite survive a restart, like the ESP32's Preferences (flash) store.
+    this.memory = new Map();
     this.clientId = 'controller';
     this.currentLine = 1;
     this.task = null;
@@ -1081,6 +1097,25 @@ export class Runtime {
     if (name === 'mqttRead') return this.broker.read(this.clientId, a[0]);
     if (name === 'mqttLastDelivery')
       return this.broker.clients.get(this.clientId)?.lastDelivery || 0;
+    if (name === 'memoryWrite') {
+      if (this.memory.size >= 32 && !this.memory.has(String(a[0])))
+        throw Error('Memory limit: 32 saved values.');
+      if (typeof a[1] !== 'number' && typeof a[1] !== 'boolean')
+        throw Error('memoryWrite saves numbers only.');
+      this.memory.set(String(a[0]), Number(a[1]));
+      return 0;
+    }
+    if (name === 'memoryRead') return this.memory.get(String(a[0])) ?? 0;
+    if (name === 'jsonFieldCount' || name === 'jsonField') {
+      let value = null;
+      try {
+        value = JSON.parse(String(a[0]));
+      } catch {}
+      const object = value && typeof value === 'object' && !Array.isArray(value);
+      if (name === 'jsonFieldCount') return object ? Object.keys(value).length : -1;
+      const field = object && Object.hasOwn(value, String(a[1])) ? value[String(a[1])] : '';
+      return typeof field === 'number' || typeof field === 'string' ? field : '';
+    }
     if (name === 'analogRead' || name === 'digitalRead') return this.sensor(a[0]);
     if (name === 'digitalWrite') {
       this.write(a[0], a[1]);

@@ -23,7 +23,8 @@ test('every hunt plants three test-detectable bugs on distinct lines', () => {
   for (const list of missionSets)
     for (const board of ['ESP32', 'Raspberry Pi Pico'])
       for (const language of ['cpp', 'python'])
-        for (const m of list)
+        // The final expedition has no program to hunt in.
+        for (const m of list.filter((m) => !m.capstone))
           for (let seed = 1; seed <= 3; seed++) {
             const devices = wired(m.ids, board),
               hunt = createBugHunt(m, language, devices, board, { seed }),
@@ -82,8 +83,9 @@ test('explanations round-trip, are idempotent and leave programs runnable', () =
             source = program(m, language, devices, example),
             explained = explainCode(source, language, devices),
             label = [m.title, board, language, example].join(' ');
-          // The starter is comments only: nothing to explain or run.
-          if (!example) {
+          // The starter is comments only: nothing to explain or run. Repair quests start from a
+          // faulty program, which is explained like any other.
+          if (!example && !m.starter) {
             assert.equal(explained, source, label);
             continue;
           }
@@ -92,7 +94,16 @@ test('explanations round-trip, are idempotent and leave programs runnable', () =
           assert.equal(explainCode(explained, language, devices), explained, label);
           const run = (code) =>
             new Runtime(code, language, devices, board).step(baseEnv, 200).outputs;
-          assert.deepEqual(run(explained), run(source), label);
+          // A repair quest's starter may stop with its fault (a wrong pin); explaining it must not
+          // change what happens.
+          const outcome = (code) => {
+            try {
+              return run(code);
+            } catch (e) {
+              return e.message;
+            }
+          };
+          assert.deepEqual(outcome(explained), outcome(source), label);
         }
 });
 

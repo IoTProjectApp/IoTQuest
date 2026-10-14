@@ -253,7 +253,7 @@ test('regressions: names in any script, Pico pins, normalised dates and bounded 
     newer = mk('Oct 9 2026 10:00 UTC');
   assert.equal(newer.createdAt, '2026-10-09T10:00:00.000Z');
   assert.equal(latestReports([newer, older])[0], newer);
-  assert.equal(mk('2026-10-08', [{ index: 999999 }]).quests[0].index, 99);
+  assert.equal(mk('2026-10-08', [{ index: 999999 }]).quests[0].index, 999);
 });
 
 test('resident chats are counted per quest and reach the report and the CSV', () => {

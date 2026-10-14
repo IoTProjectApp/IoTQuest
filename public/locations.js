@@ -175,10 +175,18 @@ function residentSays(location, text) {
   const body = /^I\b|^I’/.test(text) ? text : text.charAt(0).toLowerCase() + text.slice(1);
   return '“Here in ' + location.city + ', ' + body + '”';
 }
+// A deep copy of a quest. Timeline checks and repair starters are functions, which
+// structuredClone cannot copy; they are shared, since quests never change them.
+function copyQuest(value) {
+  if (Array.isArray(value)) return value.map(copyQuest);
+  if (value && typeof value === 'object')
+    return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, copyQuest(v)]));
+  return value;
+}
 function regionalBaseMissions(base, location) {
   if (!location) return base;
   return base.map((mission, index) => {
-    const m = structuredClone(mission);
+    const m = copyQuest(mission);
     m.resident = location.names[m.resident] || m.resident;
     if (m.weatherQuest || m.sectionQuest || m.communityQuest) {
       m.title = location.city + ' · ' + m.title;
@@ -292,13 +300,14 @@ export function adaptMissions(base, location, difficulty = 'advanced') {
   return list.map((m, index) => {
     m.difficulty = difficulty;
     if (m.weatherQuest) {
-      if (difficulty === 'advanced') Object.assign(m, structuredClone(m.advanced));
+      if (difficulty === 'advanced') Object.assign(m, copyQuest(m.advanced));
       m.learn = [
         ...m.learn,
         difficulty === 'advanced' ? 'Multiple weather checks' : 'One weather decision',
       ];
       return m;
     }
+    if (m.catalogueQuest && difficulty === 'advanced') Object.assign(m, copyQuest(m.advanced));
     m.learn = [
       ...m.learn,
       difficulty === 'advanced'

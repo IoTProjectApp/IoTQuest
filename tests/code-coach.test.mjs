@@ -98,7 +98,8 @@ export function studentProgram(m, language, devices) {
 
 test('the editor starts with no code: only the quest title, goal and a pointer to the guide', () => {
   for (const language of ['cpp', 'python'])
-    for (const m of missions) {
+    // Repair quests start from a program with a fault to find instead.
+    for (const m of missions.filter((m) => !m.starter)) {
       const starter = program(m, language, defaults(m.ids, 'ESP32')),
         mark = language === 'python' ? '#' : '//';
       for (const line of starter.split('\n'))
@@ -108,13 +109,17 @@ test('the editor starts with no code: only the quest title, goal and a pointer t
 });
 
 test('every quest’s guide covers the whole program; the student’s program passes every step', () => {
-  for (const [m, where] of everyQuest())
+  // The final expedition has no program, so its guide is one step.
+  for (const [m, where] of everyQuest().filter(([m]) => !m.capstone))
     for (const language of ['cpp', 'python']) {
       const devices = defaults(m.ids, 'ESP32'),
         steps = coachSteps(m, language, devices, 'ESP32'),
         starter = program(m, language, devices),
-        mine = studentProgram(m, language, devices),
         example = program(m, language, devices, true),
+        // Quests with timers, latches or messages are written with the Guide's patterns; their
+        // worked program is the reference for every step.
+        timeline = !!m.sequences?.length,
+        mine = timeline ? example : studentProgram(m, language, devices),
         label = where + ' · ' + m.title + ' · ' + language;
       assert.deepEqual(
         steps.map((s) => s.key.replace(/-.*/, '')),
@@ -124,13 +129,17 @@ test('every quest’s guide covers the whole program; the student’s program pa
           ...(language === 'cpp' ? ['setup'] : []),
           'loop',
           ...devices.filter((d) => !d.output).map(() => 'read'),
-          ...devices.filter((d) => d.output).map(() => 'decide'),
+          ...(timeline
+            ? [...(m.techniques || []).map(() => 'technique'), 'behaviour']
+            : devices.filter((d) => d.output).map(() => 'decide')),
           'test',
         ],
         label,
       );
       for (const step of steps.filter((s) => s.check)) {
-        assert.equal(step.check(starter).done, false, label + ' / starter ' + step.key);
+        // A repair quest's starter is a whole program, so only its broken part fails a step.
+        if (!m.starter)
+          assert.equal(step.check(starter).done, false, label + ' / starter ' + step.key);
         assert.equal(
           step.check(mine).done,
           true,

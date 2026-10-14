@@ -6,6 +6,9 @@ import {
   questDevices,
 } from './code-coach.js';
 import { ADC_SIGNALS as ADC, adcRead, picoWiring } from './signals.js';
+import { catalogueRanges } from './catalogue-devices.js';
+import { normalise } from './quest-timeline.js';
+import { TECHNIQUE_QUESTIONS } from './technique-questions.js';
 // "Check your understanding": three questions shown after a quest is passed, built from the
 // quest's own rule, sensors and scenarios, so every quest has them. Every answer, right or
 // wrong, comes with an explanation.
@@ -106,7 +109,17 @@ function reading(mission, devices, language) {
               ? 'The wind speed in kilometres per hour'
               : d.signal === 'distance'
                 ? 'The distance in centimetres'
-                : '1 (HIGH) or 0 (LOW)',
+                : d.signal === 'clock'
+                  ? 'The local time as a four-digit number, such as 2200 for 22:00'
+                  : catalogueRanges[d.signal]
+                    ? 'A calibrated value from ' +
+                      catalogueRanges[d.signal][0] +
+                      ' to ' +
+                      catalogueRanges[d.signal][1] +
+                      ' (' +
+                      catalogueRanges[d.signal][2] +
+                      ')'
+                    : '1 (HIGH) or 0 (LOW)',
     digital = range.startsWith('1 (HIGH)'),
     switchOutput = py ? '`.value()` on an output' : '`digitalWrite`';
   return question(
@@ -216,10 +229,77 @@ function change(mission, devices, language) {
   );
 }
 
+// Predict, for a quest checked by timelines: an output at one of its timed steps, preferably one
+// where it keeps its state although a reading changed (where remembering matters).
+function timelinePredict(mission, devices) {
+  const outs = devices.filter((d) => d.output),
+    candidates = [];
+  for (const sequence of mission.sequences || []) {
+    const last = [];
+    for (const step of sequence.steps.map(normalise)) {
+      (step.expect || []).forEach((want, k) => {
+        if (want !== 0 && want !== 1) return;
+        const kept = last[k] === want && Object.keys(step.env || {}).length > 0;
+        candidates.push({
+          sequence,
+          step,
+          k,
+          want,
+          score: kept ? 2 : last[k] === undefined ? 0 : 1,
+        });
+        last[k] = want;
+      });
+    }
+  }
+  if (!candidates.length) return null;
+  const best = candidates.reduce((a, b) => (b.score > a.score ? b : a)),
+    out = outs[best.k],
+    on = best.want === 1,
+    plural = /s$/.test(lower(out)),
+    why =
+      'In the tests the ' +
+      lower(out) +
+      (plural ? ' are ' : ' is ') +
+      (on ? 'ON' : 'OFF') +
+      ' at this point. The rule: ' +
+      mission.goal;
+  return question(
+    'predict',
+    '“' +
+      best.sequence.name +
+      '”: after “' +
+      best.step.label +
+      '”, ' +
+      (plural ? 'are' : 'is') +
+      ' the ' +
+      lower(out) +
+      ' ON or OFF?',
+    [
+      { text: 'ON', right: on, why },
+      { text: 'OFF', right: !on, why },
+    ],
+    mission.title,
+  );
+}
+// A question about one of the programming patterns the quest uses.
+function pattern(key, mission) {
+  const q = TECHNIQUE_QUESTIONS[key];
+  return q && question('pattern-' + key, q.prompt, q.choices, mission.title);
+}
+
 export function understandingQuestions(mission, language, installed, board = 'ESP32') {
   if (!mission?.ids?.length) return [];
   // Output i follows condition i, whatever order the devices were installed in.
   const devices = questDevices(mission, installed, board);
+  // Quests checked by timelines: a timed prediction, the sensor reading and their patterns.
+  if (!mission.conditions?.length) {
+    const qs = [
+      timelinePredict(mission, devices),
+      devices.some((d) => !d.output) && reading(mission, devices, language),
+      ...(mission.techniques || []).map((key) => pattern(key, mission)),
+    ].filter(Boolean);
+    return qs.slice(0, 3);
+  }
   if (!devices.some((d) => d.output) || !devices.some((d) => !d.output)) return [];
   return [predict, reading, change].map((make) => make(mission, devices, language));
 }

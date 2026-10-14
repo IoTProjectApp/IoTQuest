@@ -1,6 +1,8 @@
 import { Runtime } from './runtime.js';
 import { baseEnv, defaults } from './missions.js';
 import { boundaryScenarios } from './quest-boundaries.js';
+import { runSequence } from './quest-timeline.js';
+import { TECHNIQUES } from './quest-techniques.js';
 import { ADC_SIGNALS as ADC, ADC_SCALE, adcRead, isPico } from './signals.js';
 // The code coach. Students write the whole program themselves: the editor starts with only the
 // quest's title and goal as comments, and the guide walks through each part (imports, pin names,
@@ -59,7 +61,12 @@ function pinName(code, d, language) {
     ? code.match(
         d.output
           ? new RegExp(
-              '^\\s*(\\w+)\\s*=\\s*Pin\\(\\s*' + pin + '\\s*,\\s*Pin\\.OUT\\b[^)]*\\)',
+              // Pin(n, Pin.OUT), or PWM(Pin(n)) for a brightness or speed.
+              '^\\s*(\\w+)\\s*=\\s*(?:Pin\\(\\s*' +
+                pin +
+                '\\s*,\\s*Pin\\.OUT\\b[^)]*\\)|PWM\\(\\s*Pin\\(\\s*' +
+                pin +
+                '\\s*(?:,\\s*Pin\\.OUT\\s*)?\\)[^)]*\\))',
               'm',
             )
           : d.analog
@@ -521,8 +528,86 @@ function decideStep(mission, d, i, devices, language, board) {
   };
 }
 
+// Timelines can run thousands of program passes, and the Guide re-checks on every render, so the
+// verdict for the latest few programs is kept.
+const verdicts = new Map();
+function timelineVerdict(mission, code, language, devices, board) {
+  const key = JSON.stringify([
+    mission.title,
+    mission.difficulty,
+    language,
+    board,
+    devices.map((d) => [d.id, d.pin]),
+    code,
+  ]);
+  if (!verdicts.has(key)) {
+    let verdict = done('Correct in every timed step, including the exact limits.');
+    for (const sequence of mission.sequences || []) {
+      const r = runSequence(mission, sequence, code, language, devices, board);
+      if (!r.pass) {
+        verdict = waiting('Not yet. ' + sequence.name + ': ' + r.detail);
+        break;
+      }
+    }
+    if (verdicts.size >= 20) verdicts.delete(verdicts.keys().next().value);
+    verdicts.set(key, verdict);
+  }
+  return verdicts.get(key);
+}
+// Quests with timers, latches or messages: one step per programming pattern they need, then a
+// step checked against the quest's own timeline tests.
+function behaviourSteps(mission, devices, language, board) {
+  const py = python(language),
+    steps = (mission.techniques || []).map((key) => {
+      const t = TECHNIQUES[key];
+      return {
+        key: 'technique-' + key,
+        title: t.title,
+        body: [t.body],
+        task: 'Use this pattern where it fits your program (fill in the blanks for this quest):',
+        pattern: py ? t.python : t.cpp,
+        hints: [],
+        manual: true,
+      };
+    });
+  steps.push({
+    key: 'behaviour',
+    title: 'Program the behaviour',
+    body: [
+      'Mission rule: ' + mission.goal,
+      'Variables that must remember something between passes (a time, a latch, a count) are declared ' +
+        (py ? 'before the `while True:` loop.' : 'above `setup()`, outside the loop.'),
+      'The tests run your program through timed steps and check the outputs at the end of each one, exactly at the limits.',
+    ],
+    task: 'After the readings, write the logic that sets every output:',
+    pattern: '',
+    hints: [mission.hint, ...(mission.hints || [])].filter(Boolean),
+    check: (code) => {
+      if (loopStart(codeOnly(code, language), language) < 0)
+        return waiting(
+          'Write the loop first (step “' + (py ? 'Repeat forever' : 'Write loop()') + '”).',
+        );
+      return timelineVerdict(mission, code, language, devices, board);
+    },
+  });
+  return steps;
+}
+
 // The guide for a mission: one step per part of the program, each explaining what to write.
 export function coachSteps(mission, language, installed, board = 'ESP32') {
+  if (mission.capstone)
+    return [
+      {
+        key: 'expedition',
+        title: 'Plan the expedition',
+        body: [
+          mission.goal,
+          'Every quest you pass keeps its wiring, code and test results. The expedition checks that saved evidence, so there is no program to write here.',
+        ],
+        task: 'Travel, pass the quests, then come back and press “Test your solution”.',
+        manual: true,
+      },
+    ];
   const py = python(language),
     devices = questDevices(mission, installed, board),
     steps = [];
@@ -531,9 +616,11 @@ export function coachSteps(mission, language, installed, board = 'ESP32') {
   if (!py) steps.push(setupStep(devices));
   steps.push(loopStep(language));
   for (const d of inputsOf(devices)) steps.push(readStep(d, language, board));
-  outputsOf(devices).forEach((d, i) =>
-    steps.push(decideStep(mission, d, i, devices, language, board)),
-  );
+  if (mission.conditions?.length)
+    outputsOf(devices).forEach((d, i) =>
+      steps.push(decideStep(mission, d, i, devices, language, board)),
+    );
+  if (mission.sequences?.length) steps.push(...behaviourSteps(mission, devices, language, board));
   steps.push({
     key: 'test',
     title: 'Run it and test it',

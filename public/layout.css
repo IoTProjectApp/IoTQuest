@@ -187,6 +187,16 @@
     margin-left: auto;
     white-space: nowrap;
   }
+  /* Compact enough to share the tabs' row on a 1440 px screen. */
+  .world-panel .world-status .sep {
+    margin: 0 3px;
+  }
+  .world-panel #clockSpeed {
+    max-width: 110px;
+  }
+  .world-panel .world-density input {
+    width: 52px;
+  }
   .split-handle {
     display: block;
     flex: 0 0 14px;

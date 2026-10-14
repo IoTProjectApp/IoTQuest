@@ -185,7 +185,7 @@ test('free-build and fault projects, unknown places and missions open safely', a
   assert.equal(fault.slot, 'free');
   assert.match(fault.warnings.join(' '), /Free build/);
   const odd = await readProject(
-    exportZip({ extra: { locationId: 'atlantis', missionIndex: 99, board: 'Z80' } }).bytes,
+    exportZip({ extra: { locationId: 'atlantis', missionIndex: 9999, board: 'Z80' } }).bytes,
   );
   assert.equal(odd.locationId, 'legacy');
   assert.equal(odd.slot, 'free');

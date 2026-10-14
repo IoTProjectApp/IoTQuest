@@ -56,7 +56,9 @@ test('thresholds resolve pins through constants, variables, calls and pin object
 });
 
 test('every mission starter exposes its thresholds to the plotter', () => {
-  for (const m of missions)
+  // Quests checked by timelines may have no sensor threshold at all (a dimmer, signal timers,
+  // network messages); every quest with condition rules has one.
+  for (const m of missions.filter((m) => m.conditions.length))
     for (const language of ['cpp', 'python']) {
       const devices = defaults(m.ids, 'ESP32');
       assert.ok(

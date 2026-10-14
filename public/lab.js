@@ -1,6 +1,7 @@
 import { clamp } from './world-math.js';
 import { ADC_SIGNALS, ADC_SCALE, outputLevel } from './signals.js';
 import { advanceEnvironment } from './weather.js';
+import { catalogueWatts } from './catalogue-devices.js';
 export const RESOURCE_ASSUMPTIONS = {
   tankLitres: 100,
   pumpLitresPerSecond: 1.1,
@@ -26,6 +27,7 @@ export const RESOURCE_ASSUMPTIONS = {
     ac: 800,
     pump: 25,
     valve: 3,
+    ...catalogueWatts,
   },
   solarPeakWatts: 50,
   batteryCapacityWh: 100,

@@ -7,6 +7,7 @@ import { castFor, isWoman, TECHNICIAN } from './people-cast.js';
 import { CLIPS, walkTime } from './character-clips.js';
 import { outfitFor, TECHNICIAN_OUTFIT } from './character-outfits.js';
 import { addDeviceDetails } from './device-objects.js';
+import { catalogueLamps } from './catalogue-devices.js';
 import { locationById } from './locations.js';
 import { skyTime, DEFAULT_OBSERVER } from './astronomy.js';
 import {
@@ -34,6 +35,19 @@ import { weatherEffects } from './weather.js';
 import { updateSky, lightningFlash } from './sky.js';
 import { updateAnimals } from './animals.js';
 import { updateFarm } from './farm-assets.js';
+// Signal and indicator lamps glow in their own colour.
+const LAMP_COLOURS = {
+  red: '#e8604c',
+  red2: '#e8604c',
+  waitLight: '#e8604c',
+  faultLed: '#e8604c',
+  amber: '#f0a73a',
+  amber2: '#f0a73a',
+  green: '#5fd38a',
+  green2: '#5fd38a',
+  walkLight: '#5fd38a',
+  blue: '#5f9ee8',
+};
 // Re-exported for the tests and tools that import them from here.
 export { frustumTest, isSoftwareRenderer } from './world-renderer-webgl.js';
 // Most simulated seconds one frame advances the community; 360× at 60 fps is about 6 s.
@@ -502,7 +516,9 @@ export class World3D {
       const face = this.model.box(x, 0.64 + h, z, 0.26, 0.05, 0.22, '#e3c67d', extra);
       this.deviceObjects.push({ device: d, x, z, holder, face, parts: [] });
       const record = this.deviceObjects.at(-1);
-      if (['led', 'porch', 'rgb', 'streetLight', 'warningLight'].includes(d.id)) {
+      if (
+        ['led', 'porch', 'rgb', 'streetLight', 'warningLight', ...catalogueLamps].includes(d.id)
+      ) {
         record.light = this.model.sphere(x, 1 + h, z, 0.19, '#e8cf89', { ...extra, emission: 0 });
         record.pool = this.model.mesh('sphere', [x, 0.04 + h, z], [3, 0.025, 3], '#ecc768', {
           ...extra,
@@ -510,7 +526,7 @@ export class World3D {
         });
       }
       addDeviceDetails(this.model, record, h);
-      if (['pump', 'valve'].includes(d.id)) {
+      if (['pump', 'valve', 'valve2'].includes(d.id)) {
         const home = this.model.community.residences.find((h) => h.building.name === d.area);
         const native = this.model.rooms.some((r) => r[0] === d.area && r[3]?.community);
         const sprayX = home ? this.model.community.origin.x + home.building.x - 3.8 : x;
@@ -710,10 +726,10 @@ export class World3D {
       record.face.color = s.on ? '#f4d584' : '#a9b3a1';
       record.face.emission = s.on ? 0.4 : 0;
       if (record.light) {
-        record.light.color = d.id === 'rgb' ? toolColor : '#ffe4a0';
+        record.light.color = d.id === 'rgb' ? toolColor : (LAMP_COLOURS[d.id] ?? '#ffe4a0');
         record.light.emission = s.on ? s.brightness : 0;
         record.pool.opacity = s.on ? 0.16 * s.brightness : 0;
-        record.pool.color = d.id === 'rgb' ? toolColor : '#ecd092';
+        record.pool.color = d.id === 'rgb' ? toolColor : (LAMP_COLOURS[d.id] ?? '#ecd092');
       }
       for (const part of record.parts) {
         if (part.blade !== undefined) {

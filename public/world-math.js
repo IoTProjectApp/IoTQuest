@@ -334,7 +334,7 @@ export function deviceState(device, outputs, env, scales = {}) {
           ? Math.PI / 2
           : 0
         : outputLevel(raw, scales?.[device.pin] ?? (raw === 1 ? 1 : 180)) * Math.PI,
-    flow: ['pump', 'valve'].includes(device.id) && on && env.tank > 0,
+    flow: ['pump', 'valve', 'valve2'].includes(device.id) && on && env.tank > 0,
     water: clamp(env.tank / 100, 0, 1),
     plant: env.soil < 30 ? 'dry' : env.soil > 85 ? 'wet' : 'healthy',
   };

@@ -25,6 +25,24 @@ test('every quest gets three well-formed questions whose answers match the real 
       const devices = defaults(m.ids, 'ESP32'),
         qs = understandingQuestions(m, language, devices),
         label = where + ' · ' + m.title + ' · ' + language;
+      // The final expedition has no program to ask about.
+      if (m.capstone) {
+        assert.deepEqual(qs, [], label);
+        continue;
+      }
+      // Quests checked by timelines: a timed prediction, the reading and their patterns.
+      if (!m.conditions.length) {
+        assert.ok(qs.length >= 2, label);
+        for (const q of qs) {
+          assert.match(q.id, /^(predict|read|pattern-\w+)$/, label);
+          assert.ok(q.answer >= 0 && q.answer < q.choices.length, label + ' ' + q.id);
+          assert.ok(
+            q.choices.every((c) => c.why.length > 20),
+            label + ' every answer is explained',
+          );
+        }
+        continue;
+      }
       assert.deepEqual(
         qs.map((q) => q.id),
         ['predict', 'read', 'change'],

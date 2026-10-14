@@ -187,9 +187,9 @@ export function parseProgressReport(source) {
     difficulty: ['original', 'beginner', 'advanced'].includes(q.difficulty)
       ? q.difficulty
       : 'original',
-    index: Math.min(count(q.index), 99),
+    index: Math.min(count(q.index), 999),
     ...(text(q.questId) && { questId: text(q.questId) }),
-    title: text(q.title) || 'Quest ' + (Math.min(count(q.index), 99) + 1),
+    title: text(q.title) || 'Quest ' + (Math.min(count(q.index), 999) + 1),
     status: ['passed', 'started', 'not-started'].includes(q.status) ? q.status : 'not-started',
     attempts: count(q.attempts),
     hints: count(q.hints),

@@ -3,6 +3,9 @@ import { sectionQuests } from './section-quests.js';
 import { weatherQuests } from './weather-quests.js';
 import { componentQuests } from './component-quests.js';
 import { logicQuests } from './logic-quests.js';
+import { catalogueQuests } from './catalogue-quests.js';
+import { catalogueComponents } from './catalogue-devices.js';
+import { solutionProgram } from './catalogue-program.js';
 import { guidedStarter } from './code-coach.js';
 import { ADC_SIGNALS, adcRead, isPico, picoWiring, baseEnv } from './signals.js';
 // The calm-day sensor levels live in signals.js (which has no imports) so modules in an import
@@ -234,6 +237,7 @@ export const components = [
     desc: 'HIGH opens the driven gate module; LOW closes it.',
     area: 'Entrance',
   },
+  ...catalogueComponents,
 ];
 export const missions = [
   {
@@ -413,6 +417,7 @@ export const missions = [
   ...componentQuests,
   ...logicQuests,
   ...communityQuests,
+  ...catalogueQuests,
 ];
 // Energy and water allowed across a quest's tests; a quest can set its own (the AC draws 800 W).
 export const missionBudget = (m) =>
@@ -421,9 +426,13 @@ export function defaults(ids, board) {
   let a = 0,
     d = 0,
     o = 0;
+  // Later pins only serve circuits bigger than the original quests', so their pins never move.
   const analog = board === 'ESP32' ? [34, 35, 32, 33, 36, 39] : [26, 27, 28];
-  const digital = board === 'ESP32' ? [27, 14, 13] : [16, 17, 18];
-  const outputs = board === 'ESP32' ? [26, 25, 18, 19, 21, 22] : [15, 14, 13, 12, 11, 10];
+  const digital = board === 'ESP32' ? [27, 14, 13, 4, 16, 17] : [16, 17, 18, 19, 20, 21];
+  const outputs =
+    board === 'ESP32'
+      ? [26, 25, 18, 19, 21, 22, 23, 5, 2, 15]
+      : [15, 14, 13, 12, 11, 10, 9, 8, 7, 6];
   return ids.map((id) => {
     const c = components.find((c) => c.id === id);
     return {
@@ -471,8 +480,12 @@ export function validate(devices, board) {
 }
 // `board` picks the Pico's read_u16() for analogue readings; without it, the wiring decides.
 export function program(mission, language, devices, worked = false, board) {
+  // Repair quests start from a program with a fault in it.
+  if (!worked && mission.starter) return mission.starter(language, devices, board, program);
   // Students write the readings and decisions themselves, guided by the code coach.
   if (!worked) return guidedStarter(mission, language, devices);
+  // Quests with timers, latches or messages have a worked program of their own.
+  if (mission.solution) return solutionProgram(mission, language, devices, board);
   const inputs = devices.filter((d) => !d.output),
     outputs = devices.filter((d) => d.output),
     pico = board ? isPico(board) : picoWiring(devices);

@@ -93,7 +93,7 @@ Every destination has its own architectural style, garden combination and interi
 
 Five additional quests use the destination's live local weather: **Storm Watch**, **Garden Frost Alert**, **Heat & Humidity Response**, **Rain-Smart Sprinklers**, and **Cloudy-Day Grow Lights**. Each destination has beginner and advanced versions. Wind reads km/h and cloud cover reads 0–100%; outdoor temperature and humidity retain their calibrated units. The rain sensor uses the existing simulated 0–4095 scale, derived from the weather service's precipitation data.
 
-Choose **Use live weather** in a weather quest to run your program against local readings, or use Practice Weather to explore conditions. With live weather, **Predict, then check** asks whether each output will be on with today's readings; while the program runs, **Check with my running program** compares each prediction with what the program actually did. The existing weather panel identifies cached or fallback data. Assessment always uses fixed scenarios with boundaries, interlocks and changing weather, so students never need to wait for a storm or cold night. The original eight quest indices and saved progress remain intact; with the component and logic quests below there are now 33 quests in the original home and 66 across both levels at each destination.
+Choose **Use live weather** in a weather quest to run your program against local readings, or use Practice Weather to explore conditions. With live weather, **Predict, then check** asks whether each output will be on with today's readings; while the program runs, **Check with my running program** compares each prediction with what the program actually did. The existing weather panel identifies cached or fallback data. Assessment always uses fixed scenarios with boundaries, interlocks and changing weather, so students never need to wait for a storm or cold night. The original eight quest indices and saved progress remain intact; with the component, logic and catalogue quests below there are now 89 home quests in the original home and 178 across both levels at each destination.
 
 ### Component quests
 
@@ -128,6 +128,119 @@ Eight quests (26–33) teach logic patterns the earlier quests do not. Each is o
 | Reading Lamp          | Bedroom     | Two analogue inputs                | Lamp on when the dial is up and the room is dim             |
 
 The tests sit on every boundary, so typical mistakes fail the quest that teaches them: AND instead of OR, leaving out a range's end points, ignoring the alarm, or swapping the two pond thresholds.
+
+### Catalogue quests
+
+Quests 63–153 come from the IoT Quest catalogue (Q001–Q100), appended after the community quests in catalogue order (`public/catalogue-quests.js` and its three parts; each quest keeps its catalogue number in `catalogue`). Nine catalogue quests were already in the game and are not repeated: the Victorian farm quests (Q021–Q025), Garden Frost Alert (Q026) and the weather quests (Q056–Q058). Home quests are offered by whoever looks after their room; shop, warehouse, factory, road, parking and public-building quests are at those community buildings, offered by their contact or the community technician. Like the weather quests, each has a beginner level and an advanced level that replaces it at destinations played on advanced.
+
+Many need more than one condition per output, so the game gained:
+
+- **Timeline tests** (`public/quest-timeline.js`): ordered steps with durations, run on one program so its variables carry over, checked at the end of each step, exactly at the limits (a 30 s hold is ON at 29.8 s and OFF at 30 s). Steps can restart the controller (a power cut), drop and restore the network, send MQTT messages, and check what the program printed, published or retried. Delays are honoured as on hardware. Test your solution runs timelines after the scenarios and limit checks.
+- **Brightness tests**: a step can expect a PWM level (0–255, within 1) instead of ON or OFF.
+- **New devices** (`public/catalogue-devices.js`): leak sensor, local clock (2200 means 22:00), second soil probe, backup tank level, second motion sensor, flow meter, dust sensor, motor temperature probe, speed radar, two queue counters, battery monitor, solar and household load meters, turbidity and pH probes, sound level, rain forecast, data age and a data valid flag, push, reset and emergency buttons, entry and exit beams, a bike dock contact; heater, machine motor and charger relays, a second valve, red, amber, green and blue indicators, a second signal head, walk and don’t-walk lamps, a fault lamp and a second light zone. Each has practice controls, a reading range for diagnostics and a power draw. Bigger circuits get more pins after the original ones, so existing pins never move.
+- **Runtime additions**: Arduino `String`, `memoryWrite`/`memoryRead` (values that survive a restart), and `jsonFieldCount`/`jsonField` for checking untrusted messages.
+- **The Guide** explains the pattern each quest needs (hold timer, continuous-duration timer, latch, hysteresis, button edges, counting, PWM, time windows, phases, MQTT, restart memory, validation, averaging, logging) with a pattern in both languages, then checks the student’s program against the timelines. Check your understanding asks a timed prediction and a question about the pattern. Spot the bugs plants bugs in timers, counters, comparisons and outputs, kept only when the timelines catch them.
+- **Repair quests**: Find the Wrong Pin and Threshold Detective start from a program with a fault; Repair the Missing Ground starts with the devices installed and a missing ground (and, on advanced, pin conflicts).
+- **Predict Then Test** (advanced) asks for a prediction of every output before the results are shown, and scores it separately from the tests.
+- **World Technician Final Expedition** is passed by saved work: a lighting, an irrigation and a climate quest passed at three destinations (advanced also needs a wiring repair, a stale-data quest and a resource-limit quest).
+
+Every level of every catalogue quest has a worked program that passes its own tests on ESP32 and Pico in both languages (`tests/catalogue-quests.test.mjs`).
+
+| Q   | Quest                             | Where                           | Beginner tests | Advanced tests            |
+| --- | --------------------------------- | ------------------------------- | -------------- | ------------------------- |
+| 1   | Keep the Harvest Cool             | Utility room (Alex)             | Conditions     | Conditions                |
+| 2   | The Shop's Evening Sign           | Shop floor                      | Conditions     | Conditions                |
+| 3   | Reading Corner                    | Living room (Jordan)            | Conditions     | Timeline                  |
+| 4   | Curtains for a Hot Afternoon      | Living room (Jordan)            | Conditions     | Conditions                |
+| 5   | Stop the Fan Flicker              | Living room (Jordan)            | Timeline       | Timeline                  |
+| 6   | After-Shower Extractor            | Bathroom (Sam)                  | Conditions     | Timeline                  |
+| 7   | Kitchen Heat Watch                | Kitchen (Sam)                   | Conditions     | Timeline                  |
+| 8   | Washing-Machine Leak              | Utility room (Alex)             | Conditions     | Timeline                  |
+| 9   | Utility Door Reminder             | Utility room (Alex)             | Conditions     | Timeline                  |
+| 10  | Hands-Free Tap                    | Kitchen (Sam)                   | Conditions     | Timeline                  |
+| 11  | Light the Walk Home               | Garden path (Alex)              | Timeline       | Timeline                  |
+| 12  | Quiet-Hours Doorbell              | Entrance (Alex)                 | Conditions     | Conditions                |
+| 13  | Help Button                       | Bathroom (Sam)                  | Conditions     | Timeline                  |
+| 14  | Bedside Brightness                | Bedroom (Nina)                  | Timeline       | Timeline                  |
+| 15  | Room Comfort Indicator            | Kitchen (Sam)                   | Conditions     | Conditions                |
+| 16  | Rescue the Washing                | Garden path (Alex)              | Conditions     | Conditions                |
+| 17  | Water at the Right Time           | Greenhouse (Maya)               | Conditions     | Conditions                |
+| 18  | Two Garden Beds                   | Greenhouse (Maya)               | Conditions     | Timeline                  |
+| 19  | Rain Barrel Overflow              | Water tank (Sam)                | Conditions     | Timeline                  |
+| 20  | Greenhouse Water Reserve          | Greenhouse (Maya)               | Conditions     | Conditions                |
+| 27  | Grain Shed Ventilation            | Garage (Alex)                   | Conditions     | Conditions                |
+| 28  | Orchard Shade Screen              | Plant beds (Maya)               | Conditions     | Conditions                |
+| 29  | Remote Tank Trend                 | Water tank (Sam)                | Conditions     | Timeline                  |
+| 30  | Irrigation Pipe Fault             | Greenhouse (Maya)               | Conditions     | Timeline                  |
+| 31  | Market Fridge Reminder            | Shop floor                      | Conditions     | Timeline                  |
+| 32  | Bakery Proofing Cabinet           | Shop floor                      | Conditions     | Timeline                  |
+| 33  | Cafe Queue Counter                | Shop floor                      | Timeline       | Timeline                  |
+| 34  | Cold-Drink Vending Demo           | Shop floor                      | Timeline       | Timeline                  |
+| 35  | Shop Shutter Weather Guard        | Shop floor                      | Conditions     | Conditions                |
+| 36  | Loading-Bay Parking Guide         | Loading bay                     | Conditions     | Conditions                |
+| 37  | Parcel Locker Demonstration       | Loading bay                     | Timeline       | Timeline                  |
+| 38  | Warehouse Aisle Lights            | Loading bay                     | Conditions     | Timeline                  |
+| 39  | Conveyor Box Stop                 | Factory floor                   | Conditions     | Timeline                  |
+| 40  | Warehouse Inventory Alert         | Loading bay                     | Timeline       | Timeline                  |
+| 41  | Machine Guard Interlock           | Factory floor                   | Conditions     | Timeline                  |
+| 42  | Workshop Extraction               | Factory floor                   | Conditions     | Timeline                  |
+| 43  | Motor Overheat Lockout            | Factory floor                   | Conditions     | Timeline                  |
+| 44  | Parts Counter                     | Factory floor                   | Timeline       | Timeline                  |
+| 45  | Two-Hand Start Demonstration      | Factory floor                   | Conditions     | Timeline                  |
+| 46  | Timed Junction                    | Community roads                 | Timeline       | Timeline                  |
+| 47  | Pedestrian Request Crossing       | Community roads                 | Timeline       | Timeline                  |
+| 48  | Emergency Vehicle Priority        | Community roads                 | Timeline       | Timeline                  |
+| 49  | School-Zone Speed Sign            | Neighbourhood school            | Conditions     | Conditions                |
+| 50  | Traffic Queue Detector            | Community roads                 | Timeline       | Timeline                  |
+| 51  | Car-Park Availability             | Parking area                    | Timeline       | Timeline                  |
+| 52  | Bicycle Dock Check-In             | Parking area                    | Conditions     | Timeline                  |
+| 53  | Bus Shelter Lighting              | Riverside bus depot             | Conditions     | Conditions                |
+| 54  | Charging-Bay Demonstration        | Parking area                    | Conditions     | Timeline                  |
+| 55  | Railway-Crossing Model            | Community roads                 | Timeline       | Timeline                  |
+| 59  | Weather Data Goes Missing         | Greenhouse (Maya)               | Conditions     | Conditions                |
+| 60  | Forecast-Aware Garden Plan        | Greenhouse (Maya)               | Conditions     | Conditions                |
+| 61  | Flood-Level Beacon                | Water tank (Sam)                | Conditions     | Timeline                  |
+| 62  | Pond Refill and Drain             | Water tank (Sam)                | Conditions     | Timeline                  |
+| 63  | Rainwater First                   | Water tank (Sam)                | Conditions     | Timeline                  |
+| 64  | Water Quality Demonstrator        | Water tank (Sam)                | Conditions     | Conditions                |
+| 65  | Leak by Unexpected Flow           | Utility room (Alex)             | Conditions     | Timeline                  |
+| 66  | Empty-Room Energy Saver           | Living room (Jordan)            | Conditions     | Conditions                |
+| 67  | Solar Surplus Pump                | Water tank (Sam)                | Conditions     | Timeline                  |
+| 68  | Battery Reserve Lights            | Garage (Alex)                   | Conditions     | Conditions                |
+| 69  | Peak-Load Scheduler               | Kitchen (Sam)                   | Conditions     | Conditions                |
+| 70  | Daily Consumption Challenge       | Living room (Jordan)            | Timeline       | Timeline                  |
+| 71  | Library Quiet Indicator           | Neighbourhood school            | Conditions     | Timeline                  |
+| 72  | Community Hall Ventilation        | Riverside judo dojo             | Conditions     | Conditions                |
+| 73  | Playground Shade                  | Riverside children’s playground | Conditions     | Conditions                |
+| 74  | Sports-Ground Irrigation          | Riverside fountain park         | Conditions     | Conditions                |
+| 75  | Public Bin Fill Alert             | Meadow children’s playground    | Conditions     | Timeline                  |
+| 76  | Courtyard Fountain Schedule       | Riverside fountain park         | Conditions     | Conditions                |
+| 77  | Raised Veranda Rain Screen        | Entrance (Alex)                 | Conditions     | Conditions                |
+| 78  | Courtyard Night Lanterns          | Garden path (Alex)              | Conditions     | Timeline                  |
+| 79  | Mountain Cabin Freeze Watch       | Utility room (Alex)             | Conditions     | Conditions                |
+| 80  | Visitor Garden Water Feature      | Water tank (Sam)                | Timeline       | Timeline                  |
+| 81  | Publish the Weather               | Greenhouse (Maya)               | Timeline, MQTT | Timeline, MQTT            |
+| 82  | Remote Lamp Command               | Living room (Jordan)            | Timeline, MQTT | Timeline, MQTT            |
+| 83  | Sensor Heartbeat                  | Utility room (Alex)             | Timeline, MQTT | Timeline, MQTT            |
+| 84  | Reconnect Without Freezing        | Garden path (Alex)              | Timeline, MQTT | Timeline, MQTT            |
+| 85  | Stale Remote Command              | Entrance (Alex)                 | Timeline, MQTT | Timeline, MQTT            |
+| 86  | Find the Wrong Pin                | Garden path (Alex)              | Conditions     | Conditions                |
+| 87  | Repair the Missing Ground         | Entrance (Alex)                 | Conditions     | Conditions                |
+| 88  | Threshold Detective               | Bedroom (Nina)                  | Conditions     | Conditions                |
+| 89  | Frozen Sensor Recovery            | Kitchen (Sam)                   | Conditions     | Timeline                  |
+| 90  | Noisy Motion Signal               | Entrance (Alex)                 | Timeline       | Timeline                  |
+| 91  | Armed Door Alarm                  | Garage (Alex)                   | Conditions     | Timeline                  |
+| 92  | Authorised Locker Access          | Police station                  | Timeline, MQTT | Timeline, MQTT            |
+| 93  | Private Occupancy Dashboard       | Business office                 | Timeline, MQTT | Timeline, MQTT            |
+| 94  | Reject Untrusted Commands         | Bedroom (Nina)                  | Timeline, MQTT | Timeline, MQTT            |
+| 95  | Safe Restart                      | Water tank (Sam)                | Timeline       | Timeline                  |
+| 96  | One-Day Sensor Diary              | Greenhouse (Maya)               | Timeline       | Timeline                  |
+| 97  | Predict Then Test                 | Entrance (Alex)                 | Conditions     | Conditions, predict first |
+| 98  | Smart Home Commissioning          | Entrance (Alex)                 | Conditions     | Timeline                  |
+| 99  | Connected Community Challenge     | Business office                 | Conditions     | Timeline, MQTT            |
+| 100 | World Technician Final Expedition | Living room (Jordan)            | Saved progress | Saved progress            |
+
+Some catalogue rules were adapted to the game: whole-centimetre distances are checked at whole numbers; Two-Hand Start and Bicycle Dock Check-In check at 0.1 s and Noisy Motion Signal at 0.05 s, rather than the catalogue’s millisecond boundaries; Private Occupancy Dashboard keeps 5 one-minute buckets rather than 60; Emergency Vehicle Priority and Traffic Queue Detector run on the game’s two-road cycle; and Threshold Detective’s written explanation is the quest’s Check your understanding questions.
 
 ### Quests that follow the situation
 

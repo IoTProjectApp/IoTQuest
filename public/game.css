@@ -1028,9 +1028,15 @@ h2 {
   color: #909a84;
   line-height: 1.6;
 }
+.bench-heading > button {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+/* As many cards as the workbench has room for: its width depends on the layout (Split, Code, the
+   quest column), not only on the window, so the columns follow the panel rather than the screen. */
 .component-grid {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 180px), 1fr));
   gap: 12px;
 }
 .component-card {
@@ -1651,9 +1657,6 @@ body.reduced-motion #rainEffect {
   .world-footer > span:last-child {
     display: none;
   }
-  .component-grid {
-    grid-template-columns: repeat(4, 1fr);
-  }
   .bench-meta {
     display: none;
   }
@@ -1715,9 +1718,6 @@ body.reduced-motion #rainEffect {
   }
   .bench-tabs button {
     font-size: 11px;
-  }
-  .component-grid {
-    grid-template-columns: repeat(3, 1fr);
   }
   .wiring-layout {
     grid-template-columns: 1fr;
@@ -1961,7 +1961,7 @@ body.reduced-motion #rainEffect {
     left: 30px;
   }
   .component-grid {
-    grid-template-columns: repeat(2, 1fr);
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 140px), 1fr));
     gap: 8px;
   }
   .inventory-panel,

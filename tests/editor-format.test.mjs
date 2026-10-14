@@ -96,7 +96,8 @@ test('formatting refuses inconsistent Python indentation instead of guessing', (
 
 test('formatted starter and example programs are unchanged, idempotent and still run', () => {
   for (const board of ['ESP32', 'Raspberry Pi Pico'])
-    for (const m of missions)
+    // The final expedition has no program.
+    for (const m of missions.filter((m) => !m.capstone))
       for (const language of ['cpp', 'python'])
         for (const example of [false, true]) {
           const devices = defaults(m.ids, board),

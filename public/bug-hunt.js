@@ -1,5 +1,6 @@
 import { program, baseEnv } from './missions.js';
 import { Runtime } from './runtime.js';
+import { runSequence } from './quest-timeline.js';
 // "Spot the bugs": plants a few realistic bugs on separate lines of a mission's worked
 // example. Each bug alone makes the mission tests fail, so finding it can be followed by
 // fixing it and proving the repair with the real tests.
@@ -19,7 +20,10 @@ export function testsCatch(mission, code, language, devices, board) {
         .map((d) => ((result.outputs[d.pin] || 0) > 0 ? 1 : 0));
       if (!expected.every((v, i) => v === actual[i])) return true;
     }
-    return false;
+    // Stop at the first failing timeline: each one can run thousands of program passes.
+    return (mission.sequences || []).some(
+      (sequence) => !runSequence(mission, sequence, code, language, devices, board).pass,
+    );
   } catch {
     return true;
   }
@@ -84,10 +88,14 @@ function candidates(lines, language, devices, board, rand) {
     if (condition) {
       const body = condition[1],
         options = [];
-      const comparison = body.match(/(\w+) ([<>]) (\d+)/);
+      // Programs with timers and latches also compare with >=, <= and == N.
+      const comparison =
+        body.match(/(\w+) ([<>]) (\d+)/) ||
+        body.match(/(\w+) (<=|>=) (\d+)/) ||
+        body.match(/(\w+) (==) ([2-9]|\d{2,})\b/);
       if (comparison) {
         const [, name, op, value] = comparison,
-          flipped = op === '<' ? '>' : '<';
+          flipped = { '<': '>', '>': '<', '<=': '>=', '>=': '<=', '==': '!=' }[op];
         options.push({
           kind: 'flipped-comparison',
           replace: (t) => t.replace(`${name} ${op} ${value}`, `${name} ${flipped} ${value}`),
@@ -106,6 +114,15 @@ function candidates(lines, language, devices, board, rand) {
               fix: `Set the threshold back to ${value}.`,
             });
       }
+      // Text commands are exact: "ON" is not "on".
+      const command = body.match(/(\w+) == "([A-Z][^"]*)"/);
+      if (command)
+        options.push({
+          kind: 'wrong-text',
+          replace: (t) => t.replace(`"${command[2]}"`, `"${command[2].toLowerCase()}"`),
+          explain: `Messages must match exactly: the command is "${command[2]}", not "${command[2].toLowerCase()}".`,
+          fix: `Compare with "${command[2]}".`,
+        });
       const equals = body.match(/(\w+) == 1/);
       if (equals && !comparison)
         options.push({
@@ -135,6 +152,71 @@ function candidates(lines, language, devices, board, rand) {
         explain: `When the condition is true this should switch ${on[1]} ON, but it switches it OFF.`,
         fix: cpp ? 'Use HIGH.' : 'Use value(1).',
       });
+    // An output set from a variable or expression: digitalWrite(fanPin, fanOn);  /  fan.value(on)
+    const expression = text.match(
+      cpp
+        ? /^(\s+)digitalWrite\((\w+), (?!HIGH\b|LOW\b)(.+)\);$/
+        : /^(\s+)(\w+)\.value\((?![01]\))(.+)\)$/,
+    );
+    if (expression)
+      out.output.push({
+        line,
+        kind: 'wrong-output',
+        replace: (t) =>
+          cpp
+            ? t.replace(expression[3] + ');', '!(' + expression[3] + '));')
+            : t.replace('.value(' + expression[3] + ')', '.value(not (' + expression[3] + '))'),
+        explain: `This switches ${expression[2]} the wrong way round: OFF when it should be ON.`,
+        fix: `Write ${expression[3]} itself, not its opposite.`,
+      });
+    // A brightness set the wrong way round: analogWrite(ledPin, level);  /  led.duty_u16((level) * 257)
+    const brightness = text.match(
+      cpp ? /^\s+analogWrite\((\w+), (.+)\);$/ : /^\s+(\w+)\.duty_u16\(\((.+)\) \* 257\)$/,
+    );
+    if (brightness)
+      out.output.push({
+        line,
+        kind: 'wrong-output',
+        replace: (t) =>
+          cpp
+            ? t.replace(', ' + brightness[2] + ');', ', 255 - (' + brightness[2] + '));')
+            : t.replace('((' + brightness[2] + ')', '((255 - (' + brightness[2] + '))'),
+        explain: `This sets ${brightness[1]} bright when it should be dim, and dim when it should be bright.`,
+        fix: `Write ${brightness[2]} itself, not 255 minus it.`,
+      });
+    // A published message with the wrong text: mqttPublish("home/status", "occupied")
+    const message = text.match(/mqttPublish\("[^"]+", "([a-z][^"]*)"\)/);
+    if (message)
+      out.output.push({
+        line,
+        kind: 'wrong-message',
+        replace: (t) => t.replace(`"${message[1]}")`, `"${message[1].toUpperCase()}")`),
+        explain: `The dashboard expects "${message[1]}" exactly, in lower case.`,
+        fix: `Publish "${message[1]}".`,
+      });
+    // Counters and timers: count = count + 1;  /  lastSeen = millis()
+    const counter = text.match(/^\s*(\w+) = \1 ([+-]) (\w+);?$/),
+      clock = text.match(/^\s*(\w+) = (millis\(\)|time\.ticks_ms\(\));?$/);
+    if (counter)
+      (out.update ??= []).push({
+        line,
+        kind: 'wrong-update',
+        replace: (t) =>
+          t.replace(
+            `${counter[1]} ${counter[2]} ${counter[3]}`,
+            `${counter[1]} ${counter[2] === '+' ? '-' : '+'} ${counter[3]}`,
+          ),
+        explain: `${counter[1]} should go ${counter[2] === '+' ? 'up' : 'down'}, not ${counter[2] === '+' ? 'down' : 'up'}.`,
+        fix: `Use ${counter[2]} ${counter[3]}.`,
+      });
+    if (clock)
+      (out.update ??= []).push({
+        line,
+        kind: 'stale-time',
+        replace: (t) => t.replace(clock[2], '0'),
+        explain: `${clock[1]} should remember when this happened, so it needs the clock, not 0.`,
+        fix: `Set ${clock[1]} from ${clock[2]}.`,
+      });
     // Setup: pinMode(output0, OUTPUT);  /  output0 = Pin(26, Pin.OUT)
     if (cpp) {
       const mode = text.match(/^\s+pinMode\((\w+), OUTPUT\);/);
@@ -147,7 +229,7 @@ function candidates(lines, language, devices, board, rand) {
           fix: 'Use OUTPUT.',
         });
     } else {
-      const pinOut = text.match(/^(\w+) = Pin\((\d+), Pin\.OUT\)/);
+      const pinOut = text.match(/^(\w+) = (?:PWM\()?Pin\((\d+)(?:, Pin\.OUT)?\)/);
       if (pinOut) {
         const wrong = unusedPin(
           devices,
@@ -160,7 +242,7 @@ function candidates(lines, language, devices, board, rand) {
           out.setup.push({
             line,
             kind: 'wrong-pin',
-            replace: (t) => t.replace(`Pin(${pinOut[2]},`, `Pin(${wrong},`),
+            replace: (t) => t.replace(new RegExp('Pin\\(' + pinOut[2] + '\\b'), 'Pin(' + wrong),
             explain: `${pinOut[1]} is wired to GPIO ${pinOut[2]}, but this line uses GPIO ${wrong}.`,
             fix: `Use GPIO ${pinOut[2]}.`,
           });
@@ -170,7 +252,14 @@ function candidates(lines, language, devices, board, rand) {
   return out;
 }
 
-export function createBugHunt(mission, language, devices, board, { seed = 1, count = 3 } = {}) {
+// `kinds` limits the hunt to some groups of mistake (input, condition, output, update, setup).
+export function createBugHunt(
+  mission,
+  language,
+  devices,
+  board,
+  { seed = 1, count = 3, kinds = null } = {},
+) {
   const source = program(mission, language, devices, true),
     lines = source.split('\n'),
     rand = random(seed * 7919 + mission.title.length * 31 + (language === 'cpp' ? 1 : 2)),
@@ -181,7 +270,9 @@ export function createBugHunt(mission, language, devices, board, { seed = 1, cou
       copy[bug.line - 1] = bug.replace(copy[bug.line - 1]);
       return testsCatch(mission, copy.join('\n'), language, devices, board);
     },
-    order = Object.keys(groups).sort(() => rand() - 0.5),
+    order = Object.keys(groups)
+      .filter((group) => !kinds || kinds.includes(group))
+      .sort(() => rand() - 0.5),
     bugs = [],
     used = new Set();
   // One bug from each of the first `count` kinds of mistake that apply, on distinct lines.

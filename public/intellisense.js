@@ -178,6 +178,10 @@ const MQTT = [
   fn('mqttConnected', [], 'true while connected to the broker.'),
   fn('mqttReconnect', [], 'Reconnects after the network drops. Subscribe again afterwards.'),
   fn('mqttLastDelivery', [], 'When the last message arrived, in milliseconds.'),
+  fn('memoryWrite', ['name', 'value'], 'Saves a number that survives a restart or power cut.'),
+  fn('memoryRead', ['name'], 'A number saved with memoryWrite (0 if none was saved).'),
+  fn('jsonFieldCount', ['text'], 'How many fields a JSON object has (-1 if it is not valid JSON).'),
+  fn('jsonField', ['text', 'name'], 'One field of a JSON object ("" if it is missing or invalid).'),
 ];
 export const catalog = (language) => [...(language === 'python' ? PYTHON : CPP), ...MQTT];
 

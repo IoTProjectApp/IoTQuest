@@ -1,11 +1,20 @@
 import { analyzeCode } from './code-analysis.js';
 import { Runtime } from './runtime.js';
 import { ADC_SIGNALS as ADC_LIST } from './signals.js';
+import { catalogueDigitalSignals, catalogueRanges } from './catalogue-devices.js';
 // Editor diagnostics: advisory checks of the program against the installed wiring.
 // Warnings predict a runtime error or a condition that can never change; tips flag
 // habits that matter on real hardware. Nothing here blocks Run.
 const ADC_SIGNALS = new Set(ADC_LIST),
-  DIGITAL_SIGNALS = new Set(['motion', 'door', 'armed', 'occupied', 'bay', 'pedRequest']),
+  DIGITAL_SIGNALS = new Set([
+    'motion',
+    'door',
+    'armed',
+    'occupied',
+    'bay',
+    'pedRequest',
+    ...catalogueDigitalSignals,
+  ]),
   RANGES = {
     vibration: [0, 100, 'vibration units'],
     spaces: [0, 1, 'spaces'],
@@ -15,6 +24,7 @@ const ADC_SIGNALS = new Set(ADC_LIST),
     wind: [0, 300, 'km/h'],
     cloud: [0, 100, '% cloud cover'],
     distance: [0, 300, 'cm'],
+    ...catalogueRanges,
   };
 
 // The values a device can actually return to the program.

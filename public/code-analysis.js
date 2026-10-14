@@ -17,6 +17,10 @@ export function analyzeCode(code, language = 'cpp') {
     constants = new Map(),
     pinObjects = new Map(),
     readings = new Map(),
+    // How often each name is assigned, and names that also hold something other than a reading
+    // (a starting number, a count): a variable changed by the program is not a constant.
+    assignments = new Map(),
+    others = new Set(),
     uses = [],
     comparisons = [],
     lineOf = (t) => code.slice(0, t.start).split('\n').length,
@@ -40,9 +44,12 @@ export function analyzeCode(code, language = 'cpp') {
   const held = (name, i) => {
     const history = readings.get(name);
     if (!history) return null;
-    let latest = history[0];
+    let latest = null;
     for (const entry of history) if (entry.at < i) latest = entry;
-    return latest.reading;
+    if (latest) return latest.reading;
+    // Used before it is assigned in the text, it holds the previous pass's value; unless it also
+    // holds something else, such as a starting value, that is the reading.
+    return others.has(name) ? null : history[0].reading;
   };
   // The end of the statement starting at token i: true when token i ends it (a `;`, a block,
   // or a new line in MicroPython).
@@ -86,13 +93,17 @@ export function analyzeCode(code, language = 'cpp') {
     if (name.type !== 'word') continue;
     if (/^([-+*/%&|^]|<<|>>|\/\/)?=$|^(\+\+|--)$/.test(eq.text) && eq.text !== '=') {
       if (readings.has(name.text)) readings.get(name.text).push({ at: i, reading: null });
+      assignments.set(name.text, (assignments.get(name.text) || 0) + 2);
+      others.add(name.text);
       continue;
     }
     if (eq.text !== '=') continue;
+    assignments.set(name.text, (assignments.get(name.text) || 0) + 1);
     const v = value(i + 2);
     if (v && !/^[(.]$/.test(tokens[v.end + 1]?.text || '')) {
       if (!constants.has(name.text)) constants.set(name.text, v.value);
       if (readings.has(name.text)) readings.get(name.text).push({ at: i, reading: null });
+      others.add(name.text);
       continue;
     }
     let j = i + 2,
@@ -127,6 +138,7 @@ export function analyzeCode(code, language = 'cpp') {
     if (reading || readings.has(name.text))
       readings.set(name.text, [...(readings.get(name.text) || []), { at: i, reading }]);
   }
+  for (const [name, count] of assignments) if (count > 1) constants.delete(name);
   // Pass 2: calls and method uses.
   for (let i = 0; i < tokens.length; i++) {
     const t = tokens[i];

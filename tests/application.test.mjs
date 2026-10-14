@@ -43,6 +43,9 @@ import {
 } from '../public/custom-quests.js';
 import { BoardLink, readingsToEnv, outputLine, boardProgram } from '../public/hardware.js';
 import { boardPanelHTML } from '../public/board-view.js';
+import { catalogueEnvMeta, catalogueToggles } from '../public/catalogue-devices.js';
+import { timelineResults } from '../public/quest-timeline.js';
+import { expeditionResults } from '../public/expedition.js';
 import test from 'node:test';
 import { localSkyDate, DEFAULT_OBSERVER } from '../public/astronomy.js';
 import assert from 'node:assert/strict';
@@ -446,6 +449,10 @@ function harness(
     outputLine,
     boardProgram,
     boardPanelHTML,
+    catalogueEnvMeta,
+    catalogueToggles,
+    timelineResults,
+    expeditionResults,
     structuredClone,
     Blob,
     URL,
@@ -1362,7 +1369,7 @@ test('malformed saved progress falls back to defaults instead of breaking startu
     player: null,
     name: 5,
     color: 'red;background:url(x)',
-    mission: 99,
+    mission: 9999,
     completed: [],
     projects: { 0: { devices: 'bad', lab: { evidence: 'bad' } } },
     locationProgress: { kyoto: { completed: null }, broken: 7 },
@@ -2838,7 +2845,7 @@ test('the Free build button always matches whether Free build is on', async () =
 });
 test('a corrupt saved home quest or controller falls back instead of breaking Original home', async () => {
   for (const saved of [
-    { activeLocation: 'kyoto', legacyMission: 99, legacyBoard: 'Z80' },
+    { activeLocation: 'kyoto', legacyMission: 9999, legacyBoard: 'Z80' },
     { activeLocation: 'kyoto', legacyMission: '2', board: 7 },
     { locationProgress: { kyoto: { board: 42, projects: { 0: { board: 'x', devices: [] } } } } },
   ]) {

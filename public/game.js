@@ -26,6 +26,7 @@ import { World3D } from './world3d.js';
 import { toWorld, fromWorld } from './world-math.js';
 import { visitRequest, visitEntry, stepToward } from './household-visits.js';
 import { ADC_SIGNALS, ADC_SCALE, outputLevel } from './signals.js';
+import { catalogueEnvMeta, catalogueToggles } from './catalogue-devices.js';
 import { locations, locationById, adaptMissions, progressForLocation } from './locations.js';
 import { WeatherService, advanceEnvironment, servoLevel } from './weather.js';
 import { advancedMenu } from './advanced-tools.js';
@@ -50,6 +51,8 @@ import { esc, setHTML } from './html.js';
 import { sanitizeSaved } from './persistence.js';
 import { highlight } from './syntax-highlight.js';
 import { SerialPlotter, findThresholds, PLOT_LIMIT } from './plotter.js';
+import { timelineResults } from './quest-timeline.js';
+import { expeditionResults } from './expedition.js';
 import { diagnose } from './diagnostics.js';
 import { createBugHunt, scoreBugHunt } from './bug-hunt.js';
 import { explainCode, removeExplanations, hasExplanations } from './code-explain.js';
@@ -323,7 +326,13 @@ const completionKey = () => activeFault?.rewardKey ?? activeKey();
 const project = () => {
   const key = !activeFault && free ? 'free' : activeKey();
   const projects = locationProfile().projects;
-  if (!projects[key]) projects[key] = { devices: [], code: {}, board: state.board };
+  // Repair quests start with their devices already installed and wired, with a fault to find.
+  if (!projects[key])
+    projects[key] = {
+      devices: (!activeFault && !free && mission().prewired?.(state.board, defaults)) || [],
+      code: {},
+      board: state.board,
+    };
   return projects[key];
 };
 // Each project records the controller its pins and code are for. Older saves did not: their
@@ -356,6 +365,10 @@ function remapProject(p, board, previous = projectBoard(p)) {
     board,
   );
   p.devices = p.devices.map((d, i) => ({ ...d, pin: plannedDevices[i].pin }));
+  // A repair quest not yet passed starts again from its faulty wiring for the new board, so
+  // changing controller cannot repair it.
+  const prewired = !activeFault && !free && mission().prewired;
+  if (prewired && !currentCompletions()[completionKey()]) p.devices = prewired(board, defaults);
   p.codeByBoard = { ...p.codeByBoard, [previous]: p.code };
   const kept = p.codeByBoard[board];
   delete p.codeByBoard[board];
@@ -665,6 +678,15 @@ const envMeta = {
   pedRequest: ['🚶', 'Pedestrian request', '', 0, 1, 'Released', 'Requested'],
   spaces: ['P', 'Available spaces', '', 0, 1, 'Occupied', 'Free'],
   pond: ['≈', 'Pond level', '%', 0, 100, 'Low', 'Full'],
+  ...catalogueEnvMeta,
+};
+// On/off conditions shown as checkboxes rather than sliders.
+const TOGGLE_LABELS = {
+  motion: 'Resident moving nearby',
+  door: 'Garage door open',
+  armed: 'Security armed',
+  occupied: 'Residents at home',
+  ...catalogueToggles,
 };
 // Conditions shown in the panel: only what this quest's sensors (and any extra sensors
 // installed in the circuit) can read, unless the player asks to explore every condition.
@@ -758,15 +780,10 @@ function renderEnvironment() {
   $('envControls').innerHTML =
     signals
       .map((s) => {
-        if (['motion', 'door', 'armed', 'occupied'].includes(s))
+        if (Object.hasOwn(TOGGLE_LABELS, s))
           return (
             '<label class="toggle-row">' +
-            {
-              motion: 'Resident moving nearby',
-              door: 'Garage door open',
-              armed: 'Security armed',
-              occupied: 'Residents at home',
-            }[s] +
+            TOGGLE_LABELS[s] +
             '<input type="checkbox" data-env="' +
             s +
             '" ' +
@@ -2736,6 +2753,29 @@ function testSolution() {
     return;
   }
   stop(false);
+  // The final expedition is passed by work saved at destinations, not by a program.
+  if (!activeFault && mission().capstone) {
+    testResults = expeditionResults(
+      state,
+      missions,
+      state.difficulty === 'advanced' && !!currentLocation(),
+      (id) => locationById(id)?.city || id,
+    );
+    finishTests(mission(), project().devices);
+    return;
+  }
+  // Some quests ask for a prediction before the results are shown; it is scored separately.
+  const predict = !activeFault && mission().predictFirst;
+  if (predict && !labState().prediction) {
+    predictionPending = true;
+    testResults = [];
+    switchTab('tests');
+    return;
+  }
+  // Each test run asks for a fresh prediction, so it is never scored against old code, even when
+  // this run stops early at circuit validation.
+  const picks = predict ? labState().prediction : null;
+  if (predict) labState().prediction = null;
   const errors = prerequisites();
   if (errors.length) {
     testResults = [{ name: 'Circuit validation', pass: false, detail: errors.join(' ') }];
@@ -2789,6 +2829,8 @@ function testSolution() {
           env,
         });
       }
+      // Timers, latches and messages are checked with ordered steps on one running program.
+      testResults.push(...timelineResults(m, code(), state.language, ds, state.board));
       if (!activeFault && state.mission === 2) {
         const dynamic = new Runtime(code(), state.language, ds, state.board);
         let env = { ...baseEnv, soil: 20, tank: 80 },
@@ -2845,7 +2887,43 @@ function testSolution() {
         ' L across 5-second scenarios and the irrigation feedback test',
     });
     labState().assessment = { budget, consumption: assessment };
+    if (predict) testResults.push(predictionResult(m, ds, picks));
   }
+  finishTests(m, ds);
+}
+// The prediction is reported beside the tests but never decides them.
+function predictionResult(m, ds, picks) {
+  const outs = m.ids.map((id) => ds.find((d) => d.id === id)).filter((d) => d?.output);
+  let result;
+  try {
+    const runtime = new Runtime(code(), state.language, ds, state.board);
+    for (let i = 0; i < 25; i++) result = runtime.step({ ...baseEnv, ...m.predictFirst.env });
+  } catch (e) {
+    // A program that cannot run has no outputs to compare the prediction with.
+    return {
+      name: 'Your prediction (scored separately)',
+      pass: true,
+      detail: 'Not scored: the program stopped with an error (' + e.message + ').',
+    };
+  }
+  const actual = outs.map((d) => ((result?.outputs[d.pin] || 0) > 0 ? 1 : 0)),
+    right = actual.filter((v, i) => v === picks[i]).length;
+  return {
+    name: 'Your prediction (scored separately)',
+    pass: true,
+    detail:
+      right +
+      ' of ' +
+      outs.length +
+      ' predicted correctly for ' +
+      m.predictFirst.label +
+      ': ' +
+      outs.map((d, i) => d.name + ' ' + (actual[i] ? 'ON' : 'OFF')).join(', ') +
+      '.',
+  };
+}
+let predictionPending = false;
+function finishTests(m, ds) {
   currentPassed = testResults.length > 0 && testResults.every((r) => r.pass);
   if (currentPassed) {
     if (!currentCompletions()[completionKey()]) {
@@ -2885,8 +2963,40 @@ function testSolution() {
   switchTab('tests');
 }
 $('testMission').onclick = testSolution;
+function predictionForm(m) {
+  const outs = m.ids.map((id) => components.find((c) => c.id === id)).filter((c) => c?.output);
+  $('benchContent').innerHTML =
+    '<div class="tests-panel"><div class="bench-heading"><div><h3>' +
+    esc(m.title) +
+    ' · predict first</h3><p>Before the results are shown, predict each output for ' +
+    esc(m.predictFirst.label) +
+    '. Your prediction is scored on its own and never decides the tests.</p></div></div>' +
+    outs
+      .map(
+        (c, i) =>
+          '<label class="setting-row">' +
+          esc(c.name) +
+          '<select data-predict="' +
+          i +
+          '"><option value="">Choose…</option><option value="1">ON</option><option value="0">OFF</option></select></label>',
+      )
+      .join('') +
+    '<div class="bench-heading"><button class="primary" id="submitPrediction">Save prediction and run the tests</button></div></div>';
+  $('submitPrediction').onclick = () => {
+    const picks = [...document.querySelectorAll('[data-predict]')].map((el) => el.value);
+    if (picks.some((v) => v === '')) {
+      toast('Predict every output first.');
+      return;
+    }
+    labState().prediction = picks.map(Number);
+    predictionPending = false;
+    save();
+    testSolution();
+  };
+}
 function renderTests() {
   let m = mission();
+  if (predictionPending && !activeFault && m.predictFirst) return predictionForm(m);
   $('benchContent').innerHTML =
     '<div class="tests-panel"><div class="bench-heading"><div><h3>' +
     esc(m.title) +
@@ -2934,10 +3044,12 @@ function renderTests() {
     '<div class="bench-heading"><button class="outline" id="backCode">Back to code</button>' +
     (currentPassed && !activeFault && state.mission < activeMissions().length - 1
       ? '<button class="primary" id="nextMission">Next quest</button>'
-      : !activeFault && solvedOwnCode(state.mission)
+      : !activeFault && solvedOwnCode(state.mission) && !m.capstone
         ? '<button class="outline" id="debugBtn">Try a debugging challenge</button>'
         : '') +
-    (free || activeFault ? '' : '<button class="outline" id="huntBtn">Spot the bugs</button>') +
+    (free || activeFault || m.capstone
+      ? ''
+      : '<button class="outline" id="huntBtn">Spot the bugs</button>') +
     '</div></div>';
   $('testAgain').onclick = testSolution;
   renderUnderstanding();
@@ -3068,17 +3180,24 @@ function renderUnderstanding() {
     };
 }
 function debugChallenge() {
-  const m = mission();
-  project().code[state.language] = program(
-    m,
-    state.language,
-    project().devices.length ? project().devices : planned(),
-    true,
-    state.board,
-  ).replace(
-    state.language === 'cpp' ? 'HIGH' : 'value(1)',
-    state.language === 'cpp' ? 'LOW' : 'value(0)',
-  );
+  const m = mission(),
+    devices = project().devices.length ? project().devices : planned(),
+    example = program(m, state.language, devices, true, state.board),
+    flipped = example.replace(
+      state.language === 'cpp' ? 'HIGH' : 'value(1)',
+      state.language === 'cpp' ? 'LOW' : 'value(0)',
+    );
+  // Programs that set outputs from variables (timers, latches) have no HIGH to flip: plant one
+  // output bug the tests catch instead.
+  const hunt =
+      flipped === example &&
+      createBugHunt(m, state.language, devices, state.board, { count: 1, kinds: ['output'] }),
+    planted = !hunt ? flipped : hunt.bugs.length ? hunt.code : null;
+  if (!planted) {
+    toast('This quest has no output command the tests can catch, so there is no debug challenge.');
+    return;
+  }
+  project().code[state.language] = planted;
   markEdited();
   switchTab('code');
   toast('Debug challenge: one output command is wrong. Use mission tests to find and fix it.');
@@ -3086,6 +3205,7 @@ function debugChallenge() {
 function selectMission(index) {
   stop(false);
   activeFault = null;
+  predictionPending = false;
   sensorOverrides = {};
   // Opening the destination restores its 3D graphics and starts the player at home.
   if (state.travelScreen) showLocation();
@@ -4989,13 +5109,13 @@ function startWorld(createRenderer) {
     $('graphicsMessage').hidden = false;
   }
 }
-// ?renderer=three draws the world with three.js instead, while it is being brought level with
-// the WebGL renderer (the browser tests set IOTQUEST_RENDERER to the same effect). The world then
-// starts once three.js has loaded. three.js needs WebGL 2 and is not stored for offline play, so
-// the game falls back to its own renderer when it cannot load or start.
+// The world is drawn with three.js, which adds the rigged, animated people; the world starts
+// once three.js has loaded. ?renderer=webgl uses the game's own WebGL renderer instead (the
+// browser tests set IOTQUEST_RENDERER to the same effect). three.js needs WebGL 2, so the game
+// also falls back to its own renderer when three.js cannot load or start.
 if (
-  /[?&]renderer=three(&|$)/.test(globalThis.location?.search || '') ||
-  globalThis.IOTQUEST_RENDERER === 'three'
+  !/[?&]renderer=webgl(&|$)/.test(globalThis.location?.search || '') &&
+  globalThis.IOTQUEST_RENDERER !== 'webgl'
 )
   import('./world-renderer-three.js').then(
     ({ ThreeWorldRenderer }) =>

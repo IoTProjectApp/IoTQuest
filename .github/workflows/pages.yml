@@ -42,8 +42,8 @@ jobs:
 
   # Drives the real game in headless Chromium (software WebGL) to catch layout, theme and
   # accessibility regressions. Kept out of the deploy gate until it has proven stable on CI.
-  # Runs once per world renderer (the game's own WebGL renderer and the three.js one being
-  # brought level with it, ?renderer=three), each in two parts that run side by side.
+  # Runs once per world renderer (three.js, the default, and the game's own WebGL renderer it
+  # falls back to, ?renderer=webgl), each in two parts that run side by side.
   browser-part:
     name: browser part (${{ matrix.renderer }}, ${{ matrix.part }})
     runs-on: ubuntu-latest

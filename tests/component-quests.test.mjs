@@ -1,4 +1,5 @@
 import { communityQuests } from '../public/community-quests.js';
+import { catalogueQuests } from '../public/catalogue-quests.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
@@ -18,8 +19,13 @@ import { componentQuests } from '../public/component-quests.js';
 // Quests 18–25 (indices 17–24), after the original 17 and before the logic quests.
 const first = 17;
 
-test('component and community quests together use every component', () => {
-  const used = new Set([...componentQuests, ...communityQuests].flatMap((q) => q.ids));
+test('component, community and catalogue quests together use every component', () => {
+  const used = new Set(
+    [...componentQuests, ...communityQuests, ...catalogueQuests].flatMap((q) => [
+      ...q.ids,
+      ...(q.advanced?.ids || []),
+    ]),
+  );
   assert.deepEqual(
     components.filter((c) => !used.has(c.id)).map((c) => c.id),
     [],

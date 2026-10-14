@@ -14,7 +14,8 @@ test('starter and worked-example programs produce no diagnostics on either board
   for (const board of ['ESP32', 'Raspberry Pi Pico'])
     for (const m of missions)
       for (const language of ['cpp', 'python'])
-        for (const example of [false, true]) {
+        // A repair quest's starter has a fault on purpose, and its diagnostic is the clue.
+        for (const example of m.starter ? [true] : [false, true]) {
           const ds = defaults(m.ids, board);
           assert.deepEqual(
             diagnose(program(m, language, ds, example), language, ds),

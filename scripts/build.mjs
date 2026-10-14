@@ -54,18 +54,10 @@ if (channel) {
 // Offline support: stamp the service worker with every built file and a content version, so
 // installed copies update on the next visit after a deploy.
 const files = await listFiles('dist/client');
-// The three.js renderer, its add-ons and the character models only load with ?renderer=three
-// while it is being brought level with the WebGL renderer, so students do not download them;
-// offline, the game falls back to WebGL.
-const UNCACHED = new Set([
-  'sw.js',
-  'world-renderer-three.js',
-  'three-characters.js',
-  'three-outfits.js',
-  'vendor/three.module.min.js',
-]);
-const uncached = (f) =>
-  UNCACHED.has(f) || f.startsWith('vendor/three-addons/') || f.startsWith('models/');
+// The character models (about 45 MB) load as people come into view and are not stored for
+// offline play; offline, the game draws its own jointed figures in their place.
+const UNCACHED = new Set(['sw.js']);
+const uncached = (f) => UNCACHED.has(f) || f.startsWith('models/');
 const version = createHash('sha256');
 for (const f of files) version.update(f).update(await readFile('dist/client/' + f));
 await writeFile(

@@ -5,9 +5,11 @@ import { ADC_SIGNALS, ADC_SCALE } from './signals.js';
 // them a wrong limit (soil < 3200 instead of 2400, temp >= 28 instead of > 27) passes whenever the
 // hand-written scenarios sit far from the threshold.
 
-// How far either side of a limit to test, in the units a program reads. ADC sensors read whole
-// numbers; calibrated channels are fractional, so half a unit catches "> 27" written as ">= 28".
-const step = (signal) => (ADC_SIGNALS.includes(signal) ? 1 : 0.5);
+// How far either side of a limit to test, in the units a program reads. ADC sensors, distances in
+// whole centimetres, the clock and counts read whole numbers; calibrated channels are fractional,
+// so half a unit catches "> 27" written as ">= 28".
+const WHOLE = ['distance', 'clock', 'queue', 'queue2'];
+const step = (signal) => (ADC_SIGNALS.includes(signal) || WHOLE.includes(signal) ? 1 : 0.5);
 // A program reading converted back to the stored level a scenario uses.
 const level = (signal, reading) => (ADC_SIGNALS.includes(signal) ? reading / ADC_SCALE : reading);
 const THRESHOLD = /(\w+)\s*(<=|>=|<|>)\s*(-?\d+(?:\.\d+)?)/g;

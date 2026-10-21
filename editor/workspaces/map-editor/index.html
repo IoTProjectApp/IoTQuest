@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Map Editor · IoT Quest Editor</title>
+    <link rel="stylesheet" href="/editor/ui/shell.css" />
+    <link rel="stylesheet" href="map-editor.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <a class="button icon-only" id="home" href="/editor/ui/" title="Back to workspaces"></a>
+      <div class="title">
+        <strong>Map Editor</strong>
+        <span>IoT Quest Editor</span>
+      </div>
+      <div class="divider"></div>
+      <label class="city">
+        <span>City</span>
+        <select class="select" id="city" title="The destination to edit"></select>
+      </label>
+      <div class="segmented" id="views" role="group" aria-label="Jump to">
+        <button data-view="house" title="Look at the house">House</button>
+        <button data-view="garden" title="Look at the whole property">Garden</button>
+        <button data-view="town" title="Look at the town">Town</button>
+      </div>
+      <div class="spacer"></div>
+      <button class="button icon-only" id="undo" title="Undo (⌘Z)"></button>
+      <button class="button icon-only" id="redo" title="Redo (⇧⌘Z)"></button>
+      <span class="save-state" id="save-state"></span>
+      <button class="button" id="playtest" title="Open the game in a new window (⌘P)"></button>
+      <button class="button primary" id="save" title="Save every city's changes (⌘S)"></button>
+    </header>
+
+    <div class="workspace">
+      <nav class="tools" id="tools" aria-label="Tools">
+        <button data-tool="select" data-key="V" title="Select and move objects (V)"></button>
+        <button
+          data-tool="object"
+          data-key="O"
+          title="Place objects from the catalogue (O)"
+        ></button>
+        <button data-tool="erase" data-key="X" title="Remove objects (X)"></button>
+        <button data-tool="camera" data-key="C" title="Look around without selecting (C)"></button>
+      </nav>
+
+      <main class="stage">
+        <div class="view">
+          <canvas id="canvas" tabindex="0" aria-label="3D world"></canvas>
+          <div class="gizmo-bar" id="gizmo-bar">
+            <div class="segmented" id="gizmo-modes" role="group" aria-label="Gizmo">
+              <button data-mode="translate" title="Move (G)"></button>
+              <button data-mode="rotate" title="Turn (R)"></button>
+              <button data-mode="scale" title="Resize (S)"></button>
+            </div>
+            <button class="toggle" id="snap" title="Snap to 10 cm steps and 15° turns"></button>
+          </div>
+          <div class="hover-label" id="hover-label" hidden></div>
+          <div class="hint" id="hint"></div>
+          <div class="toast" id="toast" role="status" hidden></div>
+          <div class="loading" id="loading">Opening…</div>
+        </div>
+        <section class="catalogue" id="catalogue" hidden aria-label="Catalogue">
+          <div class="catalogue-head">
+            <div class="tabs" id="tabs" role="tablist"></div>
+            <label class="search">
+              <span class="search-icon" id="search-icon"></span>
+              <input class="input" id="search" type="search" placeholder="Search the catalogue" />
+            </label>
+          </div>
+          <div class="items" id="items"></div>
+        </section>
+      </main>
+
+      <aside class="inspector" id="inspector" aria-label="Inspector"></aside>
+    </div>
+    <script type="module" src="app.js"></script>
+  </body>
+</html>

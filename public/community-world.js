@@ -183,9 +183,11 @@ export function addCommunityWorld(model, location) {
       );
     const lx = x + (horizontal ? 0 : 7),
       lz = z + (horizontal ? 7 : 0);
+    model.tag?.('town/street-light#');
     box(lx, 2, lz, 0.15, 4, 0.15, '#526466');
     lights.push(box(lx, 4, lz, 0.7, 0.25, 0.7, '#e5d69e', { streetLamp: true }));
     lightPools.push(...streetLightPool(box, lx, lz, 4.5));
+    model.tag?.();
   }
   for (const j of sim.map.junctions.filter((j) => j.id !== 'yard'))
     box(j.x, 0.09, j.z, 12, 0.05, 12, '#414950');
@@ -681,6 +683,7 @@ export function addCommunityWorld(model, location) {
     people,
     workers,
   };
+  tagTownGroups(model, { sim, origin, furnishings, busStops });
   // A high cloud layer and flocks of birds over the whole world.
   const placed = objects.filter((m) => m.pos[1] > -5);
   model.community.sky = addWorldSky(model, {
@@ -693,6 +696,42 @@ export function addCommunityWorld(model, location) {
     },
   });
   return model.community;
+}
+// Edit groups for the world editor (see world-layout.js): each piece of furnishing, each bus stop,
+// and each town lot (a shop, a residence, the park...) with everything else standing on it. People
+// are left out (their animation places them every frame), as are roads and traffic signals.
+function tagTownGroups(model, { sim, origin, furnishings, busStops }) {
+  const people = new Set(
+    (model.extraPeople || []).flatMap((p) => [...(p.person?.meshes || []), ...(p.standIn || [])]),
+  );
+  for (const group of furnishings.groups) {
+    const id = 'town/furniture/' + group.id;
+    for (const part of group.parts) part.editGroup = id;
+    for (const c of model.colliders) if (c.communityFurnishing === group.id) c.editGroup = id;
+  }
+  busStops.forEach(({ parts, lamp }, i) => {
+    for (const part of [...parts, lamp]) if (part) part.editGroup = 'town/bus-stop#' + (i + 1);
+  });
+  const lots = sim.map.buildings
+    .filter((b) => !b.existingProperty)
+    .map((b) => ({ id: 'town/' + b.id, x: origin.x + b.x, z: origin.z + b.z, w: b.w, d: b.d }))
+    // The smallest lot wins where lots overlap.
+    .sort((a, b) => a.w * a.d - b.w * b.d);
+  // A building's own trim (fences, eaves, driveways) may reach a little past its lot.
+  const lotAt = (x, z, margin = 0) =>
+    lots.find((l) => Math.abs(x - l.x) <= l.w / 2 + margin && Math.abs(z - l.z) <= l.d / 2 + margin)
+      ?.id;
+  for (const m of model.objects) {
+    if (!(m.community || m.regionalStreet) || m.editGroup || m.actor || m.pos[1] < -5) continue;
+    if (people.has(m) || m.trafficSignal || m.busStop) continue;
+    const lot = lotAt(m.pos[0], m.pos[2], m.residence || m.civic || m.recreation ? 3 : 0);
+    if (lot) m.editGroup = lot;
+  }
+  for (const c of model.colliders)
+    if (c.community && !c.editGroup && !c.communityFurnishing) {
+      const lot = lotAt(c.x, c.z);
+      if (lot) c.editGroup = lot;
+    }
 }
 export function updateCommunityWorld(model, state, seconds) {
   const c = model.community;

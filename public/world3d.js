@@ -28,6 +28,7 @@ import {
 } from './world-math.js';
 import { createWorldModel } from './world-model.js';
 import { createRegionalModel } from './regions.js';
+import { applyWorldLayout } from './world-layout.js';
 import { updateClouds } from './clouds.js';
 // Left-right flip used to draw mirrored homes.
 const MIRROR = new Float32Array([-1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]);
@@ -50,6 +51,13 @@ const LAMP_COLOURS = {
 };
 // Re-exported for the tests and tools that import them from here.
 export { frustumTest, isSoftwareRenderer } from './world-renderer-webgl.js';
+// A destination's world: built by code, with the town around it and the hand-placed changes saved by
+// the world editor (data/world-layout.js).
+export function buildWorldModel(id) {
+  const model = createRegionalModel(id || 'legacy');
+  addCommunityWorld(model, locationById(id));
+  return applyWorldLayout(model, id || 'legacy');
+}
 // Most simulated seconds one frame advances the community; 360× at 60 fps is about 6 s.
 const MAX_SIM_STEP = 10;
 export class World3D {
@@ -67,8 +75,7 @@ export class World3D {
     this.onRecover = onRecover;
     this.renderer = createRenderer?.(canvas) ?? new WebGLWorldRenderer(canvas);
     this.gl = this.renderer.gl;
-    this.model = createRegionalModel(getState?.().locationId || 'legacy');
-    addCommunityWorld(this.model, locationById(getState?.().locationId));
+    this.model = buildWorldModel(getState?.().locationId);
     prepareWorldMaterials(this.model);
     this.yaw = 0.32;
     this.pitch = 0.85;
@@ -379,8 +386,7 @@ export class World3D {
     this.upgradeSignature = null;
     this.lastSimClockMs = undefined;
     this.surfaceTime = 0;
-    this.model = createRegionalModel(id);
-    addCommunityWorld(this.model, locationById(id));
+    this.model = buildWorldModel(id);
     prepareWorldMaterials(this.model);
     this.communityView = false;
     this.streetLights = null;

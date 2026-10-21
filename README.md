@@ -44,6 +44,10 @@ To add or change characters or animations:
 
 `public/` contains the source. The build produces static assets in `dist/client/` and a Cloudflare-compatible asset/weather Worker in `dist/server/index.js`. Serve assets over HTTP; module workers do not work from a file URL.
 
+### World editor (development only)
+
+`./scripts/world-editor.sh` opens the IoT Quest Editor, a desktop tool (Electron) for correcting the generated world by hand. Its **Map Editor** workspace moves, adds and removes furniture, garden features and town buildings per city. It saves to `public/data/world-layout.js`, which the game applies when it builds each city. With no changes there, every world is built exactly as before. The editor is never built or deployed; see `editor/README.md`.
+
 ## Explore, install, wire, program, test
 
 Choose a country and city using the rotating, zoomable globe or accessible 2D map. View regional inspiration, sources, weather and progress before travelling. WASD, arrows and on-screen controls move the technician; E interacts (at a room or garden installation point it installs devices) and T talks to the nearest resident. Select rooms or garden areas for detailed views. Device labels select their live circuit entries and related code. Every installed device gets its own spot in its room: on that room's floor (never through a doorway into the next), clear of furniture, away from where the resident and the technician stand, and about a metre from other devices (closer only in the smallest rooms). Adding a device never moves the others, and crowded labels fan out so each stays readable.

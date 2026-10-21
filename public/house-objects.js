@@ -1,8 +1,13 @@
 // Furniture is assembled at metre scale. Its collision footprint stays separate
 // from the visible legs, openings and cushions so small details never trap players.
 import { furnishingTransform, placeFurnishing } from './house-design.js';
-export function buildHouseObjects({ mesh, colliders, dynamic, design }) {
+export function buildHouseObjects({ mesh, tag, colliders, dynamic, design }) {
   let prop;
+  // Each piece of furniture is its own edit group for the world editor (see world-layout.js).
+  const use = (name) => {
+    prop = name;
+    tag?.('furniture/' + name + '#');
+  };
   const textiles = new Set(['#829b91', '#a0b5a7', '#a8b4a7']);
   const timbers = new Set(['#aa8868', '#b89978', '#9f8064', '#c5a882', '#b99b76']);
   const part = (shape, pos, size, color, extra = {}) => {
@@ -62,7 +67,7 @@ export function buildHouseObjects({ mesh, colliders, dynamic, design }) {
     box(x, y + 0.047, z, w, 0.012, d, c);
   };
 
-  prop = 'bed';
+  use('bed');
   footprint(-11, -8.55, 2.55, 3);
   legs(-11, -8.55, 2.2, 2.6, 0.45, 0.22);
   round(-11, 0.51, -8.55, 2.55, 0.22, 3, '#957354');
@@ -76,7 +81,7 @@ export function buildHouseObjects({ mesh, colliders, dynamic, design }) {
     });
     round(x, 1.09, -10.03, 1.24, 0.83, 0.17, '#a5907c', fabric);
   }
-  prop = 'nightstand';
+  use('nightstand');
   footprint(-8.95, -9.3, 0.65, 0.7);
   legs(-8.95, -9.3, 0.5, 0.54, 0.43, 0.2);
   round(-8.95, 0.64, -9.3, 0.65, 0.43, 0.7, '#aa8868');
@@ -84,14 +89,14 @@ export function buildHouseObjects({ mesh, colliders, dynamic, design }) {
     round(-8.95, y, -8.94, 0.58, 0.15, 0.035, '#c7ab8e');
     box(-8.95, y, -8.91, 0.16, 0.02, 0.025, '#5b635f', metal);
   }
-  prop = 'table-lamp';
+  use('table-lamp');
   cylinder(-8.95, 0.9, -9.3, 0.18, 0.04, '#b7a38d', metal);
   cylinder(-8.95, 1.13, -9.3, 0.035, 0.43, '#a4937b', metal);
   part('shade', [-8.95, 1.43, -9.3], [0.52, 0.34, 0.52], '#f7ecda', { roughness: 1 });
-  prop = 'blinds';
+  use('blinds');
   dynamic.blinds = box(-11.5, 1.22, -10.74, 1.42, 0.83, 0.05, '#c6ad83');
 
-  prop = 'sofa';
+  use('sofa');
   box(-10.55, 0.255, -3.5, 3.5, 0.025, 3.1, '#c0b7a6', fabric);
   footprint(-11.8, -3.5, 1, 2.9);
   legs(-11.8, -3.5, 0.75, 2.5, 0.43, 0.2, '#574b42');
@@ -103,14 +108,14 @@ export function buildHouseObjects({ mesh, colliders, dynamic, design }) {
   for (const z of [-4.82, -2.18]) round(-11.76, 0.89, z, 1.12, 0.54, 0.22, '#c3c9bd', fabric);
   round(-11.89, 1.03, -3.94, 0.24, 0.4, 0.43, '#a0b5a7', { ...fabric, rotation: [0.12, 0, -0.2] });
   round(-11.88, 1.01, -2.91, 0.24, 0.37, 0.4, '#cbb293', { ...fabric, rotation: [-0.12, 0, -0.2] });
-  prop = 'coffee-table';
+  use('coffee-table');
   footprint(-9.9, -3.6, 1.2, 0.9);
   legs(-9.9, -3.6, 1, 0.68, 0.76, 0.53);
   round(-9.9, 0.81, -3.6, 1.24, 0.1, 0.94, '#b89978');
   book(-10.05, 0.89, -3.7, 0.36, 0.27, '#657e85');
   part('bowl', [-9.62, 0.94, -3.4], [0.2, 0.16, 0.2], '#ede4d5', { roughness: 0.25 });
   ring(-9.51, 0.94, -3.4, 0.12, '#ede4d5', { rotation: [Math.PI / 2, 0, 0] });
-  prop = 'television';
+  use('television');
   footprint(-8.7, -4.8, 0.55, 1.3);
   legs(-8.7, -4.8, 0.36, 1.1, 0.43, 0.19);
   round(-8.7, 0.6, -4.8, 0.55, 0.34, 1.3, '#9f8064');
@@ -120,7 +125,7 @@ export function buildHouseObjects({ mesh, colliders, dynamic, design }) {
   box(-8.647, 1.44, -4.8, 0.01, 0.66, 1.17, '#52727a', { roughness: 0.18 });
   box(-8.638, 1.56, -4.94, 0.005, 0.18, 0.5, '#6d8990', { rotation: [0.08, 0, 0] });
 
-  prop = 'kitchen-cabinets';
+  use('kitchen-cabinets');
   footprint(-5.8, -5.3, 3.95, 0.72);
   box(-5.8, 0.38, -5.3, 3.85, 0.3, 0.64, '#526059');
   box(-5.8, 0.77, -5.3, 3.95, 0.74, 0.72, '#a5b99a');
@@ -129,15 +134,15 @@ export function buildHouseObjects({ mesh, colliders, dynamic, design }) {
     round(x, 0.79, -4.926, 0.91, 0.67, 0.035, '#bac6b7');
     box(x, 1.01, -4.894, 0.32, 0.02, 0.035, '#69736f', metal);
   }
-  prop = 'kitchen-sink';
+  use('kitchen-sink');
   part('bowl', [-6.3, 1.24, -5.3], [0.71, 0.16, 0.53], '#a3afb0', metal);
   faucet(-6.3, 1.26, -5.57);
-  prop = 'cooktop';
+  use('cooktop');
   round(-4.82, 1.225, -5.3, 0.85, 0.035, 0.62, '#273236', { roughness: 0.25 });
   for (const x of [-5.02, -4.62])
     for (const z of [-5.46, -5.12]) ring(x, 1.251, z, 0.24, '#6a7474', metal);
   for (const x of [-5, -4.82, -4.64]) cylinder(x, 1.26, -4.98, 0.027, 0.025, '#bbc5c4', metal);
-  prop = 'refrigerator';
+  use('refrigerator');
   footprint(-4.05, -4.12, 0.78, 0.85);
   round(-4.05, 1.16, -4.12, 0.78, 1.85, 0.85, '#c5cecd', { roughness: 0.4 });
   for (const [y, h] of [
@@ -147,13 +152,13 @@ export function buildHouseObjects({ mesh, colliders, dynamic, design }) {
     round(-4.05, y, -3.677, 0.72, h, 0.055, '#dce1df', { roughness: 0.35 });
   for (const y of [1.12, 1.65]) round(-3.8, y, -3.627, 0.032, 0.28, 0.045, '#78898a', metal);
   box(-4.05, 1.62, -3.64, 0.2, 0.12, 0.015, '#394c50');
-  prop = 'dining-table';
+  use('dining-table');
   footprint(-6.1, -2.5, 1.5, 1.2);
   legs(-6.1, -2.5, 1.23, 0.96, 1.17, 0.94, '#917252');
   round(-6.1, 1.23, -2.5, 1.66, 0.12, 1.3, '#c5a882');
   part('vase', [-6.1, 1.42, -2.5], [0.2, 0.26, 0.2], '#809b91', { roughness: 0.4 });
   for (const x of [-7.35, -4.95]) {
-    prop = 'dining-chair';
+    use('dining-chair');
     legs(x, -2.5, 0.36, 0.36, 0.76, 0.53, '#806750');
     round(x, 0.8, -2.5, 0.62, 0.1, 0.62, '#ceb997');
     const back = x < -6.1 ? x - 0.27 : x + 0.27;
@@ -162,7 +167,7 @@ export function buildHouseObjects({ mesh, colliders, dynamic, design }) {
     round(x, 0.866, -2.5, 0.53, 0.055, 0.53, '#a8b4a7', fabric);
   }
 
-  prop = 'bathtub';
+  use('bathtub');
   footprint(-6.6, -8.9, 1.3, 2.15);
   round(-6.6, 0.37, -8.9, 1.23, 0.22, 2.06, '#e8ede8', { roughness: 0.3 });
   for (const x of [-7.17, -6.03])
@@ -171,7 +176,7 @@ export function buildHouseObjects({ mesh, colliders, dynamic, design }) {
     round(-6.6, 0.63, z, 1.3, 0.57, 0.19, '#f1f2e7', { roughness: 0.28 });
   round(-6.6, 0.72, -8.9, 0.99, 0.022, 1.77, '#a6cfd2', { opacity: 0.7, roughness: 0.2 });
   faucet(-6.6, 0.87, -9.9);
-  prop = 'vanity';
+  use('vanity');
   footprint(-4.3, -9.6, 0.75, 0.75);
   round(-4.3, 0.78, -9.6, 0.75, 0.95, 0.75, '#bba68c');
   for (const y of [0.62, 0.94]) {
@@ -182,14 +187,14 @@ export function buildHouseObjects({ mesh, colliders, dynamic, design }) {
   faucet(-4.3, 1.31, -9.88);
   round(-4.3, 1.82, -10.8, 0.9, 0.82, 0.065, '#c0b5a1');
   round(-4.3, 1.82, -10.755, 0.8, 0.72, 0.025, '#adc6c9', { roughness: 0.15 });
-  prop = 'toilet';
+  use('toilet');
   cylinder(-5.1, 0.42, -7.15, 0.21, 0.38, '#e6ebe7', { roughness: 0.3 });
   part('bowl', [-5.1, 0.64, -7.12], [0.62, 0.34, 0.75], '#f3f2e9', { roughness: 0.25 });
   part('torus', [-5.1, 0.82, -7.12], [0.64, 0.18, 0.77], '#fbfaf2', { roughness: 0.3 });
   round(-5.1, 0.97, -7.52, 0.6, 0.69, 0.29, '#f3f2e9', { roughness: 0.3 });
   cylinder(-5.1, 1.326, -7.52, 0.055, 0.014, '#adb9b8', metal);
 
-  prop = 'laundry-machine';
+  use('laundry-machine');
   for (const x of [-2.3, -1.1]) {
     footprint(x, -9.8, 1, 1);
     round(x, 0.78, -9.8, 1, 1.1, 1, '#e6e9e0', { roughness: 0.4 });
@@ -206,7 +211,7 @@ export function buildHouseObjects({ mesh, colliders, dynamic, design }) {
     part('sphere', [x, 0.77, -9.225], [0.49, 0.49, 0.09], '#4f737e', { roughness: 0.2 });
     round(x + 0.28, 0.79, -9.18, 0.065, 0.16, 0.045, '#cbd3ce');
   }
-  prop = 'storage-shelf';
+  use('storage-shelf');
   footprint(0.4, -9.1, 0.6, 1.8);
   for (const z of [-9.97, -8.23]) box(0.4, 0.92, z, 0.6, 1.38, 0.08, '#aa885f');
   for (const y of [0.3, 0.72, 1.14, 1.55]) box(0.4, y, -9.1, 0.64, 0.07, 1.8, '#aa885f');
@@ -214,7 +219,7 @@ export function buildHouseObjects({ mesh, colliders, dynamic, design }) {
     box(0.4, 0.94, -9.8 + i * 0.22, 0.42, 0.35, 0.12, ['#6f8885', '#c4ac88', '#8d9eac'][i % 3]);
   box(0.4, 1.3, -10.82, 0.7, 0.6, 0.08, '#758d7b');
 
-  prop = 'car';
+  use('car');
   footprint(-1.2, -3.75, 1.65, 2.9);
   round(-1.2, 0.57, -3.75, 1.65, 0.46, 2.9, '#728f88', { roughness: 0.32 });
   round(-1.2, 0.99, -3.85, 1.38, 0.56, 1.55, '#8ea79e', { roughness: 0.32 });
@@ -252,12 +257,13 @@ export function buildHouseObjects({ mesh, colliders, dynamic, design }) {
   box(-1.2, 0.49, -2.275, 1.3, 0.09, 0.06, '#465555');
   box(-1.2, 0.65, -2.263, 0.5, 0.13, 0.012, '#35454a');
   box(-1.2, 0.51, -2.233, 0.29, 0.08, 0.012, '#d8d9c9');
-  prop = 'workbench';
+  use('workbench');
   footprint(0.75, -4.8, 0.8, 1.9);
   legs(0.75, -4.8, 0.6, 1.65, 1.17, 0.94);
   box(0.75, 0.5, -4.8, 0.7, 0.06, 1.76, '#8b745e');
   round(0.7, 1.26, -4.8, 0.96, 0.12, 2, '#b99b76');
   round(0.7, 1.43, -5.22, 0.46, 0.21, 0.55, '#6b817e');
   box(0.7, 1.56, -5.22, 0.25, 0.035, 0.06, '#b1bfbb', metal);
+  tag?.();
   dynamic.garageDoor = box(-1.1, 0.38, -1, 3.1, 0.2, 0.16, '#a7b3ab');
 }

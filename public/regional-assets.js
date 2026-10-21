@@ -301,6 +301,7 @@ export function buildDestinationModel(id) {
   if (['terrace', 'seasonal'].includes(l.planting)) {
     for (let i = 0; i < 3; i++) {
       const x = 6 + i * 3.25;
+      m.tag('garden/terrace#');
       box(x, 0.25 + i * 0.23, 4.6, 2.55, 0.45 + i * 0.46, 5.8, '#aca68c');
       for (const p of m.plants)
         if (Math.abs(p.stem.pos[0] - x) < 1 && p.stem.pos[2] > 0) {
@@ -312,10 +313,13 @@ export function buildDestinationModel(id) {
     for (const [x, z] of [
       [3.8, 8.1],
       [13.2, -4.2],
-    ])
+    ]) {
+      m.tag('garden/palm#');
       buildTree(m, x, z, 0.85, { style: 'palm', foliage: ['#72915d', '#7f9e64', '#8da674'] });
+    }
   }
   if (l.planting === 'xeric') {
+    m.tag('garden/succulents');
     for (let i = 0; i < 6; i++) {
       const x = 3.5 + i * 0.45;
       mesh('cone', [x, 0.52, 8.7], [0.16, 0.9, 0.16], '#88a58a');
@@ -326,7 +330,8 @@ export function buildDestinationModel(id) {
     for (const [x, z] of [
       [3.8, 8.1],
       [13.2, -4.2],
-    ])
+    ]) {
+      m.tag('garden/bamboo#');
       for (let i = 0; i < 7; i++) {
         const bx = x + Math.sin(i * 2.4) * 0.45,
           bz = z + Math.cos(i * 2.4) * 0.45;
@@ -343,10 +348,12 @@ export function buildDestinationModel(id) {
           );
         }
       }
+    }
   }
   if (['herb', 'flower', 'vegetable', 'mixed'].includes(l.planting)) {
     // A raised bed whose plants follow the layout: low herbs, bright flowers or vegetable rows.
     const kinds = l.planting === 'mixed' ? ['herb', 'flower', 'vegetable'] : [l.planting];
+    m.tag('garden/planting-bed');
     box(4.6, 0.15, 8.7, 3.4, 0.3, 0.9, '#9c8466');
     for (let i = 0; i < 9; i++) {
       const kind = kinds[i % kinds.length],
@@ -369,6 +376,7 @@ export function buildDestinationModel(id) {
       } else mesh('leaf', [x, 0.4, 8.7], [0.5, 0.24, 0.28], i % 2 ? '#6f9a52' : '#88ad5e');
     }
   }
+  m.tag();
   buildMelbourneStyle(l, m);
   if (l.farm) {
     buildFarm(l, m);
@@ -381,10 +389,12 @@ export function buildDestinationModel(id) {
     m.skyDistance = 16;
   }
   if (l.planting === 'pond') {
+    m.tag('garden/pond');
     cylinder(3.5, 0.12, 6.8, 1.5, 0.2, '#a9bba5');
     m.pondWater = cylinder(3.5, 0.25, 6.8, 1.3, 0.04, '#7eb6bd');
     m.colliders.push({ x: 3.5, z: 6.8, w: 3, d: 3 });
     m.areaOverrides['Water tank'] = [61, 76];
+    m.tag();
   }
   m.windObjects = m.objects
     .filter(

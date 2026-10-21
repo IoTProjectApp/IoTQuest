@@ -1,0 +1,157 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { createRegionalModel } from '../public/regions.js';
+import { addCommunityWorld } from '../public/community-world.js';
+import { locationById, locations } from '../public/locations.js';
+import { modelMatrix } from '../public/world-math.js';
+import {
+  applyWorldLayout,
+  editGroups,
+  snapshotGroup,
+  transformGroup,
+  turnRotation,
+  groupTemplate,
+} from '../public/world-layout.js';
+import WORLD_LAYOUT from '../public/data/world-layout.js';
+
+const build = (id) => {
+  const model = createRegionalModel(id);
+  addCommunityWorld(model, locationById(id));
+  return model;
+};
+const geometryOf = (model) =>
+  JSON.stringify(model.objects.map((m) => [m.shape, m.pos, m.size, m.rotation, m.color]));
+const near = (a, b, message) =>
+  a.forEach((v, i) => assert.ok(Math.abs(v - b[i]) < 1e-6, `${message}: ${a} vs ${b}`));
+
+test('an empty layout leaves every world exactly as built', () => {
+  for (const id of ['legacy', 'kyoto', 'marrakech', 'brisbane', 'fitzroy', 'gippsland']) {
+    const built = geometryOf(build(id));
+    const model = applyWorldLayout(build(id), id, { version: 1, locations: {} });
+    assert.equal(geometryOf(model), built, id);
+    assert.deepEqual(model.layoutWarnings, []);
+  }
+});
+
+test('the saved layout only names groups the worlds still build', () => {
+  for (const [id, changes] of Object.entries(WORLD_LAYOUT.locations)) {
+    assert.ok(id === 'legacy' || locationById(id), `${id} is a destination`);
+    const groups = editGroups(build(id));
+    for (const groupId of Object.keys(changes.edits || {}))
+      assert.ok(groups.has(groupId), `${id}: ${groupId} is still built`);
+  }
+});
+
+test('every destination tags its furniture, garden and town as edit groups', () => {
+  for (const { id } of [{ id: 'legacy' }, ...locations]) {
+    const groups = editGroups(build(id));
+    // (Some styles clear the house's rooms for a court or a compound, furniture and all.)
+    for (const expected of [
+      'garden/tank',
+      'town/shop',
+      ...(id === 'legacy' ? ['furniture/sofa#1', 'furniture/bed#1'] : []),
+    ])
+      assert.ok(groups.has(expected), `${id} has ${expected}`);
+    // The house's furniture stays inside the house.
+    for (const [groupId, group] of groups)
+      if (groupId.startsWith('furniture/'))
+        for (const part of group.parts)
+          assert.ok(
+            part.pos[0] > -13.5 && part.pos[0] < 1.8 && part.pos[2] > -11.5 && part.pos[2] < -0.5,
+            `${id} ${groupId}`,
+          );
+  }
+});
+
+test('turning a part about the vertical axis composes with its own rotation', () => {
+  for (const rotation of [
+    [0, 0.4, 0],
+    [Math.PI / 2, 0, 0],
+    [0.3, -0.7, 1.1],
+    [-0.12, 0, -0.2],
+  ])
+    for (const turn of [0.5, Math.PI / 2, -2.4]) {
+      // Ry(turn) · R as matrices, against the turned Euler angles.
+      const expected = modelMatrix([0, 0, 0], [1, 1, 1], [0, turn, 0]),
+        own = modelMatrix([0, 0, 0], [1, 1, 1], rotation),
+        product = new Array(16).fill(0);
+      for (let c = 0; c < 4; c++)
+        for (let r = 0; r < 4; r++)
+          for (let k = 0; k < 4; k++) product[c * 4 + r] += expected[k * 4 + r] * own[c * 4 + k];
+      near(
+        [...modelMatrix([0, 0, 0], [1, 1, 1], turnRotation(rotation, turn))],
+        product,
+        `${rotation} turned ${turn}`,
+      );
+    }
+});
+
+test('moving a group moves its parts and colliders together about its base centre', () => {
+  const model = build('legacy'),
+    sofa = editGroups(model).get('furniture/sofa#1'),
+    snapshot = snapshotGroup(sofa),
+    [px, py, pz] = sofa.pivot;
+  assert.ok(sofa.colliders.length > 0, 'the sofa has its collider');
+  transformGroup(sofa, snapshot, { pos: [px + 2, py, pz - 1], turn: 0, scale: 1 });
+  sofa.parts.forEach((part, i) =>
+    near(
+      part.pos,
+      [snapshot.parts[i].pos[0] + 2, snapshot.parts[i].pos[1], snapshot.parts[i].pos[2] - 1],
+      'moved part',
+    ),
+  );
+  // A quarter turn swaps the collider's width and depth.
+  transformGroup(sofa, snapshot, { pos: [px, py, pz], turn: Math.PI / 2, scale: 1 });
+  const [c] = sofa.colliders,
+    [o] = snapshot.colliders;
+  near([c.w, c.d], [o.d, o.w], 'turned collider');
+  // Back where it was, exactly.
+  transformGroup(sofa, snapshot, { pos: [px, py, pz], turn: 0, scale: 1 });
+  sofa.parts.forEach((part, i) => near(part.pos, snapshot.parts[i].pos, 'restored part'));
+});
+
+test('a layout moves, removes and adds groups, and reports changes it cannot apply', () => {
+  const plain = build('legacy'),
+    sofa = editGroups(plain).get('furniture/sofa#1'),
+    template = groupTemplate(editGroups(plain).get('garden/tree#1')),
+    layout = {
+      version: 1,
+      locations: {
+        legacy: {
+          edits: {
+            'furniture/sofa#1': {
+              pos: [sofa.pivot[0] + 1, sofa.pivot[1], sofa.pivot[2]],
+              turn: 0,
+              scale: 1,
+            },
+            'furniture/car#1': { removed: true },
+            'garden/nothing-here': { removed: true },
+          },
+          added: [
+            { id: 'added/1', name: 'Tree', pos: [5, 0, 8], turn: 0, scale: 1.2, ...template },
+          ],
+        },
+      },
+    };
+  const model = applyWorldLayout(build('legacy'), 'legacy', layout),
+    groups = editGroups(model);
+  assert.ok(Math.abs(groups.get('furniture/sofa#1').pivot[0] - (sofa.pivot[0] + 1)) < 1e-6);
+  assert.equal(groups.has('furniture/car#1'), false);
+  assert.equal(
+    model.colliders.some((c) => c.editGroup === 'furniture/car#1'),
+    false,
+  );
+  assert.ok(groups.has('added/1'));
+  near(groups.get('added/1').pivot, [5, 0, 8], 'added tree base');
+  assert.ok(
+    model.colliders.some((c) => c.editGroup === 'added/1'),
+    'the added tree is solid',
+  );
+  assert.deepEqual(model.layoutWarnings, ['legacy: no "garden/nothing-here" to remove']);
+  // Added copies keep how parts look, not what the game does with the original.
+  assert.ok(
+    groups
+      .get('added/1')
+      .parts.every((p) => !('prop' in p) && !('vegetation' in p && p.vegetation === undefined)),
+  );
+});

@@ -263,18 +263,19 @@ function undo(redo = false) {
     toast(`${redo ? 'Redid' : 'Undid'}: ${text}`);
   }
 }
-async function playtest() {
+async function playtest(fromStart = false) {
   flush();
   if (state.session.isChanged()) {
     if (!confirm('The game plays saved wording only. Save now and open the game?')) return;
     if (!(await save())) return;
   }
-  shell.openGame();
+  // In the selected city.
+  shell.openGame(fromStart ? null : { city: state.city });
 }
 $('undo').addEventListener('click', () => undo());
 $('redo').addEventListener('click', () => undo(true));
 $('save').addEventListener('click', save);
-$('playtest').addEventListener('click', playtest);
+$('playtest').addEventListener('click', (e) => playtest(e.shiftKey));
 $('home').addEventListener('click', (e) => {
   flush();
   if (
@@ -303,7 +304,7 @@ document.addEventListener('keydown', (e) => {
 });
 shell?.onMenu((command) => {
   if (command === 'save') save();
-  else if (command === 'playtest') playtest();
+  else if (command === 'playtest' || command === 'playstart') playtest(command === 'playstart');
   else if (typing()) document.execCommand(command);
   else undo(command === 'redo');
 });

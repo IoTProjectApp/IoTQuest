@@ -96,6 +96,7 @@ test('the game never loads or saves progress in a play-test, and the editor send
     'character-editor',
     'quest-editor',
     'conversation-editor',
+    'city-editor',
   ]) {
     const app = await readFile(
       new URL(`../editor/workspaces/${workspace}/app.js`, import.meta.url),

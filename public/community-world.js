@@ -1,3 +1,4 @@
+import { pavement } from './street-network.js';
 import { connectFarmHomeCars } from './farm-home-access.js';
 import { connectHomeDriveway, drawHomeStreetDriveway } from './home-driveway.js';
 import { recreationLots, buildRecreationAreas, updateFountain } from './community-recreation.js';
@@ -84,7 +85,7 @@ export function addCommunityWorld(model, location) {
   for (const [a, b] of [
     [home.node, gate],
     [gate, street],
-    [street, '0:1/1/-1'],
+    [street, pavement(walks, '0:1/1/-1')],
   ]) {
     walks.edge(a, b, { originalProperty: true });
     walks.edge(b, a, { originalProperty: true });
@@ -302,7 +303,7 @@ export function addCommunityWorld(model, location) {
   walks.node('road-control-approach', 11, 8);
   walks.node('road-control-station', 11, 11);
   for (const [a, b] of [
-    ['1:1/1/1', 'road-control-approach'],
+    [pavement(walks, '1:1/1/1'), 'road-control-approach'],
     ['road-control-approach', 'road-control-station'],
   ]) {
     walks.edge(a, b);

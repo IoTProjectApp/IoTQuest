@@ -3,6 +3,7 @@ import { civicLots } from './community-civic.js';
 import { residentialLots } from './community-residences.js';
 import { Runtime } from './runtime.js';
 import { communityDevices } from './community-missions.js';
+import { buildStreetNetwork, streetLayoutFor, pavement } from './street-network.js';
 // Metres and seconds. Rendering and controllers share this fixed-step simulation.
 export const LEFT_DRIVING = new Set(['JPN', 'AUS', 'KEN', 'ZAF', 'IND', 'IDN', 'GBR', 'NZL']);
 const distance = (a, b) => Math.hypot(a.x - b.x, a.z - b.z);
@@ -48,7 +49,9 @@ export class Network {
     return path;
   }
 }
-export function createCommunity(location = {}) {
+// `layout` is the street network to build (street-network.js); by default the one saved for the
+// destination.
+export function createCommunity(location = {}, layout = streetLayoutFor(location.id || 'legacy')) {
   const roads = new Network(),
     walks = new Network(),
     junctions = [],
@@ -72,92 +75,15 @@ export function createCommunity(location = {}) {
     NOR: ['Butikk · Kafé', 'Fabrikk', 'STOP'],
   }[location.iso] || ['Market · Café', 'Factory', 'STOP'];
   const handedness = LEFT_DRIVING.has(location.iso || 'AUS') ? -1 : 1;
-  for (let iz = -1; iz < 4; iz++)
-    for (let ix = 0; ix < 6; ix++) {
-      const id = `${ix}:${iz}`,
-        x = (ix - 1) * 48,
-        z = (iz - 1) * 48;
-      junctions.push({ id, x, z, signal: ix === 1 && iz === 1, owner: null });
-      for (const sx of [-1, 1])
-        for (const sz of [-1, 1]) walks.node(`${id}/${sx}/${sz}`, x + sx * 8, z + sz * 8);
-      for (const side of [-1, 1]) {
-        for (const axis of ['x', 'z']) {
-          const a = `${id}/${axis === 'x' ? -1 : side}/${axis === 'x' ? side : -1}`;
-          const b = `${id}/${axis === 'x' ? 1 : side}/${axis === 'x' ? side : 1}`;
-          const crossing = {
-            id: `${id}/${axis}/${side}`,
-            junction: id,
-            a,
-            b,
-            signal: ix === 1 && iz === 1,
-            occupants: new Set(),
-          };
-          crossings.push(crossing);
-          walks.edge(a, b, { crossing });
-          walks.edge(b, a, { crossing });
-        }
-      }
-    }
-  for (const j of junctions)
-    for (const [dx, dz] of [
-      [1, 0],
-      [0, 1],
-    ]) {
-      const k = junctions.find((k) => k.x === j.x + dx * 48 && k.z === j.z + dz * 48);
-      if (!k) continue;
-      segments.push([j, k]);
-      for (const [a, b] of [
-        [j, k],
-        [k, j],
-      ]) {
-        const vx = (b.x - a.x) / 48,
-          vz = (b.z - a.z) / 48;
-        const ox = -vz * 2.2 * handedness,
-          oz = vx * 2.2 * handedness;
-        const from = roads.node(`${a.id}>${b.id}:out`, a.x + vx * 12 + ox, a.z + vz * 12 + oz);
-        const to = roads.node(`${a.id}>${b.id}:in`, b.x - vx * 12 + ox, b.z - vz * 12 + oz);
-        roads.edge(from, to, { axis: vx ? 'EW' : 'NS', approach: b.id });
-      }
-      for (const side of [-1, 1]) {
-        const a = `${j.id}/${dx ? 1 : side}/${dz ? 1 : side}`;
-        const b = `${k.id}/${dx ? -1 : side}/${dz ? -1 : side}`;
-        walks.edge(a, b);
-        walks.edge(b, a);
-      }
-    }
-  for (const j of junctions) {
-    const incoming = Object.keys(roads.nodes).filter((id) => id.endsWith(`>${j.id}:in`));
-    j.signal = incoming.length >= 3;
-    for (const crossing of crossings.filter((c) => c.junction === j.id)) crossing.signal = j.signal;
-    const outgoing = Object.keys(roads.nodes).filter(
-      (id) => id.startsWith(`${j.id}>`) && id.endsWith(':out'),
-    );
-    for (const a of incoming)
-      for (const b of outgoing) {
-        if (a.split('>')[0] === b.split('>')[1].split(':out')[0]) continue;
-        const start = roads.nodes[a],
-          end = roads.nodes[b];
-        const axis = Math.abs(start.x - j.x) > 10 ? 'EW' : 'NS';
-        const outAxis = Math.abs(end.x - j.x) > 10 ? 'EW' : 'NS';
-        const c1 = {
-          x: start.x + (axis === 'EW' ? Math.sign(j.x - start.x) * 10 : 0),
-          z: start.z + (axis === 'NS' ? Math.sign(j.z - start.z) * 10 : 0),
-        };
-        const c2 = {
-          x: end.x - (outAxis === 'EW' ? Math.sign(end.x - j.x) * 10 : 0),
-          z: end.z - (outAxis === 'NS' ? Math.sign(end.z - j.z) * 10 : 0),
-        };
-        const points = Array.from({ length: 25 }, (_, i) => {
-          const t = i / 24,
-            u = 1 - t;
-          return {
-            x: u ** 3 * start.x + 3 * u ** 2 * t * c1.x + 3 * u * t ** 2 * c2.x + t ** 3 * end.x,
-            z: u ** 3 * start.z + 3 * u ** 2 * t * c1.z + 3 * u * t ** 2 * c2.z + t ** 3 * end.z,
-          };
-        });
-        roads.edge(a, b, { junction: j.id, axis, turn: axis !== outAxis, points });
-      }
-  }
+  // The street network (street-network.js): the original grid unless the Street Editor changed it.
+  const network = buildStreetNetwork(layout, {
+    roads,
+    walks,
+    handedness,
+  });
+  junctions.push(...network.junctions);
+  segments.push(...network.segments);
+  crossings.push(...network.crossings);
   // Driveways branch from lanes into open yards, outside building footprints.
   const lane = '1:2>2:2:out',
     end = '1:2>2:2:in';
@@ -177,8 +103,8 @@ export function createCommunity(location = {}) {
   const apron = {
     id: 'yard-crossing',
     junction: 'yard',
-    a: '1:2/1/-1',
-    b: '2:2/-1/-1',
+    a: pavement(walks, '1:2/1/-1'),
+    b: pavement(walks, '2:2/-1/-1'),
     signal: false,
     occupants: new Set(),
   };
@@ -266,7 +192,7 @@ export function createCommunity(location = {}) {
     residentialLots.map((b, i) => {
       const block = Math.floor(i / 2),
         right = i % 2 === 1;
-      const corner = `${block + (right ? 1 : 0)}:0/${right ? -1 : 1}/-1`;
+      const corner = pavement(walks, `${block + (right ? 1 : 0)}:0/${right ? -1 : 1}/-1`);
       const sideX = walks.nodes[corner].x;
       return [b.type, [corner, [sideX, -62], [b.x, -62], [b.x, b.z + b.d / 2 + 1]]];
     }),
@@ -310,7 +236,7 @@ export function createCommunity(location = {}) {
   };
   for (const building of buildings) {
     const [origin, ...points] = entrances[building.type];
-    let previous = origin;
+    let previous = pavement(walks, origin);
     for (const [i, [x, z]] of points.entries()) {
       if (walks.nodes[previous].x === x && walks.nodes[previous].z === z) continue;
       const node = walks.node(`${building.id}:entrance:${i}`, x, z);
@@ -323,8 +249,9 @@ export function createCommunity(location = {}) {
   // A direct pavement link lets park visitors reach the adjacent playground crossing.
   const park = buildings.find((b) => b.type === 'park');
   if (park) {
-    walks.edge(park.node, '4:3/-1/-1');
-    walks.edge('4:3/-1/-1', park.node);
+    const corner = pavement(walks, '4:3/-1/-1');
+    walks.edge(park.node, corner);
+    walks.edge(corner, park.node);
   }
   // Bus stops halfway along the busiest street lanes (both directions of each block). Buses pull
   // in, wait, then pull away; community-world draws a shelter on the kerb beside each one.
@@ -466,8 +393,8 @@ export function overlaps(a, b, margin = 0.3) {
   return true;
 }
 export class CommunitySimulation {
-  constructor(location) {
-    this.map = createCommunity(location);
+  constructor(location, layout) {
+    this.map = createCommunity(location, layout);
     this.signals = new Signals();
     this.vehicles = [];
     this.people = [];

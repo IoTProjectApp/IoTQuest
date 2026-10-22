@@ -4237,6 +4237,9 @@ function openConversation(key, area) {
     // A visit is about the room the technician walked into.
     area: area ?? character?.area,
     looksAfter: area && area !== character?.area ? area : null,
+    // Hand-written lines follow the person, whatever the city calls them.
+    person: currentLocation()?.names?.[key] ? key : resident,
+    location: currentLocation() ?? null,
   });
   activeConversation.section = character?.section;
   // Thanks are said once; chats count towards each of this resident's quests in progress reports.

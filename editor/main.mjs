@@ -31,6 +31,12 @@ const STORES = {
     valid: (v) =>
       v?.version === 1 && typeof v.people === 'object' && typeof v.defaults === 'object',
   },
+  conversations: {
+    file: join(PUBLIC, 'data', 'conversations.js'),
+    about: "What the game's people say, written by the Conversation Editor",
+    valid: (v) =>
+      v?.version === 1 && typeof v.people === 'object' && typeof v.defaults === 'object',
+  },
   'street-layout': {
     file: join(PUBLIC, 'data', 'street-layout.js'),
     about: "The town's street layout, written by the Street Editor",

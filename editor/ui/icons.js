@@ -36,6 +36,7 @@ const PATHS = {
   quest: '<path d="M5 21V4"/><path d="M5 4h11l-2 4 2 4H5"/>',
   check: '<path d="m5 12 5 5 9-10"/>',
   plus: '<path d="M12 5v14M5 12h14"/>',
+  chat: '<path d="M4 5h16v11H10l-5 4v-4H4V5Z"/><path d="M8 9.5h8M8 12.5h5"/>',
   lock: '<rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7.5a4 4 0 0 1 8 0V11"/>',
 };
 

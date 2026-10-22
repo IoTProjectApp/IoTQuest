@@ -12,12 +12,13 @@ The script checks for Node.js 20 or newer, installs the game's development packa
 
 The editor is a set of **workspaces**. A workspace is a screen for one job, such as placing objects in the 3D world. The editor opens on a home page with a card for each workspace. Click a card to open that workspace, and use the back arrow at the top left to return.
 
-| Workspace        | What it does                                                                                                                               | Writes                         |
-| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------ |
-| Map Editor       | Move, add and remove furniture, garden features and town buildings in the 3D world, city by city.                                          | `public/data/world-layout.js`  |
-| Street Editor    | Lay out the town's roads: junctions, roads, traffic lights, stop signs and crossings, then watch the traffic run.                          | `public/data/street-layout.js` |
-| Character Editor | Dress the game's people and set how they move: who plays them, their clothes, their walk, stance and activity, and how fast.               | `public/data/characters.js`    |
-| Quest Editor     | Write new quests: who asks and where, the devices to wire, the rules and the tests, each checked against a worked solution on both boards. | `public/data/quests.js`        |
+| Workspace           | What it does                                                                                                                                       | Writes                                                                    |
+| ------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
+| Map Editor          | Move, add and remove furniture, garden features and town buildings in the 3D world, city by city.                                                  | `public/data/world-layout.js`                                             |
+| Street Editor       | Lay out the town's roads: junctions, roads, traffic lights, stop signs and crossings, then watch the traffic run.                                  | `public/data/street-layout.js`                                            |
+| Character Editor    | Dress the game's people and set how they move: who plays them, their clothes, their walk, stance and activity, and how fast.                       | `public/data/characters.js`                                               |
+| Quest Editor        | Write new quests: who asks and where, the devices to wire, the rules and the tests, each checked against a worked solution on both boards.         | `public/data/quests.js`                                                   |
+| Conversation Editor | Write what the game's people say, for everyone or one person in one city, and how each resident asks for their quests; try each chat as you write. | `public/data/conversations.js` (and `public/data/quests.js` for requests) |
 
 Each workspace:
 
@@ -327,3 +328,57 @@ export default {
 - **Your quests come after the built-in quests,** in the file's order. The game remembers progress by a quest's place in that list, so adding quests never disturbs saved games. Deleting one of your quests moves the ones after it up, and the editor warns you.
 - **A quest that fails to build in the game** is left out with a warning, rather than stopping the game.
 - **CI checks your quests too:** they join the game's list, so the existing tests (`tests/simulation.test.mjs` and others) run their worked solutions on every board and language, along with `tests/quest-editor.test.mjs`.
+
+## Conversation Editor
+
+Everything a resident says in a chat is put together from a few lines (a greeting, thanks, what to ask about next…) and their quest's own words. The Conversation Editor writes those lines for everyone, or for one person, everywhere or in one city, and changes how each resident asks for their quests.
+
+### Layout
+
+- **Top bar:** back to workspaces, **Where** (Home or a city: cities give the household their own names, and open requests with "Here in …"), undo and redo, save state, **Play-test** and **Save**.
+- **Left, the people:** **Everyone** (the lines anyone without their own says), then everyone a quest names, with how many requests they make. A blue dot marks someone with lines of their own, a red one someone whose lines have problems.
+- **Middle, the chat:** a chat with them, made by the game's own conversation code from your unsaved lines, at the moment you pick: **First visit**, **After a pass** (their first request has just passed) or **Urgent** (the conditions make a request urgent). Click the suggested questions, type your own, or pick another of their requests. **Start over** clears it.
+- **Right, their lines:** one box per line, showing faintly what they say when the box is blank. The `{name}` buttons under each box put a placeholder in. In a city, **Everywhere / Only in …** picks whether the lines are theirs everywhere or only there. **What they ask for** lists their requests, each with its opening words; a changed one can be reset.
+
+Typing changes the chat straight away; undo takes back a whole edit to one box.
+
+### The lines
+
+| Line              | When it is said                                                                   | Placeholders             |
+| ----------------- | --------------------------------------------------------------------------------- | ------------------------ |
+| Greeting          | How they open a chat                                                              | `{name}` `{city}`        |
+| Looks after       | After the greeting, when you visit a room they look after                         | and `{area}`             |
+| Urgent            | First, when the conditions make a request urgent                                  | and `{reason}`           |
+| Invitation        | After what they ask for                                                           | and `{title}`            |
+| Nothing to ask    | How they open a chat with no requests                                             | `{name}` `{city}`        |
+| Thanks            | When a request has passed, with what it now does                                  | and `{title}` `{effect}` |
+| Thanks, plain     | When a request with nothing to watch has passed                                   | and `{title}`            |
+| Next              | Between their thanks and their next request                                       | `{name}` `{city}`        |
+| No requests reply | Their answer to any question when they have nothing to ask                        | `{name}` `{city}`        |
+| About me          | Their answer to "Tell me about yourself"; with none, that question is not offered | `{name}` `{city}`        |
+
+`{name}` is what the city calls them and `{city}` is the city's name ("town" at home). The answers to the suggested questions (components, animation, weather, help) are worked out from each quest and are not lines.
+
+### The check
+
+A line that uses a placeholder it cannot fill, has `<` or `>`, is longer than 240 characters or is blank (except About me) stops saving, as does an empty request. Lines for someone no quest names are allowed with a warning: they are said only if that person talks.
+
+### The saved lines
+
+`public/data/conversations.js` holds them; `public/conversation-settings.js` describes the format and reads them in the game.
+
+```js
+export default {
+  version: 1,
+  defaults: { greeting: 'Hi there!' },
+  people: {
+    Maya: { about: 'I have kept this garden for twenty years.' },
+    'Maya@kyoto': { greeting: 'Konnichiwa! I am {name}.' },
+  },
+};
+```
+
+- **People are named as their quests name them** (Maya, Ms Chen), so the household's lines follow them to every city, whatever it calls them. `'Maya@kyoto'` lines apply in that city only.
+- **Order:** a person's city lines, then their own, then everyone's, then the game's. Only lines that differ are kept.
+- **Requests are quest changes:** changing what someone asks for saves the quest's `quote` in `public/data/quests.js` (`edits`), exactly as the Quest Editor would, so both editors show it.
+- **With the file empty, everyone says what they always said**, word for word (`tests/conversation-editor.test.mjs` checks this along with the format).

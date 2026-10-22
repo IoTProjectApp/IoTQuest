@@ -34,6 +34,14 @@ export const WORKSPACES = [
     icon: 'quest',
     writes: 'public/data/quests.js',
   },
+  {
+    id: 'conversation-editor',
+    name: 'Conversation Editor',
+    summary:
+      "Write what the game's people say: greetings, thanks and a line about themselves, for everyone or one person in one city, and how each resident asks for their quests. Try every chat as you write.",
+    icon: 'chat',
+    writes: 'public/data/conversations.js',
+  },
 ];
 
 export const workspaceUrl = (workspace) => `../workspaces/${workspace.id}/`;

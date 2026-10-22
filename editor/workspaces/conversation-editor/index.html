@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Conversation Editor · IoT Quest Editor</title>
+    <link rel="stylesheet" href="/editor/ui/shell.css" />
+    <link rel="stylesheet" href="/editor/ui/workspace.css" />
+    <link rel="stylesheet" href="conversation-editor.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <a class="button icon-only" id="home" href="/editor/ui/" title="Back to workspaces"></a>
+      <div class="title">
+        <strong>Conversation Editor</strong>
+        <span>IoT Quest Editor</span>
+      </div>
+      <div class="divider"></div>
+      <label class="city" title="Where the chat happens: cities give the household their own names">
+        <span>Where</span>
+        <select class="select" id="city"></select>
+      </label>
+      <div class="spacer"></div>
+      <button class="button icon-only" id="undo" title="Undo (⌘Z)"></button>
+      <button class="button icon-only" id="redo" title="Redo (⇧⌘Z)"></button>
+      <span class="save-state" id="save-state"></span>
+      <button class="button" id="playtest" title="Open the game in a new window (⌘P)"></button>
+      <button class="button primary" id="save" title="Save everyone's lines (⌘S)"></button>
+    </header>
+
+    <div class="workspace conversations">
+      <nav class="people" aria-label="People">
+        <label class="search">
+          <span class="search-icon" id="search-icon"></span>
+          <input class="input" id="search" type="search" placeholder="Search people" />
+        </label>
+        <div class="list" id="people"></div>
+      </nav>
+      <main class="chat-stage" aria-label="Chat preview">
+        <div class="chat-head">
+          <div>
+            <h1 id="chat-title"></h1>
+            <p id="chat-note"></p>
+          </div>
+          <div class="segmented" id="moments" role="group" aria-label="When">
+            <button data-moment="hello" title="A first visit">First visit</button>
+            <button data-moment="thanks" title="Just after their first request passed">
+              After a pass
+            </button>
+            <button data-moment="urgent" title="When the conditions make a request urgent">
+              Urgent
+            </button>
+          </div>
+        </div>
+        <div class="chat-log" id="chat-log" role="log" aria-live="polite"></div>
+        <div class="chat-ask" id="chat-ask"></div>
+      </main>
+      <aside class="inspector" id="lines" aria-label="Lines"></aside>
+    </div>
+    <div class="toast" id="toast" role="status" hidden></div>
+    <script type="module" src="app.js"></script>
+  </body>
+</html>

@@ -6,6 +6,7 @@ import { OrbitControls } from '/editor/three/OrbitControls.js';
 import { ThreeCharacters } from '../../../public/three-characters.js';
 import { CLIPS, walkTime } from '../../../public/character-clips.js';
 import { Reactions } from '../../../public/character-reactions.js';
+import { strideScale } from '../../../public/character-appearance.js';
 
 const KEY = 'preview';
 // A resident's ordinary walking pace, in metres a second; their speed setting scales it.
@@ -57,10 +58,11 @@ export class Stage {
     this.last = performance.now();
     requestAnimationFrame(this.frame);
   }
-  // Who to show: { model, outfit, scale, carry, belt, walk, idle, activity, speed, rate }.
+  // Who to show: { model, outfit, appearance, scale, carry, belt, walk, idle, activity, speed,
+  // rate }.
   show(look) {
-    // A different model or outfit means dressing them again.
-    const dress = JSON.stringify([look.model, look.outfit, look.carry, look.belt]);
+    // A different model, outfit or appearance means dressing them again.
+    const dress = JSON.stringify([look.model, look.outfit, look.appearance, look.carry, look.belt]);
     if (dress !== this.dress && this.characters.people.has(KEY)) this.characters.remove(KEY);
     this.dress = dress;
     this.look = look;
@@ -136,7 +138,11 @@ export class Stage {
       at = { x: Math.cos(a) * RADIUS, z: -Math.sin(a) * RADIUS, angle: -a - Math.PI / 2 };
       clips = [
         CLIPS[look.walk]?.stride
-          ? { name: look.walk, time: walkTime(look.walk, this.walked), weight: 1 }
+          ? {
+              name: look.walk,
+              time: walkTime(look.walk, this.walked / strideScale(look.appearance)),
+              weight: 1,
+            }
           : loop(look.walk),
       ];
     } else clips = [loop(look.activity || look.idle)];
@@ -144,6 +150,7 @@ export class Stage {
       key: KEY,
       model: look.model,
       outfit: look.outfit,
+      appearance: look.appearance,
       scale: look.scale || 1,
       carry: look.carry,
       belt: look.belt,

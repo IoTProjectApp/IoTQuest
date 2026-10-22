@@ -12,6 +12,8 @@
 //   speed     how fast they walk, as a factor (residents and the household)
 //   rate      how fast their idle or activity clip plays, as a factor
 //   reactions clips they play when something happens (see character-reactions.js)
+//   appearance  their height, build, skin, hair, beard and brows (see character-appearance.js);
+//             a person's own fields are laid over the defaults' one by one
 // A person's own settings come before the defaults, and the defaults before what the code picks.
 // Ids are the game's own: 'player' (the technician), 'Maya', 'worker:shop-floor:0',
 // 'bus:0:1>1:1:2'... With no settings everyone is as the code makes them.
@@ -31,6 +33,7 @@ export function settingsFor(id, settings = CHARACTER_SETTINGS) {
     activity: own.activity ?? defaults.activity ?? null,
     speed: own.speed ?? defaults.speed ?? 1,
     rate: own.rate ?? defaults.rate ?? 1,
+    appearance: { ...defaults.appearance, ...own.appearance },
   };
 }
 // An outfit with changes laid over it: a change of null takes that piece off.

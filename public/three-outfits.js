@@ -1290,3 +1290,6 @@ function solve3(m, r) {
   if (Math.abs(d) < 1e-12) return null;
   return [0, 1, 2].map((k) => det(m.map((row, i) => row.map((v, j) => (j === k ? r[i] : v)))) / d);
 }
+
+// Shared with the appearance designer (three-appearance.js).
+export { eachVertex, recolour, LUMA, linear };

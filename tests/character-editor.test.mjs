@@ -31,6 +31,7 @@ test('settings for one person and for everyone, saved as small as they can be', 
     activity: null,
     speed: 1,
     rate: 0.8,
+    appearance: {},
   });
   assert.ok(s.isChanged() && s.isChanged('Maya') && !s.isChanged('Alex'));
   assert.deepEqual([...s.changedPeople()], ['Maya', 'bus:0:1>1:1:0']);

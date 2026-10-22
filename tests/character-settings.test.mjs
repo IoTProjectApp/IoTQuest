@@ -24,6 +24,7 @@ test('a person’s own settings come before the defaults, and both before the co
     activity: null,
     speed: 1,
     rate: 2,
+    appearance: {},
   });
   assert.equal(settingsFor('someone-else', settings).rate, 0.5);
   assert.deepEqual(settingsFor('anyone', { version: 1, defaults: {}, people: {} }), {
@@ -34,6 +35,7 @@ test('a person’s own settings come before the defaults, and both before the co
     activity: null,
     speed: 1,
     rate: 1,
+    appearance: {},
   });
 });
 

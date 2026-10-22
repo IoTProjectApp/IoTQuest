@@ -430,3 +430,34 @@
 .clip-panel .controls input[type='range'] {
   flex: 1;
 }
+
+/* The Look section (look-panel.js) */
+.look-actions {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.look-actions .select {
+  flex: 1;
+}
+.row.sub > span {
+  color: var(--muted);
+  font-size: 12px;
+}
+.swatches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+}
+.swatch {
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border: 1px solid var(--line-strong);
+  border-radius: 50%;
+  cursor: pointer;
+}
+.swatch.on {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}

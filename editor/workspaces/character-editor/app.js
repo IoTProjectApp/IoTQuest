@@ -21,6 +21,7 @@ import { PoseEditor, POSING } from './pose-editor.js';
 import { createModelImport } from './model-panel.js';
 import { knownModel } from '../../../public/character-models.js';
 import { icon } from '../../ui/icons.js';
+import { appearanceSection, bindAppearance } from './look-panel.js';
 
 const shell = window.editorShell;
 const $ = (id) => document.getElementById(id);
@@ -114,6 +115,7 @@ function lookOf(target) {
     // A model since removed plays them as built.
     model: knownModel(pick('model', base.model)) ? pick('model', base.model) : base.model,
     outfit: dressed(dressed(base.outfit, defaults.outfit), own.outfit),
+    appearance: { ...defaults.appearance, ...own.appearance },
     scale: base.scale,
     carry: base.carry,
     belt: base.belt,
@@ -271,6 +273,7 @@ function renderInspector() {
         <select class="select" id="model">${options(modelChoices, own.model || '')}</select></div>${reset('model', 'model' in own)}</div>
     </section>`
     }
+    ${appearanceSection(own, look)}
     <section>
       <div class="section-head"><h3>Clothes</h3><button class="link" data-section="outfit" ${own.outfit ? '' : 'disabled'}>Reset clothes</button></div>
       ${plain('top', 'Top')}
@@ -493,6 +496,7 @@ function bindInspector(el, target) {
     });
   for (const b of el.querySelectorAll('[data-section]'))
     b.addEventListener('click', () => s.reset(target, b.dataset.section));
+  bindAppearance(el, { session: s, target, look, stage });
   $('reset-all').addEventListener('click', () => s.reset(target));
   bindReactions(el, {
     own: s.own(target),

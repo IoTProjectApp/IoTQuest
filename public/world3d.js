@@ -8,6 +8,7 @@ import { knownModel } from './character-models.js';
 import { CLIPS, walkTime } from './character-clips.js';
 import { settingsFor, dressed, knownClip } from './character-settings.js';
 import { Reactions, conditionsFrom } from './character-reactions.js';
+import { strideScale } from './character-appearance.js';
 import { outfitFor, TECHNICIAN_OUTFIT } from './character-outfits.js';
 import { addDeviceDetails } from './device-objects.js';
 import { catalogueLamps } from './catalogue-devices.js';
@@ -1019,7 +1020,8 @@ export class World3D {
         pace = entry.pace < 0.05 ? 0 : entry.pace;
       clips = pace
         ? [
-            { ...stepped(moving, entry.walked, loop), weight: pace },
+            // A taller person's longer stride: their feet keep pace with the ground.
+            { ...stepped(moving, entry.walked / strideScale(set.appearance), loop), weight: pace },
             { ...loop(still), weight: 1 - pace },
           ]
         : [{ ...loop(still), weight: 1 }];
@@ -1028,6 +1030,7 @@ export class World3D {
       key,
       model: knownModel(set.model) ? set.model : castFor(key, '', woman),
       outfit: dressed(outfitFor(key), set.outfit),
+      appearance: set.appearance,
       ...at,
       clips,
       standIn,
@@ -1086,12 +1089,13 @@ export class World3D {
       // Work wear for the technician (a hi-vis vest and a hard hat); everyone else dressed as their
       // own.
       outfit: dressed(technician ? TECHNICIAN_OUTFIT : outfitFor(actor.id), set.outfit),
+      appearance: set.appearance,
       z,
       // Actors face (sin, cos) of their heading; characters face (cos, sin) of their angle.
       angle: Math.atan2(Math.cos(heading), Math.sin(heading)),
       clips: pace
         ? [
-            { ...stepped(walk, actor.walked, loop), weight: pace },
+            { ...stepped(walk, actor.walked / strideScale(set.appearance), loop), weight: pace },
             { ...idle, weight: 1 - pace },
           ]
         : [{ ...idle, weight: 1 }],

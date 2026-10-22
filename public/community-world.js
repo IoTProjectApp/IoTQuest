@@ -1,4 +1,16 @@
-import { pavement, alongRoad, acrossRoad } from './street-network.js';
+import {
+  pavement,
+  alongRoad,
+  acrossRoad,
+  ROAD_SIZES,
+  ROUNDABOUT,
+  LANE_OFFSET,
+  LANE_SPACING,
+  linePart,
+  linePieces,
+  lineLength,
+  offsetLine,
+} from './street-network.js';
 import { connectFarmHomeCars } from './farm-home-access.js';
 import { connectHomeDriveway, drawHomeStreetDriveway } from './home-driveway.js';
 import { recreationLots, buildRecreationAreas, updateFountain } from './community-recreation.js';
@@ -172,19 +184,48 @@ export function addCommunityWorld(model, location, { streets } = {}) {
     const { size, rotation } = alongRoad(dir, length, height, width);
     return box(x, y, z, ...size, color, { ...extra, rotation });
   };
-  for (const [a, b] of sim.map.segments) {
-    const length = Math.hypot(b.x - a.x, b.z - a.z),
+  for (const segment of sim.map.segments) {
+    const [a, b] = segment,
+      size = ROAD_SIZES[segment.lanes || 1];
+    let length = Math.hypot(b.x - a.x, b.z - a.z),
       dir = [(b.x - a.x) / length, (b.z - a.z) / length],
       x = (a.x + b.x) / 2,
       z = (a.z + b.z) / 2;
-    piece(x, 0.025, z, dir, length, 0.1, 17, '#c8c5b5');
-    piece(x, 0.09, z, dir, length, 0.05, 12, '#414950');
-    for (let t = 2; t < length; t += 5)
-      piece(a.x + dir[0] * t, 0.13, a.z + dir[1] * t, dir, 2, 0.015, 0.15, '#eee7c8');
+    if (segment.line) {
+      // A curved road: short straight pieces along its curve, overlapping so it has no gaps.
+      for (const p of linePieces(segment.line)) {
+        piece(p.x, 0.025, p.z, p.dir, p.length + 0.6, 0.1, size.verge, '#c8c5b5');
+        piece(p.x, 0.09, p.z, p.dir, p.length + 0.6, 0.05, size.asphalt, '#414950');
+      }
+      length = lineLength(segment.line);
+      for (let t = 2; t < length; t += 5) {
+        const at = linePart(segment.line, t, t);
+        piece(at.points[0].x, 0.13, at.points[0].z, at.startDir, 2, 0.015, 0.15, '#eee7c8');
+      }
+      const middle = linePart(segment.line, length / 2, length / 2);
+      [x, z, dir] = [middle.points[0].x, middle.points[0].z, middle.startDir];
+    } else {
+      piece(x, 0.025, z, dir, length, 0.1, size.verge, '#c8c5b5');
+      piece(x, 0.09, z, dir, length, 0.05, size.asphalt, '#414950');
+      for (let t = 2; t < length; t += 5)
+        piece(a.x + dir[0] * t, 0.13, a.z + dir[1] * t, dir, 2, 0.015, 0.15, '#eee7c8');
+    }
+    // Two lanes each way: a white dashed line between each pair.
+    if (segment.lanes === 2) {
+      const line = segment.line || [a, b];
+      for (const side of [-1, 1]) {
+        const lane = offsetLine(line, side * (LANE_OFFSET + LANE_SPACING / 2)),
+          total = lineLength(lane);
+        for (let t = 12; t < total - 12; t += 6) {
+          const at = linePart(lane, t, t);
+          piece(at.points[0].x, 0.13, at.points[0].z, at.startDir, 2.5, 0.015, 0.12, '#f4f1e6');
+        }
+      }
+    }
     // The light stands on the verge to the south or east of the road.
     const across = acrossRoad(dir),
-      lx = x + across[0] * 7,
-      lz = z + across[1] * 7;
+      lx = x + across[0] * (size.verge / 2 - 1.5),
+      lz = z + across[1] * (size.verge / 2 - 1.5);
     model.tag?.('town/street-light#');
     box(lx, 2, lz, 0.15, 4, 0.15, '#526466');
     lights.push(box(lx, 4, lz, 0.7, 0.25, 0.7, '#e5d69e', { streetLamp: true }));
@@ -192,21 +233,31 @@ export function addCommunityWorld(model, location, { streets } = {}) {
     model.tag?.();
   }
   // Junctions: a square where roads meet square-on, a round apron where any road comes in at an
-  // angle.
+  // angle or along a curve, as wide as the widest road; a roundabout has its circle and island.
   for (const j of sim.map.junctions.filter((j) => j.id !== 'yard')) {
-    const angled = sim.map.segments.some(
-      ([a, b]) => (a === j || b === j) && a.x !== b.x && a.z !== b.z,
-    );
-    if (!angled) box(j.x, 0.09, j.z, 12, 0.05, 12, '#414950');
-    else {
+    const arms = sim.map.segments.filter(([a, b]) => a === j || b === j),
+      angled = arms.some(([a, b]) => a.x !== b.x && a.z !== b.z),
+      curved = arms.some((s) => s.line),
+      asphalt = Math.max(12, ...arms.map((s) => ROAD_SIZES[s.lanes || 1].asphalt));
+    const disc = (y, r, h, colour, extra = {}) =>
+      objects.push(
+        model.cylinder(j.x + origin.x, y, j.z + origin.z, r, h, colour, {
+          community: true,
+          ...extra,
+        }),
+      );
+    if (j.roundabout) {
+      disc(0.025, ROUNDABOUT.apron + 2, 0.1, '#c8c5b5');
+      disc(0.09, ROUNDABOUT.apron, 0.05, '#414950');
+      disc(0.16, ROUNDABOUT.island + 0.3, 0.18, '#adafa6');
+      disc(0.2, ROUNDABOUT.island, 0.22, '#7f9c6b', { surface: 'grass' });
+    } else if (!angled && !curved) box(j.x, 0.09, j.z, asphalt, 0.05, asphalt, '#414950');
+    else
       for (const [y, r, h, colour] of [
-        [0.025, 9.5, 0.1, '#c8c5b5'],
-        [0.09, 7.5, 0.05, '#414950'],
+        [0.025, asphalt / 2 + 3.5, 0.1, '#c8c5b5'],
+        [0.09, asphalt / 2 + 1.5, 0.05, '#414950'],
       ])
-        objects.push(
-          model.cylinder(j.x + origin.x, y, j.z + origin.z, r, h, colour, { community: true }),
-        );
-    }
+        disc(y, r, h, colour);
   }
   if (model.farm) model.farm.driveway = drawFarmDriveway({ box, origin, sim });
   for (const c of sim.map.crossings) {

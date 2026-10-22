@@ -157,15 +157,19 @@ The town's roads used to be a fixed grid in the code: six junctions across and f
   - **Plan / 3D** switches between editing from above and seeing the town as the game draws it.
   - **Run traffic** runs the real simulation on your layout, in the plan, at twice real time.
 - **Tools** on the left:
-  - **Select** (`V`): click a junction or road, and drag junctions to move them. Their roads follow.
+  - **Select** (`V`): click a junction or road, and drag junctions to move them. Their roads follow. A selected road shows a round handle halfway along: drag it to curve the road (a filled handle means it is curved).
   - **Road** (`R`): click a junction, a road or open ground to start, then click again to end. It keeps drawing from where you ended until `Esc`. Ending on a road or open ground adds a junction there.
   - **Junction** (`J`): click a road to put a junction on it.
   - **Crossing** (`C`): click beside a junction to add or remove the zebra crossing over that road.
   - **Delete** (`X`): click a junction or road to remove it.
   - **Pan** (`H`): drag to move around. Holding `Space` does the same with any tool.
 - **Inspector:**
-  - For a junction: its position, its **control** and its roads. The controls are **Automatic** (signals where three or more roads meet, as before), **Signals**, **Stop**, **Give way** and **Uncontrolled**.
-  - For a road: its length and its bus stops.
+  - For a junction: its position, its **control** and its roads. The controls are **Automatic** (signals where three or more roads meet, as before), **Signals**, **Stop**, **Give way**, **Roundabout** and **Uncontrolled**.
+  - For a road: its length (along its curve), its bus stops, its **Lanes** (one or two each way) and its **Shape** (straight or curved).
+- **Road shapes:**
+  - **Two lanes each way** make an 18 m road with a dashed line between each pair of lanes. Its pavements sit 11 m from the centre line, so its junctions are wider too. Traffic takes whichever lane suits its turn.
+  - **Curved** roads bend smoothly through their handle, halfway along. Lanes, kerbs, pavements and bus stops follow the curve. **Straight** takes the bend away. Splitting a road with a junction straightens it, but keeps its lanes.
+  - **Roundabout** puts a circle round a grass island in the junction. Traffic gives way to whoever is already on the circle, then drives round it: anticlockwise seen from above where traffic drives on the right, clockwise on the left. Crossings stay as zebras.
   - With nothing selected: the layout's numbers, its **problems**, and **Back to the grid** (or **Back to shared** for a city).
 - **Snap** keeps junctions on whole metres and lines them up with other junctions, showing a guide line. Scroll zooms, right-drag pans and `F` fits the town in view.
 
@@ -177,17 +181,19 @@ The editor checks the layout as you work and rings each problem on the plan. **R
   - a road running through a building's lot
   - roads that cross without a junction
   - a road shorter than 28 m
-  - roads meeting at less than 40°
+  - roads meeting at less than 40° (measured along a curved road where it leaves the junction)
+  - a curve tighter than 15 m round
   - a dead end (cars cannot turn round)
   - junctions cut off from the rest
   - a building people cannot walk to
 - **Warnings:**
   - bus stops that disappeared with their road
   - more than four roads at signals (signals have two phases, so some arms share a green)
+  - a roundabout where fewer than three roads meet
 
 ### What stays put
 
-Some junctions and roads are locked, because other parts of the game are built around them. The editor shows a padlock and the reason.
+Some junctions and roads are locked, because other parts of the game are built around them. The editor shows a padlock and the reason. Locked roads cannot be widened or curved, and locked junctions cannot become roundabouts.
 
 - **`1:1`:** students' traffic-light programs run its signals, and the road-control station stands beside it.
 - **`1:2`, `2:2` and the road between them:** the loading yard joins there.
@@ -205,7 +211,7 @@ export default {
   "locations": {                    // a city's own layout, when it has one
     "kyoto": {
       "junctions": [{"id": "0:-1", "x": -48, "z": -96}, ..., {"id": "n1", "x": 250, "z": 70, "control": "stop"}],
-      "roads": [{"a": "0:-1", "b": "1:-1"}, ..., {"a": "5:2", "b": "n1"}]
+      "roads": [{"a": "0:-1", "b": "1:-1", "lanes": 2}, ..., {"a": "5:2", "b": "n1", "bend": {"x": 230, "z": 40}}]
     }
   }
 };
@@ -213,11 +219,13 @@ export default {
 
 - **Positions** are metres in the town's own coordinates: x is east, z is south.
 - **Junction ids:** the grid's junctions keep their ids (`ix:iz`), and junctions you add are `n1`, `n2`, ….
-- **`control`** is `signals`, `stop`, `giveway` or `none`. Leave it out for the automatic choice.
+- **`control`** is `signals`, `stop`, `giveway`, `roundabout` or `none`. Leave it out for the automatic choice.
+- **`lanes: 2`** gives a road two lanes each way. The second lane's ids are `a>b:out:2` and `a>b:in:2`. Leave it out for one lane each way.
+- **`bend`** is the point a curved road passes through, halfway along. Leave it out for a straight road.
 - **`closedCrossings`** lists the neighbouring junctions whose road has no zebra crossing at this one.
 - **Cities without a layout of their own** use `town`. A layout the same as what it would inherit is not saved, so the file stays empty until something really changes.
 
-With the file empty, the town is built exactly as before: same lanes, crossings, signals and drawing (`tests/street-network.test.mjs`). Signals pair each junction's arms by which are most nearly opposite. On the grid that is east–west against north–south, so students' `trafficEW` and `trafficNS` programs keep working.
+With the file empty, or with roads and junctions that use none of `lanes`, `bend` and `roundabout`, the town is built exactly as before: same lanes, crossings, signals and drawing (`tests/street-network.test.mjs` checks the grid's network against hashes taken before these existed). Signals pair each junction's arms by which are most nearly opposite. On the grid that is east–west against north–south, so students' `trafficEW` and `trafficNS` programs keep working.
 
 ## Character Editor
 

@@ -1,6 +1,15 @@
 // The Street Editor's plan: the town from above on a 2D canvas, in the town's own metres (x east,
 // z south, so north is up). Draws the lots, roads, junctions, crossings and bus stops, the running
 // traffic, the selection and the problems, and turns pointer positions into town positions.
+import {
+  roadLine,
+  roadSize,
+  roadDirection,
+  offsetLine,
+  ROUNDABOUT,
+  LANE_OFFSET,
+  LANE_SPACING,
+} from '../../../public/street-network.js';
 
 const COLOURS = {
   ground: '#1d2228',
@@ -25,7 +34,19 @@ const COLOURS = {
   person: '#9fd3ff',
   lock: '#c9ced6',
   stop: '#e8604c',
+  island: '#4f6b45',
+  laneLine: '#eef0f2',
 };
+// Where a selected road's bend handle sits: on its curve, or halfway along a straight road.
+export function bendHandle(layout, [a, b]) {
+  const road = layout.roads.find((r) => (r.a === a && r.b === b) || (r.a === b && r.b === a)),
+    ja = layout.junctions.find((j) => j.id === a),
+    jb = layout.junctions.find((j) => j.id === b);
+  if (!road || !ja || !jb) return null;
+  return road.bend
+    ? { x: road.bend.x, z: road.bend.z, bent: true }
+    : { x: (ja.x + jb.x) / 2, z: (ja.z + jb.z) / 2, bent: false };
+}
 
 export class PlanView {
   constructor(canvas) {
@@ -125,12 +146,24 @@ export class PlanView {
       if (d < nearest) [best, nearest] = [{ junction: j.id }, d];
     }
     if (best) return best;
-    nearest = Math.max(6, 8 / this.scale);
+    // Within a road's asphalt, along its curve; the nearest road wins.
+    nearest = Infinity;
     for (const r of layout.roads) {
-      const d = distanceToSegment(at, byId[r.a], byId[r.b]);
-      if (d.distance < nearest) [best, nearest] = [{ road: [r.a, r.b], at: d.point }, d.distance];
+      const line = roadLine(byId[r.a], byId[r.b], r),
+        reach = Math.max(roadSize(r).asphalt / 2, 8 / this.scale);
+      for (let i = 1; i < line.length; i++) {
+        const d = distanceToSegment(at, line[i - 1], line[i]);
+        if (d.distance < reach && d.distance < nearest)
+          [best, nearest] = [{ road: [r.a, r.b], at: d.point }, d.distance];
+      }
     }
     return best;
+  }
+  // Whether a town position is on the selected road's bend handle.
+  hitHandle(layout, at) {
+    if (!this.selected?.road) return false;
+    const handle = bendHandle(layout, this.selected.road);
+    return !!handle && Math.hypot(handle.x - at.x, handle.z - at.z) < Math.max(3, 9 / this.scale);
   }
   // The crossing nearest a town position: the junction and the arm (neighbour) it spans.
   hitCrossing(layout, at) {
@@ -144,9 +177,10 @@ export class PlanView {
       ]) {
         const j = byId[id],
           k = byId[towards],
-          length = Math.hypot(k.x - j.x, k.z - j.z),
-          // A crossing sits about 8 m out along each arm.
-          spot = { x: j.x + ((k.x - j.x) / length) * 8, z: j.z + ((k.z - j.z) / length) * 8 },
+          [dx, dz] = roadDirection(j, k, r),
+          // A crossing sits about as far out along each arm as its pavement.
+          out = roadSize(r).pavement,
+          spot = { x: j.x + dx * out, z: j.z + dz * out },
           d = Math.hypot(spot.x - at.x, spot.z - at.z);
         if (d < nearest) [best, nearest] = [{ junction: id, towards, spot }, d];
       }
@@ -186,43 +220,72 @@ export class PlanView {
         ctx.fillText(clip(ctx, b.name, b.w * s - 8), cx, cy);
       }
     }
-    // Roads: verge, asphalt, then the dashed centre line.
+    // Roads: verge, asphalt, then the dashed centre line, each road as wide as its lanes and along
+    // its curve.
+    const lines = layout.roads
+      .filter((r) => byId[r.a] && byId[r.b])
+      .map((r) => ({ r, line: roadLine(byId[r.a], byId[r.b], r), size: roadSize(r) }));
+    const trace = (line) => {
+      ctx.moveTo(...P(line[0].x, line[0].z));
+      for (const p of line.slice(1)) ctx.lineTo(...P(p.x, p.z));
+    };
     const road = (width, colour, dash = []) => {
       ctx.strokeStyle = colour;
-      ctx.lineWidth = width;
       ctx.lineCap = dash.length ? 'butt' : 'round';
+      ctx.lineJoin = 'round';
       ctx.setLineDash(dash);
-      ctx.beginPath();
-      for (const r of layout.roads) {
-        const a = byId[r.a],
-          b = byId[r.b];
-        if (!a || !b) continue;
-        ctx.moveTo(...P(a.x, a.z));
-        ctx.lineTo(...P(b.x, b.z));
+      for (const { line, size } of lines) {
+        ctx.lineWidth = width(size);
+        ctx.beginPath();
+        trace(line);
+        ctx.stroke();
       }
-      ctx.stroke();
       ctx.setLineDash([]);
     };
-    road(17 * s, COLOURS.verge);
-    road(12 * s, COLOURS.asphalt);
-    if (s > 1.4) road(Math.max(1, 0.15 * s), COLOURS.dash, [2 * s, 3 * s]);
+    road((size) => size.verge * s, COLOURS.verge);
+    road((size) => size.asphalt * s, COLOURS.asphalt);
+    if (s > 1.4) road(() => Math.max(1, 0.15 * s), COLOURS.dash, [2 * s, 3 * s]);
+    // Two lanes each way: a thin line between each pair.
+    if (s > 1.4) {
+      ctx.strokeStyle = COLOURS.laneLine;
+      ctx.lineWidth = Math.max(0.8, 0.12 * s);
+      ctx.setLineDash([2.5 * s, 3.5 * s]);
+      for (const { r, line } of lines)
+        if (r.lanes === 2)
+          for (const side of [-1, 1]) {
+            ctx.beginPath();
+            trace(offsetLine(line, side * (LANE_OFFSET + LANE_SPACING / 2)));
+            ctx.stroke();
+          }
+      ctx.setLineDash([]);
+    }
+    // Roundabouts: the circle's asphalt and its island.
+    for (const j of layout.junctions)
+      if (j.control === 'roundabout') {
+        const [x, y] = P(j.x, j.z);
+        ctx.fillStyle = COLOURS.asphalt;
+        ctx.beginPath();
+        ctx.arc(x, y, ROUNDABOUT.apron * s, 0, Math.PI * 2);
+        ctx.fill();
+      }
     // Selected or hovered road.
     for (const [pick, colour] of [
       [this.hover, COLOURS.hover],
       [this.selected, COLOURS.accent],
     ])
       if (pick?.road) {
-        const a = byId[pick.road[0]],
-          b = byId[pick.road[1]];
-        if (!a || !b) continue;
+        const picked = lines.find(
+          ({ r }) =>
+            (r.a === pick.road[0] && r.b === pick.road[1]) ||
+            (r.b === pick.road[0] && r.a === pick.road[1]),
+        );
+        if (!picked) continue;
         ctx.strokeStyle = colour;
         ctx.lineWidth = 2;
         ctx.globalAlpha = 0.95;
         for (const side of [-1, 1]) {
-          const n = normal(a, b, 9 * side);
           ctx.beginPath();
-          ctx.moveTo(...P(a.x + n.x, a.z + n.z));
-          ctx.lineTo(...P(b.x + n.x, b.z + n.z));
+          trace(offsetLine(picked.line, side * (picked.size.verge / 2 + 0.5)));
           ctx.stroke();
         }
         ctx.globalAlpha = 1;
@@ -246,8 +309,8 @@ export class PlanView {
     const signalled = new Set((map?.junctions || []).filter((j) => j.signal).map((j) => j.id));
     for (const j of layout.junctions) {
       const [x, y] = P(j.x, j.z),
-        r = Math.max(5, 6 * s);
-      ctx.fillStyle = COLOURS.junction;
+        r = Math.max(5, (j.control === 'roundabout' ? ROUNDABOUT.island : 6) * s);
+      ctx.fillStyle = j.control === 'roundabout' ? COLOURS.island : COLOURS.junction;
       ctx.beginPath();
       ctx.arc(x, y, r, 0, Math.PI * 2);
       ctx.fill();
@@ -272,6 +335,20 @@ export class PlanView {
         );
       if (lockedJunctions[j.id] && s > 1.2)
         drawLock(ctx, x + r * 0.75, y - r * 0.75, Math.max(5, Math.min(8, s * 2.4)));
+    }
+    // The selected road's bend handle: filled on a curve, hollow halfway along a straight road.
+    if (this.selected?.road) {
+      const handle = bendHandle(layout, this.selected.road);
+      if (handle) {
+        const [x, y] = P(handle.x, handle.z);
+        ctx.fillStyle = handle.bent ? COLOURS.accent : COLOURS.ground;
+        ctx.strokeStyle = COLOURS.accent;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(x, y, 6, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+      }
     }
     // Bus stops: a small sign on the kerb.
     if (map && s > 1.2)
@@ -421,6 +498,23 @@ function drawControl(ctx, control, x, y, r, phase) {
     ctx.fill();
     ctx.fillStyle = '#fff';
     ctx.fillRect(x - r * 0.55, y - r * 0.12, r * 1.1, r * 0.24);
+  } else if (control === 'roundabout') {
+    // Arrows chasing round a circle.
+    ctx.strokeStyle = '#ffffff';
+    ctx.fillStyle = '#ffffff';
+    ctx.lineWidth = Math.max(1.5, r * 0.22);
+    for (const start of [0, (Math.PI * 2) / 3, (Math.PI * 4) / 3]) {
+      ctx.beginPath();
+      ctx.arc(x, y, r * 0.75, start, start + 1.4);
+      ctx.stroke();
+      const end = start + 1.4,
+        tip = [x + Math.cos(end) * r * 0.75, y + Math.sin(end) * r * 0.75];
+      ctx.beginPath();
+      ctx.moveTo(tip[0] + Math.cos(end) * r * 0.3, tip[1] + Math.sin(end) * r * 0.3);
+      ctx.lineTo(tip[0] - Math.cos(end) * r * 0.3, tip[1] - Math.sin(end) * r * 0.3);
+      ctx.lineTo(tip[0] - Math.sin(end) * r * 0.35, tip[1] + Math.cos(end) * r * 0.35);
+      ctx.fill();
+    }
   } else if (control === 'giveway') {
     ctx.fillStyle = '#ffffff';
     ctx.strokeStyle = COLOURS.stop;
@@ -446,10 +540,6 @@ function drawLock(ctx, x, y, r) {
   ctx.fillRect(x - r * 0.6, y - r * 0.2, r * 1.2, r * 0.9);
   ctx.restore();
 }
-const normal = (a, b, d) => {
-  const length = Math.hypot(b.x - a.x, b.z - a.z) || 1;
-  return { x: (-(b.z - a.z) / length) * d, z: ((b.x - a.x) / length) * d };
-};
 export function distanceToSegment(p, a, b) {
   const dx = b.x - a.x,
     dz = b.z - a.z,

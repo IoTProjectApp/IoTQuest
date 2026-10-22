@@ -32,6 +32,7 @@ import {
 import { createWorldModel } from './world-model.js';
 import { createRegionalModel } from './regions.js';
 import { applyWorldLayout } from './world-layout.js';
+import { addOwnPeople, routineFor, routinePose } from './people-settings.js';
 import { updateClouds } from './clouds.js';
 // Left-right flip used to draw mirrored homes.
 const MIRROR = new Float32Array([-1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]);
@@ -59,7 +60,8 @@ export { frustumTest, isSoftwareRenderer } from './world-renderer-webgl.js';
 export function buildWorldModel(id) {
   const model = createRegionalModel(id || 'legacy');
   addCommunityWorld(model, locationById(id));
-  return applyWorldLayout(model, id || 'legacy');
+  // People added in the Character Editor (data/people.js) join after the hand-placed changes.
+  return addOwnPeople(applyWorldLayout(model, id || 'legacy'), id || 'legacy');
 }
 // A walk clip stepped by the distance walked, so feet keep pace with the ground; a clip that is
 // not a walk (set in the Character Editor) plays as a loop instead.
@@ -644,7 +646,8 @@ export class World3D {
       let ax = actor.x,
         az = actor.z,
         angle = actor.heading ?? 0,
-        phase = 0;
+        phase = 0,
+        routine = null;
       if (actor.id === 'player') {
         ax = p[0];
         az = p[2];
@@ -677,6 +680,15 @@ export class World3D {
         ax = actor.x;
         az = actor.z;
         phase = reduced ? 0 : t * 8;
+      } else if ((routine = routineFor(actor.id, state.locationId))) {
+        // A routine from the Character Editor: walking stop to stop, then staying a while.
+        const pose = routinePose(routine, reduced ? 0 : t, settingsFor(actor.id).speed);
+        actor.x = ax = pose.x;
+        actor.z = az = pose.z;
+        angle = pose.angle;
+        phase = pose.walking && !reduced ? t * 8 : 0;
+        actor.routineClip = pose.clip;
+        actor.routineWalking = pose.walking;
       } else if (actor.id === 'Maya' && motion) {
         // Maya strolls round the garden, as briskly as her set speed.
         const w = t * 0.8 * settingsFor('Maya').speed;
@@ -1046,14 +1058,20 @@ export class World3D {
             : 'Walking',
       // Someone in conversation talks with their hands; reduced motion holds everyone still. A
       // hand-set activity replaces standing and walking alike.
+      // A routine's stop plays its own clip.
       gesture =
-        state.talkingNpc === actor.id ? 'Talking' : knownClip(set.activity || set.idle || 'Idle'),
+        state.talkingNpc === actor.id
+          ? 'Talking'
+          : knownClip(actor.routineClip || set.activity || set.idle || 'Idle'),
       loop = (name) => ({
         name,
         time: state.reduced ? 0 : (t * set.rate) % CLIPS[name].duration,
       }),
       idle = loop(gesture),
-      pace = actor.pace < 0.05 || state.reduced || set.activity ? 0 : actor.pace;
+      pace =
+        actor.pace < 0.05 || state.reduced || (set.activity && !actor.routineWalking)
+          ? 0
+          : actor.pace;
     return {
       key: actor.id,
       model:

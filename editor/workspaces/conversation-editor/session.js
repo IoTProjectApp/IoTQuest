@@ -13,6 +13,7 @@ import {
   linesFor,
 } from '../../../public/conversation-settings.js';
 import { QuestSession, builtInQuests } from '../quest-editor/session.js';
+import { PEOPLE_SETTINGS } from '../../../public/people-settings.js';
 
 export { LINES, PLACEHOLDERS, MAX_LENGTH, locations };
 // Where the lines for everyone are kept, among the people.
@@ -90,6 +91,9 @@ export class ConversationSession {
       add(qs.builtInSpec(index).resident, { kind: 'builtin', index });
     }
     for (const q of qs.quests) add(q.resident, { kind: 'mine', id: q.id });
+    // People added in the Character Editor talk too, with or without requests.
+    for (const p of PEOPLE_SETTINGS.people)
+      if (p.name && !byName.has(p.name)) byName.set(p.name, { name: p.name, requests: [] });
     return [...byName.values()].sort((a, b) => a.name.localeCompare(b.name));
   }
   // What a city calls someone (only the household has city names).

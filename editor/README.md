@@ -388,11 +388,50 @@ Waving: {
 
 It is saved as `public/models/people/model-<Name>.glb` and listed in `public/data/models.js`. It can then be picked under **Played by** for anyone. The bin button removes it (its file too); anyone set to it goes back to as built.
 
+### New people
+
+**New person** (above the list) adds someone of your own, listed under **Your people** and standing on the front lawn at home until you say otherwise. At the top of their inspector, **Who they are** sets:
+
+- **Name**: who they are in the game. It must be their own: not another added person's, nor anyone's already in that city (a quest resident or a townsperson), or their quests and chats would mix.
+- **Lives in**: home (the original house), one city, or every city.
+- **What they do** (shown when they talk, "Neighbour" if blank) and **About them**, a line for whoever writes their quests and lines.
+- **Stands at**: **Place on the map…** opens the map (below); click where they stand.
+- **Remove** takes them out of the game, with their looks and routine.
+
+Their looks and movement are set below, like anyone's: who plays them, what they wear, their clips and speeds. In the game they stand (or walk their routine) in their city, and the technician can talk to them. Once saved, their name can be picked as a quest's resident in the Quest Editor, and their lines written in the Conversation Editor.
+
+### Routines
+
+A routine is a round of stops: they walk to each in a straight line, stay there a while playing a clip, and after the last walk back to the first. **Routine** in the inspector says what they do now; **Draw a routine…** opens the map over the preview:
+
+- **The map** is the city from above as the game builds it: grey blocks are walls, fences and furniture (what people cannot walk through), dots are other people, a diamond is where an added person stands without a routine, and the yellow dot is them, walking the routine as it plays back (**Play**, at 1×, 5× or 20×).
+- **Click** the map to add a stop (after the selected one, or at the end). **Drag** a stop to move it; drag elsewhere to pan, **scroll** to zoom, **F** fits the routine. **Delete** removes the selected stop.
+- **Beside the map**, each stop has how long they stay (up to 10 minutes) and what they play there: their standing clip, or any clip, imported ones too. Arrows change the order.
+
+They walk at 1.2 m/s, times their walking speed. A walk that runs through a wall or furniture is drawn red and stops saving, as does a stop inside one: add a stop to go round. Routines follow the game's clock, so the game's speed and pause apply.
+
+**Who can have one:** people added here, and the townspeople and workers who stand by themselves. Locked, with the reason shown: the technician (you steer them), the household (they come to the technician when a room needs them), the judo class (timed to its lesson), and people moved by what they are doing (players, swimmers, passengers). The Character Editor shows everyone at home, so a townsperson's routine plays at home only (the town differs between cities); an added person's routine plays wherever they live.
+
+### The saved people
+
+`public/data/people.js` holds them; `public/people-settings.js` describes the format and adds them to the game.
+
 ```js
 export default {
   version: 1,
   models: {
     Robin: { file: 'model-Robin.glb', woman: true, height: 0.92 },
+  people: [
+    { id: 'own:ana', name: 'Ana', city: 'legacy', at: [3, 9], role: 'Baker', bio: 'Up at four.' },
+  ],
+  routines: {
+    'own:ana': {
+      stops: [
+        { at: [3, 9], stay: 20, clip: 'TalkingAsk' },
+        { at: [9, 9], stay: 10 },
+      ],
+    },
+    'civic:hospital': { city: 'legacy', stops: [{ at: [60, 40], stay: 30 }] },
   },
 };
 ```
@@ -400,6 +439,9 @@ export default {
 - **The game** (`public/character-models.js`) draws an imported model from its one file near and far (the game's own have a light version for distance and software WebGL), scaled by its height. A setting that names a model the game does not have plays that person as built. With the file empty the game is exactly as before (`tests/character-models.test.mjs`).
 - **Publishing a model:** as with clips, commit `public/data/models.js` here and add the model's `.glb` to the private models repository, then update `COMMIT` in `scripts/fetch-models.mjs`. Until its file is there, anyone set to it is drawn as their jointed stand-in figure.
 - **Not imported:** a model's own animations (import them as clips), extra rigid parts parented to bones, and models whose skeleton is not Mixamo-style (rig them in Mixamo first).
+- **Ids:** an added person's id is `own:` and the name they were added with as a slug (`own:new-person-1`), and stays put when they are renamed, so their looks (kept under that id in `public/data/characters.js`) stay theirs.
+- **Positions** are world metres, `[x, z]`, to the centimetre.
+- **With the file empty, every world is built and every frame drawn exactly as before** (`tests/people-routines.test.mjs` compares the worlds; a run of frames was compared against the code before).
 
 ## Quest Editor
 

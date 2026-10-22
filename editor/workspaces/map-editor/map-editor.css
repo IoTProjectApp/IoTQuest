@@ -137,3 +137,57 @@
   margin: 0 auto;
   color: var(--faint);
 }
+
+/* The House tool's inspector */
+.pick-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.pick-list .button {
+  height: 28px;
+  font-size: 12px;
+}
+.inspector .muted.small {
+  margin-top: 8px;
+  font-size: 12px;
+}
+.inspector .caution + .caution {
+  margin-top: 6px;
+}
+.field.colour input[type='color'] {
+  width: 100%;
+  height: 30px;
+  padding: 2px;
+  border: 1px solid var(--line-strong);
+  border-radius: 6px;
+  background: var(--bg);
+}
+.doorway {
+  display: grid;
+  grid-template-columns: 1fr 1fr 24px;
+  gap: 8px;
+  align-items: end;
+  margin-bottom: 8px;
+}
+.doorway .input {
+  width: 100%;
+}
+.doorway .revert {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 30px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: var(--faint);
+  cursor: pointer;
+}
+.doorway .revert:hover {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+.gizmo-bar[hidden] {
+  display: none;
+}

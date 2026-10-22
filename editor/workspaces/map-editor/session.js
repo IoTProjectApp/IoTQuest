@@ -13,6 +13,15 @@ import {
   partBounds,
   scaleOf,
 } from '../../../public/world-layout.js';
+import {
+  applyHouseShell,
+  checkHouse,
+  shellInfo,
+  wallSpecs,
+  furnitureInWalls,
+  WALL_NAMES,
+  LINE_NAMES,
+} from '../../../public/house-shell.js';
 import { kindOf, nameOf, categoryOf, cautionFor } from './names.js';
 
 const round = (v, places) => Math.round(v * 10 ** places) / 10 ** places || 0;
@@ -33,6 +42,25 @@ const same = (a, b) =>
   scaleOf(a.scale).every((v, i) => Math.abs(v - scaleOf(b.scale)[i]) <= 5e-4 + 1e-9);
 const clone = (value) => JSON.parse(JSON.stringify(value));
 const emptyChanges = () => ({ edits: {}, added: [] });
+// House changes without anything empty in them (a wall with no changes, no walls...), or null.
+export function tidyHouse(house) {
+  if (!house) return null;
+  const out = {};
+  const lines = Object.fromEntries(
+    Object.entries(house.lines || {}).map(([id, at]) => [id, round(at, 3)]),
+  );
+  if (Object.keys(lines).length) out.lines = lines;
+  for (const key of ['walls', 'rooms']) {
+    const entries = Object.entries(house[key] || {})
+      .map(([id, edit]) => [
+        id,
+        Object.fromEntries(Object.entries(edit).filter(([, v]) => v !== undefined && v !== null)),
+      ])
+      .filter(([, edit]) => Object.keys(edit).length);
+    if (entries.length) out[key] = Object.fromEntries(entries);
+  }
+  return Object.keys(out).length ? out : null;
+}
 
 export class WorldSession {
   // `changes`: this destination's entry from the saved layout (or none).
@@ -105,6 +133,44 @@ export class WorldSession {
       else changes.edits[id] = { removed: true };
     });
   }
+  // ---- The house's walls and rooms (see public/house-shell.js) ----
+  // What the House tool can change here: { whole, walls, rooms }.
+  houseInfo() {
+    return shellInfo(this.model);
+  }
+  // Every wall as the house now stands.
+  walls() {
+    return wallSpecs(this.model, this.changes.house || {});
+  }
+  // Shows house changes while a wall is dragged, without recording them.
+  previewHouse(house) {
+    applyHouseShell(this.model, house);
+  }
+  // Changes the house: `change(house)` edits a copy. Changes with problems are not made; their
+  // problems are returned instead.
+  editHouse(label, change) {
+    const house = clone(this.changes.house || {});
+    change(house);
+    const tidied = tidyHouse(house),
+      problems = checkHouse(this.model, tidied).filter((p) => p.error);
+    if (problems.length) {
+      // Put back what a drag may have shown.
+      applyHouseShell(this.model, this.changes.house);
+      return problems;
+    }
+    this.commit(label, (changes) => {
+      if (tidied) changes.house = tidied;
+      else delete changes.house;
+    });
+    return [];
+  }
+  // Problems to point out in the house as it now stands: furniture left inside a moved wall.
+  houseWarnings() {
+    return furnitureInWalls(this.model).map(({ group, wall }) => ({
+      group,
+      text: `${this.groups.get(group)?.name || group} is inside the ${WALL_NAMES[wall].toLowerCase()}. Move it with Select.`,
+    }));
+  }
   // Back to how the code builds it.
   reset(id) {
     const group = this.groups.get(id);
@@ -164,6 +230,7 @@ export class WorldSession {
   // Replaces all changes (opening a destination, or discarding edits) without undo history.
   restore(changes) {
     this.changes = { edits: { ...changes.edits }, added: [...(changes.added || [])] };
+    if (changes.house) this.changes.house = clone(changes.house);
     this.undoStack = [];
     this.redoStack = [];
     this.sync();
@@ -173,6 +240,8 @@ export class WorldSession {
   // Brings the model in line with this.changes: placements, removals and added copies.
   sync() {
     const { edits, added } = this.changes;
+    // Saved house changes this city cannot take (a problem found on opening) are listed.
+    this.houseProblems = applyHouseShell(this.model, this.changes.house);
     this.missing = Object.keys(edits).filter((id) => !this.groups.has(id));
     const wanted = new Map(added.map((a) => [a.id, a]));
     for (const [id, group] of [...this.groups]) {
@@ -229,11 +298,26 @@ export class WorldSession {
         missing: !this.groups.has(id),
       });
     for (const a of this.changes.added) list.push({ id: a.id, name: a.name, what: 'Added' });
+    const house = this.changes.house || {};
+    for (const line of Object.keys(house.lines || {}))
+      list.push({ id: 'house:lines:' + line, name: 'Moved ' + LINE_NAMES[line], what: 'Changed' });
+    for (const wall of Object.keys(house.walls || {}))
+      list.push({ id: 'house:walls:' + wall, name: WALL_NAMES[wall] || wall, what: 'Changed' });
+    for (const room of Object.keys(house.rooms || {}))
+      list.push({ id: 'house:rooms:' + room, name: room + ' floor', what: 'Changed' });
     return list;
+  }
+  // Puts one house change back as built: 'house:lines:middle', 'house:walls:back'...
+  resetHouse(id) {
+    const [, key, part] = id.split(':');
+    return this.editHouse('Reset ' + (key === 'lines' ? LINE_NAMES[part] : part), (house) => {
+      delete house[key]?.[part];
+    });
   }
   // The changes as saved: null when there are none, so the layout file stays clean.
   saved() {
-    const { edits, added } = this.changes;
-    return Object.keys(edits).length || added.length ? clone({ edits, added }) : null;
+    const { edits, added, house } = this.changes;
+    if (!Object.keys(edits).length && !added.length && !house) return null;
+    return clone(house ? { edits, added, house } : { edits, added });
   }
 }

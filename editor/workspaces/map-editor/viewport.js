@@ -13,7 +13,9 @@ import {
   transformGroup,
   groupTemplate,
   scaleOf,
+  partBounds,
 } from '../../../public/world-layout.js';
+import { LOCKED_LINES } from '../../../public/house-shell.js';
 
 const FOV = 0.82;
 // A daytime sky with light cloud: what matters here is seeing shapes and colours clearly.
@@ -110,9 +112,35 @@ const normalise = (v) => {
 };
 
 export class Viewport {
-  constructor(canvas, { onPick, onPlace, onTransformEnd, onHover, onCamera, onResize } = {}) {
+  constructor(
+    canvas,
+    {
+      onPick,
+      onPlace,
+      onTransformEnd,
+      onHover,
+      onCamera,
+      onResize,
+      onHousePick,
+      onHouseDrag,
+      onHouseEnd,
+    } = {},
+  ) {
     this.canvas = canvas;
-    Object.assign(this, { onPick, onPlace, onTransformEnd, onHover, onCamera, onResize });
+    Object.assign(this, {
+      onPick,
+      onPlace,
+      onTransformEnd,
+      onHover,
+      onCamera,
+      onResize,
+      onHousePick,
+      onHouseDrag,
+      onHouseEnd,
+    });
+    // The House tool's selection and hover: { kind: 'wall' | 'room', id }.
+    this.house = null;
+    this.houseHover = null;
     this.mode = 'translate';
     this.renderer = new ThreeWorldRenderer(canvas);
     this.camera = new THREE.PerspectiveCamera((FOV * 180) / Math.PI, 1, 0.1, 900);
@@ -150,9 +178,22 @@ export class Viewport {
     this.orbit.addEventListener('change', () => this.onCamera?.());
     this.gizmo.addEventListener('dragging-changed', (e) => {
       this.orbit.enabled = !e.value;
+      if (this.tool === 'house') {
+        if (!e.value && this.dragLine) this.onHouseEnd?.(...this.dragLine);
+        this.dragLine = null;
+        return;
+      }
       if (!e.value && this.selected) this.onTransformEnd?.(this.selected.id, this.proxyPlacement());
     });
     this.gizmo.addEventListener('objectChange', () => {
+      if (this.tool === 'house') {
+        const wall = this.selectedWall();
+        if (!wall) return;
+        this.dragLine = [wall.line, this.proxy.position[wall.axis === 'x' ? 'z' : 'x']];
+        this.onHouseDrag?.(...this.dragLine);
+        this.updateOutlines();
+        return;
+      }
       if (!this.selected) return;
       this.session.preview(this.selected.id, this.proxyPlacement());
       this.updateOutlines();
@@ -174,6 +215,7 @@ export class Viewport {
   setSession(session, location) {
     this.session = session;
     this.location = location;
+    this.house = null;
     this.select(null);
     this.setHover(null);
     this.cancelPlacing();
@@ -183,6 +225,8 @@ export class Viewport {
     this.tool = tool;
     this.cancelPlacing();
     this.setHover(null);
+    this.houseHover = null;
+    if (tool !== 'house') this.house = null;
     this.attachGizmo();
   }
   // 'translate' and 'rotate' use the gizmo; 'scale' shows the resize handles instead.
@@ -208,6 +252,9 @@ export class Viewport {
     this.updateOutlines();
   }
   attachGizmo() {
+    if (this.tool === 'house') return this.attachWallGizmo();
+    this.gizmo.showY = true;
+    this.gizmo.showX = this.gizmo.showZ = this.mode !== 'rotate';
     const editing = this.selected && this.tool === 'select' && !this.selected.hidden;
     if (editing && this.mode !== 'scale') {
       this.syncProxy();
@@ -224,6 +271,7 @@ export class Viewport {
   }
   refresh() {
     if (this.selected && !this.session.groups.has(this.selected.id)) this.selected = null;
+    if (this.tool === 'house' && !this.gizmo.dragging) this.attachGizmo();
     if (this.selected && !this.gizmo.dragging && !this.resizing) this.attachGizmo();
     this.updateOutlines();
   }
@@ -254,7 +302,96 @@ export class Viewport {
     holder.box.scale.set(max[0] - min[0] + pad, max[1] - min[1] + pad, max[2] - min[2] + pad);
     if (color !== undefined) holder.box.material.color.setHex(color);
   }
+  // ---- The House tool: walls and rooms ----
+  // The parts that show a wall or room: a wall's, or a room's floor.
+  houseParts(target) {
+    const shell = this.session?.model.shell;
+    if (!target || !shell) return [];
+    if (target.kind === 'wall') return shell.walls.find((w) => w.id === target.id)?.parts || [];
+    return shell.rooms.find((r) => r.id === target.id)?.parts.slice(0, 1) || [];
+  }
+  selectedWall() {
+    return this.house?.kind === 'wall'
+      ? this.session.walls().find((w) => w.id === this.house.id)
+      : null;
+  }
+  selectHouse(target) {
+    this.house = target;
+    this.attachGizmo();
+    this.updateOutlines();
+  }
+  setHouseHover(target) {
+    if (JSON.stringify(target) === JSON.stringify(this.houseHover)) return;
+    this.houseHover = target;
+    this.updateOutlines();
+    this.onHover?.(target);
+  }
+  // A wall on a line that can move gets a handle that slides it across the house.
+  attachWallGizmo() {
+    this.handles.visible = false;
+    const wall = this.selectedWall();
+    if (!wall || !this.session.houseInfo().whole || LOCKED_LINES[wall.line]) {
+      this.gizmo.detach();
+      return;
+    }
+    if (!this.gizmo.dragging) {
+      const middle = (wall.from + wall.to) / 2,
+        top = wall.height + 0.3;
+      this.proxy.position.set(
+        ...(wall.axis === 'x' ? [middle, top, wall.at] : [wall.at, top, middle]),
+      );
+      this.proxy.rotation.set(0, 0, 0);
+    }
+    this.gizmo.setMode('translate');
+    this.gizmo.showY = false;
+    this.gizmo.showX = wall.axis === 'z';
+    this.gizmo.showZ = wall.axis === 'x';
+    this.gizmo.attach(this.proxy);
+  }
+  // The wall or room floor under the cursor.
+  pickHouse(event) {
+    const ray = this.ray(event),
+      shell = this.session?.model.shell;
+    if (!ray || !shell) return null;
+    const info = this.session.houseInfo();
+    let best = null,
+      nearest = Infinity;
+    const consider = (target, parts) => {
+      for (const part of parts) {
+        const t = rayPart(ray, part);
+        if (t < nearest) {
+          nearest = t;
+          best = target;
+        }
+      }
+    };
+    for (const wall of shell.walls)
+      if (info.walls.includes(wall.id)) consider({ kind: 'wall', id: wall.id }, wall.parts);
+    for (const room of shell.rooms)
+      if (info.rooms.includes(room.id))
+        consider({ kind: 'room', id: room.id }, room.parts.slice(0, 1));
+    return best;
+  }
+  // Fits a wire box around parts (a wall's or a floor's).
+  fitParts(holder, parts, color) {
+    holder.visible = parts.length > 0;
+    if (!holder.visible) return;
+    const { min, max } = partBounds(parts),
+      pad = 0.06;
+    holder.position.set(0, 0, 0);
+    holder.rotation.set(0, 0, 0);
+    holder.scale.set(1, 1, 1);
+    holder.box.position.set((min[0] + max[0]) / 2, (min[1] + max[1]) / 2, (min[2] + max[2]) / 2);
+    holder.box.scale.set(max[0] - min[0] + pad, max[1] - min[1] + pad, max[2] - min[2] + pad);
+    holder.box.material.color.setHex(color);
+  }
   updateOutlines() {
+    if (this.tool === 'house') {
+      this.fitParts(this.selectionBox, this.houseParts(this.house), ACCENT);
+      const same = JSON.stringify(this.houseHover) === JSON.stringify(this.house);
+      this.fitParts(this.hoverBox, same ? [] : this.houseParts(this.houseHover), HOVER);
+      return;
+    }
     this.fit(this.selectionBox, this.selected, ACCENT);
     const hover = this.hovered !== this.selected ? this.hovered : null;
     this.fit(this.hoverBox, hover, this.tool === 'erase' ? DANGER : HOVER);
@@ -312,8 +449,13 @@ export class Viewport {
       if (this.ghost) this.moveGhost(e);
       else if (!this.gizmo.dragging && !down && ['select', 'erase'].includes(this.tool))
         this.setHover(this.pick(e));
+      else if (!this.gizmo.dragging && !down && this.tool === 'house')
+        this.setHouseHover(this.pickHouse(e));
     });
-    c.addEventListener('pointerleave', () => this.setHover(null));
+    c.addEventListener('pointerleave', () => {
+      this.setHover(null);
+      this.setHouseHover(null);
+    });
     c.addEventListener('pointerup', (e) => {
       const click =
         down && down.button === 0 && Math.hypot(e.clientX - down.x, e.clientY - down.y) < 5;
@@ -321,6 +463,7 @@ export class Viewport {
       // A press on the gizmo is a drag of the object, never a click.
       if (!click || this.gizmo.axis) return;
       if (this.ghost) this.onPlace?.(this.ghost.source, this.ghost.placement, e.shiftKey);
+      else if (this.tool === 'house') this.onHousePick?.(this.pickHouse(e));
       else if (this.tool === 'select' || this.tool === 'erase') this.onPick?.(this.pick(e), e);
     });
   }

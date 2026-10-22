@@ -4,13 +4,15 @@
 // person moved, removed or added to data/world-layout.js, per destination:
 //   { version: 1, locations: { [locationId]: {
 //       edits: { [groupId]: { pos: [x, y, z], turn, scale } | { removed: true } },
-//       added: [{ id, name, pos: [x, y, z], turn, scale, parts: [...], colliders: [...] }] } } }
+//       added: [{ id, name, pos: [x, y, z], turn, scale, parts: [...], colliders: [...] }],
+//       house: { lines, walls, rooms } } } }
 // `pos` is where the group's base centre goes (the middle of its footprint, at its lowest point),
 // `turn` a rotation about the vertical axis in radians, and `scale` its size: one factor, or
 // [across, up, along] factors on the group's own unturned x, y and z (stretching it). Added
-// objects carry their own parts, measured from a base centre at the origin. An empty layout leaves
-// the world exactly as built.
+// objects carry their own parts, measured from a base centre at the origin. `house` changes the
+// walls and rooms themselves (see house-shell.js). An empty layout leaves the world exactly as built.
 import WORLD_LAYOUT from './data/world-layout.js';
+import { applyHouseShell } from './house-shell.js';
 
 export { WORLD_LAYOUT };
 
@@ -199,6 +201,9 @@ export function applyWorldLayout(model, locationId, layout = WORLD_LAYOUT) {
   const changes = layout?.locations?.[locationId || 'legacy'];
   model.layoutWarnings = [];
   if (!changes) return model;
+  // The house first: furniture placed afterwards stands where it was saved.
+  for (const problem of applyHouseShell(model, changes.house))
+    model.layoutWarnings.push(`${locationId}: house changes left out: ${problem.text}`);
   const groups = editGroups(model);
   for (const [id, edit] of Object.entries(changes.edits || {})) {
     const group = groups.get(id);

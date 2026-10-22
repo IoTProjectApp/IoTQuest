@@ -141,6 +141,24 @@ export function createWorldModel(variant = {}) {
       start = g + 0.75;
     }
   };
+  // The house's shell, for the Map Editor's House tool (applied by house-shell.js): each wall with
+  // the grid lines it stands on and ends at, its doorways and height, and each room's floor parts.
+  const shell = { walls: [], rooms: [] };
+  const shellWall = (id, line, fromLine, toLine, openings, height, build) => {
+    const firstPart = objects.length,
+      firstCollider = colliders.length;
+    build();
+    shell.walls.push({
+      id,
+      line,
+      fromLine,
+      toLine,
+      openings,
+      height,
+      parts: objects.slice(firstPart),
+      colliders: colliders.slice(firstCollider),
+    });
+  };
   // A raised island, grass and a gravel walkway through the property.
   box(0, -0.53, 0, 33.8, 1, 27.5, '#b0bc83');
   box(0, -0.035, 0, 33.6, 0.1, 27.3, '#abc68b');
@@ -173,6 +191,7 @@ export function createWorldModel(variant = {}) {
   ];
   box(-5.8, 0.07, -6, 14.9, 0.2, 10.4, '#e9ddc6');
   for (const [name, x, z, c] of rooms) {
+    const firstPart = objects.length;
     box(x, 0.18, z, 4.58, 0.09, 4.8, c);
     const tiled = variant.design && !['Bathroom', 'Utility room', 'Garage'].includes(name);
     // Designed floors cover these default plank lines, so only draw them on plain floors.
@@ -203,19 +222,40 @@ export function createWorldModel(variant = {}) {
             { rounded: false, interiorFloor: true },
           );
     }
+    shell.rooms.push({ id: name, x, z, parts: objects.slice(firstPart) });
   }
-  wallH(-13.1, 1.4, -11, null, 1.55);
-  wallH(-13.1, -8.2, -6, -10.5, 0.95);
-  wallH(-8.2, -3.4, -6, -5.8, 0.95);
-  wallH(-3.4, 1.4, -6, -1.1, 0.95); // bedroom/kitchen doorway
-  wallV(-13.1, -11, -1, [], 1.1);
-  wallV(1.4, -11, -1, [-3.5], 1.1);
-  wallV(-8.2, -11, -1, [-8.5, -3.5], 0.95);
-  wallV(-3.4, -11, -1, [-8.5, -3.5], 0.95);
+  const door = (at, width = 1.5) => ({ at, width }),
+    doors = (...at) => at.map((a) => door(a));
+  shellWall('back', 'back', 'left', 'right', [], 1.55, () => wallH(-13.1, 1.4, -11, null, 1.55));
+  shellWall('middle-left', 'middle', 'left', 'divider-left', [door(-10.5)], 0.95, () =>
+    wallH(-13.1, -8.2, -6, -10.5, 0.95),
+  );
+  shellWall('middle-centre', 'middle', 'divider-left', 'divider-right', [door(-5.8)], 0.95, () =>
+    wallH(-8.2, -3.4, -6, -5.8, 0.95),
+  );
+  shellWall('middle-right', 'middle', 'divider-right', 'right', [door(-1.1)], 0.95, () =>
+    wallH(-3.4, 1.4, -6, -1.1, 0.95),
+  ); // bedroom/kitchen doorway
+  shellWall('left', 'left', 'back', 'front', [], 1.1, () => wallV(-13.1, -11, -1, [], 1.1));
+  shellWall('right', 'right', 'back', 'front', doors(-3.5), 1.1, () =>
+    wallV(1.4, -11, -1, [-3.5], 1.1),
+  );
+  shellWall('divider-left', 'divider-left', 'back', 'front', doors(-8.5, -3.5), 0.95, () =>
+    wallV(-8.2, -11, -1, [-8.5, -3.5], 0.95),
+  );
+  shellWall('divider-right', 'divider-right', 'back', 'front', doors(-8.5, -3.5), 0.95, () =>
+    wallV(-3.4, -11, -1, [-8.5, -3.5], 0.95),
+  );
   // Front wall and three entrances (garage door leaves a wide passage).
-  wallH(-13.1, -8.2, -1, -10.5, 0.55);
-  wallH(-8.2, -3.4, -1, -5.8, 0.55);
-  wallH(-3.4, 1.4, -1, -1.1, 0.55, 3.2);
+  shellWall('front-left', 'front', 'left', 'divider-left', [door(-10.5)], 0.55, () =>
+    wallH(-13.1, -8.2, -1, -10.5, 0.55),
+  );
+  shellWall('front-centre', 'front', 'divider-left', 'divider-right', [door(-5.8)], 0.55, () =>
+    wallH(-8.2, -3.4, -1, -5.8, 0.55),
+  );
+  shellWall('front-right', 'front', 'divider-right', 'right', [door(-1.1, 3.2)], 0.55, () =>
+    wallH(-3.4, 1.4, -1, -1.1, 0.55, 3.2),
+  );
   // Fittings (windows, doors, blinds) are edit groups of their own, apart from the walls.
   for (const x of [-11.5, -6.7, -1.9]) {
     tag('house/window#');
@@ -585,5 +625,6 @@ export function createWorldModel(variant = {}) {
     sphere,
     cylinder,
     rooms,
+    shell,
   };
 }

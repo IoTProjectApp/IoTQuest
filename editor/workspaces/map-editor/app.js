@@ -454,7 +454,7 @@ function undo(redo = false) {
 async function save() {
   collect();
   try {
-    await shell.writeLayout(state.layout);
+    await shell.write('world-layout', state.layout);
     state.savedText = currentText();
     changed();
     toast('Saved to public/data/world-layout.js');
@@ -537,7 +537,7 @@ window.mapEditor = { state, viewport };
 
 // ---- Start ----------------------------------------------------------------------------------
 async function start() {
-  if (shell) state.layout = await shell.readLayout();
+  if (shell) state.layout = await shell.read('world-layout');
   else {
     // Opened outside the desktop shell: read the layout, but saving is unavailable.
     state.layout = (await import('../../../public/data/world-layout.js')).default;
@@ -559,6 +559,8 @@ async function start() {
 }
 start().catch((error) => {
   $('loading').hidden = false;
-  $('loading').textContent = 'The Map Editor could not start: ' + error.message;
+  $('loading').textContent = /No handler registered/.test(error.message)
+    ? 'The editor was updated while it was open. Quit it (⌘Q) and run scripts/world-editor.sh again.'
+    : 'The Map Editor could not start: ' + error.message;
   console.error(error);
 });

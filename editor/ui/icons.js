@@ -22,6 +22,17 @@ const PATHS = {
   warning: '<path d="M12 3 2 20h20L12 3Z"/><path d="M12 10v4M12 17.5v.5"/>',
   focus: '<path d="M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5"/><circle cx="12" cy="12" r="2.5"/>',
   close: '<path d="M6 6l12 12M18 6 6 18"/>',
+  road: '<path d="M8 3 5 21M16 3l3 18"/><path d="M12 4v3M12 10.5v3M12 17v3"/>',
+  junction:
+    '<path d="M3 12h18M12 3v18"/><circle cx="12" cy="12" r="3.2" fill="currentColor" stroke="none"/>',
+  crossing: '<path d="M4 7h16M4 17h16"/><path d="M7 9.5v5M10.5 9.5v5M14 9.5v5M17.5 9.5v5"/>',
+  hand: '<path d="M8 13V5.5a1.5 1.5 0 0 1 3 0V11M11 10V4.5a1.5 1.5 0 0 1 3 0V11M14 10.5V6a1.5 1.5 0 0 1 3 0v7.5c0 4-2.5 7-6.5 7-3 0-4.6-1.6-6-4l-2-3.6a1.6 1.6 0 0 1 2.6-1.8L8 13"/>',
+  traffic:
+    '<rect x="8" y="2.5" width="8" height="19" rx="2.5"/><circle cx="12" cy="7" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="12" cy="17" r="1.6"/>',
+  pause: '<path d="M8 5v14M16 5v14"/>',
+  plan: '<rect x="3.5" y="3.5" width="17" height="17" rx="2"/><path d="M3.5 12h17M12 3.5v17"/>',
+  cube: '<path d="M12 3 4 7v10l8 4 8-4V7l-8-4Z"/><path d="m4 7 8 4 8-4M12 11v10"/>',
+  lock: '<rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7.5a4 4 0 0 1 8 0V11"/>',
 };
 
 export function icon(name, size = 18) {

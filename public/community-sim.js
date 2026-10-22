@@ -694,7 +694,8 @@ export class CommunitySimulation {
             j.owner != null ||
             !clear ||
             (j.signal && this.signalsAt(j.id).phase !== next.axis) ||
-            (!j.signal && waiting))
+            (!j.signal && waiting) ||
+            this.yields(v, j, edge))
         )
           gap = edge.length - v.progress;
         else if (edge.length - v.progress < 0.5) j.owner = v.id;
@@ -741,6 +742,7 @@ export class CommunitySimulation {
           }
         }
         if (edge.junction) v.clearing = edge.junction;
+        v.arrived = null;
         if (edge.yard && edge.to === 'yard-exit')
           this.map.junctions.find((j) => j.id === 'yard').owner = null;
         v.index++;
@@ -761,6 +763,23 @@ export class CommunitySimulation {
         }
       }
     }
+  }
+  // Stop and give-way junctions (street-network.js): vehicles at the line go in the order they
+  // arrived, and at a stop sign each first comes to a full stop.
+  yields(v, j, edge) {
+    if (!j.priority || j.signal) return false;
+    if (edge.length - v.progress < 1.5 && v.arrived?.junction !== j.id)
+      v.arrived = { junction: j.id, at: this.time, stopped: false };
+    if (v.arrived?.junction !== j.id) return j.priority === 'stop';
+    if (v.speed < 0.1) v.arrived.stopped = true;
+    if (j.priority === 'stop' && !v.arrived.stopped) return true;
+    return this.vehicles.some(
+      (o) =>
+        o !== v &&
+        o.arrived?.junction === j.id &&
+        o.arrived.at < v.arrived.at &&
+        o.route[o.index]?.approach === j.id,
+    );
   }
   releaseDepartedOwners() {
     for (const j of this.map.junctions)

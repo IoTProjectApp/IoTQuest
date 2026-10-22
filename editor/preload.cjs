@@ -2,8 +2,9 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('editorShell', {
-  readLayout: () => ipcRenderer.invoke('layout:read'),
-  writeLayout: (layout) => ipcRenderer.invoke('layout:write', layout),
+  // Saved files by name: 'world-layout' (Map Editor), 'street-layout' (Street Editor).
+  read: (store) => ipcRenderer.invoke('store:read', store),
+  write: (store, value) => ipcRenderer.invoke('store:write', store, value),
   openGame: () => ipcRenderer.invoke('game:open'),
   setUnsaved: (value) => ipcRenderer.send('editor:unsaved', value),
   // Menu commands (save, undo, redo, play-test) arrive as named events.

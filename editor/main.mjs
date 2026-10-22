@@ -13,7 +13,22 @@ const PUBLIC = join(ROOT, 'public');
 // The editor's home page and shared styles, and its workspaces (see editor/README.md).
 const UI = join(ROOT, 'editor', 'ui');
 const WORKSPACES = join(ROOT, 'editor', 'workspaces');
-const LAYOUT = join(PUBLIC, 'data', 'world-layout.js');
+// The files workspaces save (each a JS module exporting one object), with what each must contain.
+const STORES = {
+  'world-layout': {
+    file: join(PUBLIC, 'data', 'world-layout.js'),
+    about: 'Hand-placed changes to the generated world, written by the world editor',
+    valid: (v) => v?.version === 1 && typeof v.locations === 'object',
+  },
+  'street-layout': {
+    file: join(PUBLIC, 'data', 'street-layout.js'),
+    about: "The town's street layout, written by the Street Editor",
+    valid: (v) =>
+      v?.version === 1 &&
+      typeof v.locations === 'object' &&
+      (v.town === null || Array.isArray(v.town?.roads)),
+  },
+};
 // three.js add-ons the editor uses (from the game's pinned three in node_modules), pointed at the
 // game's vendored three so both share one copy.
 const ADDONS = {
@@ -80,13 +95,15 @@ async function serve(req, res) {
   res.end(body);
 }
 
-async function readLayout() {
+async function readStore(name) {
+  const store = STORES[name];
+  if (!store) throw Error('No store ' + name);
   // A fresh import each time (the query string defeats the module cache).
-  const module = await import(pathToFileURL(LAYOUT).href + '?t=' + Date.now());
+  const module = await import(pathToFileURL(store.file).href + '?t=' + Date.now());
   return module.default;
 }
-// JSON laid out for reading and diffs: one line per part, collider or placement, numbers to a tenth
-// of a millimetre.
+// JSON laid out for reading and diffs: one line per part, collider, placement, junction or road,
+// numbers to a tenth of a millimetre.
 function format(value, indent = '') {
   const flat = (v) =>
     v === null ||
@@ -117,18 +134,18 @@ function format(value, indent = '') {
     (Array.isArray(value) ? ']' : '}')
   );
 }
-async function writeLayout(layout) {
-  if (layout?.version !== 1 || typeof layout.locations !== 'object')
-    throw Error('Not a world layout');
+async function writeStore(name, value) {
+  const store = STORES[name];
+  if (!store) throw Error('No store ' + name);
+  if (!store.valid(value)) throw Error('Not a valid ' + name);
   const text =
-    '// Hand-placed changes to the generated world, written by the world editor\n' +
-    '// (scripts/world-editor.sh). See world-layout.js for the format.\n' +
+    `// ${store.about}\n// (scripts/world-editor.sh). See editor/README.md for the format.\n` +
     'export default ' +
-    format(layout) +
+    format(value) +
     ';\n';
   // Written beside it and renamed over it, so a failed write never leaves half a file.
-  await writeFile(LAYOUT + '.tmp', text);
-  await rename(LAYOUT + '.tmp', LAYOUT);
+  await writeFile(store.file + '.tmp', text);
+  await rename(store.file + '.tmp', store.file);
 }
 
 let base,
@@ -229,8 +246,8 @@ function buildMenu() {
   );
 }
 
-ipcMain.handle('layout:read', () => readLayout());
-ipcMain.handle('layout:write', (_, layout) => writeLayout(layout));
+ipcMain.handle('store:read', (_, name) => readStore(name));
+ipcMain.handle('store:write', (_, name, value) => writeStore(name, value));
 ipcMain.handle('game:open', () => openGame());
 ipcMain.on('editor:unsaved', (_, value) => {
   unsaved = !!value;

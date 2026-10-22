@@ -1,4 +1,4 @@
-import { pavement } from './street-network.js';
+import { pavement, alongRoad, acrossRoad } from './street-network.js';
 import { connectFarmHomeCars } from './farm-home-access.js';
 import { connectHomeDriveway, drawHomeStreetDriveway } from './home-driveway.js';
 import { recreationLots, buildRecreationAreas, updateFountain } from './community-recreation.js';
@@ -56,8 +56,9 @@ export const communityStations = {
   ),
   ...Object.fromEntries(residentialLots.map((b) => [b.type, [b.name, b.x, b.z]])),
 };
-export function addCommunityWorld(model, location) {
-  const sim = new CommunitySimulation(location),
+// `streets` is a street layout to build instead of the saved one (the Street Editor's preview).
+export function addCommunityWorld(model, location, { streets } = {}) {
+  const sim = new CommunitySimulation(location, streets),
     origin = { ...COMMUNITY_ORIGIN, x: model.farm ? 96 : COMMUNITY_ORIGIN.x };
   const neighbourAreas = integrateRegionalNeighbours(model, sim, origin);
   if (model.farm) connectFarmDriveway(sim, origin);
@@ -166,48 +167,56 @@ export function addCommunityWorld(model, location) {
         ? '#8ba982'
         : '#a1af8a';
   box(72, -0.55, 0, 266, 1, 218, ground, { surface: arid ? 'soil' : 'grass' });
+  // Roads, at any angle (street-network.js): verge, asphalt, centre dashes and a street light.
+  const piece = (x, y, z, dir, length, height, width, color, extra = {}) => {
+    const { size, rotation } = alongRoad(dir, length, height, width);
+    return box(x, y, z, ...size, color, { ...extra, rotation });
+  };
   for (const [a, b] of sim.map.segments) {
-    const horizontal = a.z === b.z,
+    const length = Math.hypot(b.x - a.x, b.z - a.z),
+      dir = [(b.x - a.x) / length, (b.z - a.z) / length],
       x = (a.x + b.x) / 2,
       z = (a.z + b.z) / 2;
-    box(x, 0.025, z, horizontal ? 48 : 17, 0.1, horizontal ? 17 : 48, '#c8c5b5');
-    box(x, 0.09, z, horizontal ? 48 : 12, 0.05, horizontal ? 12 : 48, '#414950');
-    for (let t = 2; t < 48; t += 5)
-      box(
-        a.x + ((b.x - a.x) * t) / 48,
-        0.13,
-        a.z + ((b.z - a.z) * t) / 48,
-        horizontal ? 2 : 0.15,
-        0.015,
-        horizontal ? 0.15 : 2,
-        '#eee7c8',
-      );
-    const lx = x + (horizontal ? 0 : 7),
-      lz = z + (horizontal ? 7 : 0);
+    piece(x, 0.025, z, dir, length, 0.1, 17, '#c8c5b5');
+    piece(x, 0.09, z, dir, length, 0.05, 12, '#414950');
+    for (let t = 2; t < length; t += 5)
+      piece(a.x + dir[0] * t, 0.13, a.z + dir[1] * t, dir, 2, 0.015, 0.15, '#eee7c8');
+    // The light stands on the verge to the south or east of the road.
+    const across = acrossRoad(dir),
+      lx = x + across[0] * 7,
+      lz = z + across[1] * 7;
     model.tag?.('town/street-light#');
     box(lx, 2, lz, 0.15, 4, 0.15, '#526466');
     lights.push(box(lx, 4, lz, 0.7, 0.25, 0.7, '#e5d69e', { streetLamp: true }));
     lightPools.push(...streetLightPool(box, lx, lz, 4.5));
     model.tag?.();
   }
-  for (const j of sim.map.junctions.filter((j) => j.id !== 'yard'))
-    box(j.x, 0.09, j.z, 12, 0.05, 12, '#414950');
+  // Junctions: a square where roads meet square-on, a round apron where any road comes in at an
+  // angle.
+  for (const j of sim.map.junctions.filter((j) => j.id !== 'yard')) {
+    const angled = sim.map.segments.some(
+      ([a, b]) => (a === j || b === j) && a.x !== b.x && a.z !== b.z,
+    );
+    if (!angled) box(j.x, 0.09, j.z, 12, 0.05, 12, '#414950');
+    else {
+      for (const [y, r, h, colour] of [
+        [0.025, 9.5, 0.1, '#c8c5b5'],
+        [0.09, 7.5, 0.05, '#414950'],
+      ])
+        objects.push(
+          model.cylinder(j.x + origin.x, y, j.z + origin.z, r, h, colour, { community: true }),
+        );
+    }
+  }
   if (model.farm) model.farm.driveway = drawFarmDriveway({ box, origin, sim });
   for (const c of sim.map.crossings) {
     const a = sim.map.walks.nodes[c.a],
       b = sim.map.walks.nodes[c.b],
       length = Math.hypot(b.x - a.x, b.z - a.z),
-      horizontal = a.z === b.z;
+      dir = [(b.x - a.x) / length, (b.z - a.z) / length];
+    // Zebra stripes: short along the crossing, 2 m across it.
     for (let t = 0.5; t < length; t += 1.5)
-      box(
-        a.x + ((b.x - a.x) * t) / length,
-        0.14,
-        a.z + ((b.z - a.z) * t) / length,
-        horizontal ? 0.7 : 2,
-        0.025,
-        horizontal ? 2 : 0.7,
-        '#f5efe0',
-      );
+      piece(a.x + dir[0] * t, 0.14, a.z + dir[1] * t, dir, 0.7, 0.025, 2, '#f5efe0');
   }
   for (const [id, edges] of Object.entries(sim.map.walks.edges))
     for (const edge of edges) {

@@ -5,9 +5,10 @@
 // five rows down, 48 m apart.
 //
 // A layout, in metres in the town's own coordinates (y is up, x east, z south):
-//   { junctions: [{ id, x, z, control? }], roads: [{ a, b }] }
-// `control` is 'signals' or 'none'; without it a junction has signals when three or more roads
-// lead into it. Roads join two junctions by id, with a lane each way. data/street-layout.js holds
+//   { junctions: [{ id, x, z, control?, closedCrossings? }], roads: [{ a, b }] }
+// `control` is 'signals', 'stop' (every arm stops, then goes when clear), 'giveway' (slow, go
+// when clear) or 'none'; without it a junction has signals when three or more roads lead into it.
+// `closedCrossings` lists the neighbouring junctions whose road has no zebra crossing here. Roads join two junctions by id, with a lane each way. data/street-layout.js holds
 // the saved layouts: `town` (shared by every destination) and `locations[id]` (one destination's).
 import STREET_LAYOUT from './data/street-layout.js';
 
@@ -18,6 +19,39 @@ export { STREET_LAYOUT };
 export const PAVEMENT_OFFSET = 8;
 export const STOP_BACK = 12;
 export const LANE_OFFSET = 2.2;
+export const CONTROLS = ['signals', 'stop', 'giveway', 'none'];
+// What other code depends on, which the Street Editor therefore keeps in place (with the reason it
+// shows): junctions that cannot move or be removed, and roads that cannot be removed ('a|b').
+const STATIONS =
+  'The police and fire stations' + "' driveways meet the street through this junction";
+export const LOCKED = {
+  junctions: {
+    '1:1': "Students' traffic-light programs run this junction, beside the road-control station",
+    '1:2': 'The loading yard joins the road between 1:2 and 2:2',
+    '2:2': 'The loading yard joins the road between 1:2 and 2:2',
+    '0:1': "The farms' driveway and the home's footpath join the street here",
+    '0:2': "The farms' driveway joins the road between 0:1 and 0:2",
+    '3:0': STATIONS,
+    '3:1': STATIONS,
+    '3:2': STATIONS,
+  },
+  roads: {
+    '1:2|2:2': 'The loading yard joins this road',
+    '0:1|0:2': "The farms' driveway joins this road",
+    '3:0|3:1': 'The police and fire stations open onto this road',
+    '3:1|3:2': 'The police and fire stations open onto this road',
+  },
+};
+// Why a road cannot be removed, or null.
+export const lockedRoad = (a, b) => LOCKED.roads[`${a}|${b}`] || LOCKED.roads[`${b}|${a}`] || null;
+// A piece drawn along a road (or a crossing) in direction `dir`: its size and turn, with `length`
+// along the road and `width` across it. Roads running exactly east-west or north-south get the
+// same unturned sizes the town has always been drawn with.
+export function alongRoad([dx, dz], length, height, width) {
+  if (Math.abs(dz) < 1e-9) return { size: [length, height, width], rotation: [0, 0, 0] };
+  if (Math.abs(dx) < 1e-9) return { size: [width, height, length], rotation: [0, 0, 0] };
+  return { size: [length, height, width], rotation: [0, Math.atan2(-dz, dx), 0] };
+}
 const CARDINALS = [
   [1, 0],
   [0, 1],
@@ -56,7 +90,7 @@ const unit = (x, z) => {
 const angleOf = ([x, z]) => Math.atan2(z, x);
 // A perpendicular to a direction, turned so it leans towards +x/+z: for an east-west road that is
 // south, for a north-south road east. Pavement and corner sides are numbered along it.
-function across([dx, dz]) {
+export function acrossRoad([dx, dz]) {
   const p = [-dz, dx];
   return p[0] + p[1] < 0 || (p[0] + p[1] === 0 && p[0] < 0) ? [-p[0], -p[1]] : p;
 }
@@ -113,6 +147,7 @@ export function buildStreetNetwork(layout, { roads, walks, handedness = 1 }) {
       signal: false,
       owner: null,
       ...(j.control ? { control: j.control } : {}),
+      ...(j.closedCrossings?.length ? { closedCrossings: j.closedCrossings } : {}),
     })),
     byId = Object.fromEntries(junctions.map((j) => [j.id, j])),
     roadList = layout.roads.filter((r) => byId[r.a] && byId[r.b] && r.a !== r.b),
@@ -120,13 +155,20 @@ export function buildStreetNetwork(layout, { roads, walks, handedness = 1 }) {
     crossings = [],
     corners = {},
     // What each lane node is (the nodes themselves stay plain { id, x, z }).
-    laneInfo = [];
+    laneInfo = [],
+    // Each junction's signal phase for traffic arriving from each neighbour: 'EW' or 'NS'.
+    phases = {};
   // Corners and crossings round every junction.
   for (const j of junctions) {
     const neighbours = roadList
       .filter((r) => r.a === j.id || r.b === j.id)
       .map((r) => byId[r.a === j.id ? r.b : r.a]);
     const arms = junctionArms(j, neighbours);
+    const signalled = j.control ? j.control === 'signals' : neighbours.length >= 3;
+    phases[j.id] = armPhases(
+      arms.filter((a) => a.to),
+      signalled,
+    );
     const cornerIds = arms.map((arm, i) => {
       const at = cornerBetween(j, arm, arms[(i + 1) % arms.length]);
       return { at, sx: sign(at.x - j.x), sz: sign(at.z - j.z), i };
@@ -159,6 +201,8 @@ export function buildStreetNetwork(layout, { roads, walks, handedness = 1 }) {
               ? c
               : best,
           );
+        // A crossing the Street Editor closed: pedestrians go round by the other crossings.
+        if (at.arm.to && j.closedCrossings?.includes(at.arm.to)) continue;
         const [a, b] = at.sides,
           crossing = {
             id: `${j.id}/${axis}/${side}`,
@@ -199,15 +243,15 @@ export function buildStreetNetwork(layout, { roads, walks, handedness = 1 }) {
         { id: from, lane: 'out', from: a.id, to: b.id, dir: [vx, vz] },
         { id: to, lane: 'in', from: a.id, to: b.id, dir: [vx, vz] },
       );
-      roads.edge(from, to, { axis: axisOf([vx, vz]), approach: b.id });
+      roads.edge(from, to, { axis: phases[b.id][a.id], approach: b.id });
     }
     const atJ = corners[j.id].find((c) => c.arm.to === k.id).sides,
       atK = corners[k.id].find((c) => c.arm.to === j.id).sides,
       dir = unit(k.x - j.x, k.z - j.z),
       // atK's sides are numbered along the reverse direction's `across`; line them up with j's.
       flip =
-        across(dir)[0] * across([-dir[0], -dir[1]])[0] +
-          across(dir)[1] * across([-dir[0], -dir[1]])[1] <
+        acrossRoad(dir)[0] * acrossRoad([-dir[0], -dir[1]])[0] +
+          acrossRoad(dir)[1] * acrossRoad([-dir[0], -dir[1]])[1] <
         0;
     for (const s of [0, 1]) {
       const a = atJ[s],
@@ -222,13 +266,13 @@ export function buildStreetNetwork(layout, { roads, walks, handedness = 1 }) {
     const incoming = lanes.filter((n) => n.lane === 'in' && n.to === j.id),
       outgoing = lanes.filter((n) => n.lane === 'out' && n.from === j.id);
     j.signal = j.control ? j.control === 'signals' : incoming.length >= 3;
+    if (j.control === 'stop' || j.control === 'giveway') j.priority = j.control;
     for (const crossing of crossings.filter((c) => c.junction === j.id)) crossing.signal = j.signal;
     for (const start of incoming)
       for (const end of outgoing) {
         // No U-turns back down the road a vehicle came along.
         if (start.from === end.to) continue;
-        const axis = axisOf(start.dir),
-          outAxis = axisOf(end.dir);
+        const axis = phases[j.id][start.from];
         const c1 = { x: start.x + start.dir[0] * 10, z: start.z + start.dir[1] * 10 },
           c2 = { x: end.x - end.dir[0] * 10, z: end.z - end.dir[1] * 10 };
         const points = Array.from({ length: 25 }, (_, i) => {
@@ -248,9 +292,28 @@ export function buildStreetNetwork(layout, { roads, walks, handedness = 1 }) {
 }
 // A lane's signal phase: mostly east-west or mostly north-south.
 const axisOf = ([dx, dz]) => (Math.abs(dx) >= Math.abs(dz) ? 'EW' : 'NS');
+// The phase traffic from each arm of a junction moves in. By compass direction, as the grid always
+// had; but where signals would give two arms that are not opposite each other the same green (an
+// angled road), the most nearly opposite pair of arms moves together and every other arm in the
+// other phase.
+export function armPhases(arms, signalled) {
+  const phase = Object.fromEntries(arms.map((a) => [a.to, axisOf(a.dir)]));
+  const dot = (a, b) => a.dir[0] * b.dir[0] + a.dir[1] * b.dir[1];
+  const clash = arms.some((a, i) =>
+    arms.some((b, k) => k > i && phase[a.to] === phase[b.to] && dot(a, b) > -0.7),
+  );
+  if (!signalled || !clash) return phase;
+  let pair = null;
+  for (const [i, a] of arms.entries())
+    for (const b of arms.slice(i + 1)) if (!pair || dot(a, b) < dot(...pair)) pair = [a, b];
+  const first = axisOf(pair[0].dir),
+    second = first === 'EW' ? 'NS' : 'EW';
+  for (const a of arms) phase[a.to] = pair.includes(a) ? first : second;
+  return phase;
+}
 // Orders the two corners beside an arm by its `across` side: -1 first.
 function orderSides(dir, a, b, walks) {
-  const p = across(dir),
+  const p = acrossRoad(dir),
     side = (id) => walks.nodes[id].x * p[0] + walks.nodes[id].z * p[1];
   return side(a) <= side(b) ? [a, b] : [b, a];
 }

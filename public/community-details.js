@@ -1,3 +1,4 @@
+import { alongRoad, acrossRoad } from './street-network.js';
 import { buildTree } from './vegetation.js';
 
 // Architectural detail in metres, built on the existing district footprints and routes.
@@ -66,6 +67,48 @@ export function detailCommunity(model, { sim, origin, location, box, objects }) 
     const horizontal = a.z === b.z,
       x = (a.x + b.x) / 2,
       z = (a.z + b.z) / 2;
+    if (!horizontal && a.x !== b.x) {
+      // An angled road (street-network.js): kerbs, edge paint and joints along it.
+      const length = Math.hypot(b.x - a.x, b.z - a.z),
+        dir = [(b.x - a.x) / length, (b.z - a.z) / length],
+        across = acrossRoad(dir),
+        along = (px, y, pz, l, h, w, color) => {
+          const { size, rotation } = alongRoad(dir, l, h, w);
+          detail(px, y, pz, ...size, color, { rotation });
+        };
+      // Kerbs stop where the lanes do, 12 m from each junction, clear of roads meeting at an angle.
+      for (const side of [-1, 1]) {
+        along(
+          x + across[0] * side * 6.15,
+          0.16,
+          z + across[1] * side * 6.15,
+          length - 24,
+          0.18,
+          0.22,
+          '#adafa6',
+        );
+        along(
+          x + across[0] * side * 5.7,
+          0.126,
+          z + across[1] * side * 5.7,
+          length - 24,
+          0.012,
+          0.1,
+          '#dedbd0',
+        );
+        for (let t = 14; t < length - 12; t += 7)
+          along(
+            a.x + dir[0] * t + across[0] * side * 7.4,
+            0.19,
+            a.z + dir[1] * t + across[1] * side * 7.4,
+            0.035,
+            0.012,
+            2,
+            '#9d9f96',
+          );
+      }
+      continue;
+    }
     for (const side of [-1, 1]) {
       const access = sim.map.farmDriveway?.junction;
       if (

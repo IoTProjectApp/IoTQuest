@@ -10,6 +10,14 @@ export const WORKSPACES = [
     // What the workspace changes in the repository, shown on its card.
     writes: 'public/data/world-layout.js',
   },
+  {
+    id: 'street-editor',
+    name: 'Street Editor',
+    summary:
+      "Lay out the town's roads: move and add junctions, draw and remove roads, set traffic lights, stop signs and crossings, then watch the traffic run.",
+    icon: 'road',
+    writes: 'public/data/street-layout.js',
+  },
 ];
 
 export const workspaceUrl = (workspace) => `../workspaces/${workspace.id}/`;

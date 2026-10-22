@@ -46,7 +46,12 @@ To add or change characters or animations:
 
 ### World editor (development only)
 
-`./scripts/world-editor.sh` opens the IoT Quest Editor, a desktop tool (Electron) for correcting the generated world by hand. Its **Map Editor** workspace moves, adds and removes furniture, garden features and town buildings per city. It saves to `public/data/world-layout.js`, which the game applies when it builds each city. With no changes there, every world is built exactly as before. The editor is never built or deployed; see `editor/README.md`.
+`./scripts/world-editor.sh` opens the IoT Quest Editor, a desktop tool (Electron) for correcting the generated world by hand. It has two workspaces:
+
+- **Map Editor** moves, adds and removes furniture, garden features and town buildings per city. It saves to `public/data/world-layout.js`.
+- **Street Editor** lays out the town's roads, junction controls and crossings, and the traffic follows. It saves to `public/data/street-layout.js`.
+
+The game applies both when it builds each city. With no changes saved, every world is built exactly as before. The editor is never built or deployed; see `editor/README.md`.
 
 ## Explore, install, wire, program, test
 

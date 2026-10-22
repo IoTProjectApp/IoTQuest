@@ -1,6 +1,6 @@
 // The Map Editor's 3D view: the world drawn by the game's own renderer, an orbit camera, picking,
-// selection and hover outlines, the move/rotate/scale gizmo, and the see-through copy that follows
-// the cursor while placing from the catalogue.
+// selection and hover outlines, the move and turn gizmo, the handles that resize the selection,
+// and the see-through copy that follows the cursor while placing from the catalogue.
 import * as THREE from '../../../public/vendor/three.module.min.js';
 import { TransformControls } from '/editor/three/TransformControls.js';
 import { OrbitControls } from '/editor/three/OrbitControls.js';
@@ -8,7 +8,12 @@ import { ThreeWorldRenderer } from '../../../public/world-renderer-three.js';
 import { worldSunlight } from '../../../public/world-materials.js';
 import { updateSky } from '../../../public/sky.js';
 import { multiply, perspective, lookAt, screenRay } from '../../../public/world-math.js';
-import { snapshotGroup, transformGroup, groupTemplate } from '../../../public/world-layout.js';
+import {
+  snapshotGroup,
+  transformGroup,
+  groupTemplate,
+  scaleOf,
+} from '../../../public/world-layout.js';
 
 const FOV = 0.82;
 // A daytime sky with light cloud: what matters here is seeing shapes and colours clearly.
@@ -68,10 +73,47 @@ function outline(color, opacity) {
   return holder;
 }
 
+// The resize handles: a square on each side and on top (axis 0 x, 1 y, 2 z; side ±1) and a round
+// one on a top corner (axis null) that resizes evenly.
+function resizeHandles() {
+  const group = new THREE.Group(),
+    square = new THREE.BoxGeometry(1, 1, 1),
+    round = new THREE.SphereGeometry(0.75, 16, 12);
+  for (const [axis, side, colour] of [
+    [0, 1, 0xffffff],
+    [0, -1, 0xffffff],
+    [2, 1, 0xffffff],
+    [2, -1, 0xffffff],
+    [1, 1, 0xffffff],
+    [null, 1, ACCENT],
+  ]) {
+    const handle = new THREE.Mesh(
+      axis === null ? round : square,
+      new THREE.MeshBasicMaterial({ color: colour, depthTest: false, transparent: true }),
+    );
+    handle.userData = { axis, side, colour };
+    handle.renderOrder = 12;
+    group.add(handle);
+  }
+  group.visible = false;
+  return group;
+}
+// A group's size in metres: width, height and depth along its own sides.
+export function dimensions(group, scale = group.placement.scale) {
+  const { min, max } = group.box;
+  return scaleOf(scale).map((v, i) => (max[i] - min[i]) * v);
+}
+const dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+const normalise = (v) => {
+  const length = Math.hypot(...v) || 1;
+  return v.map((x) => x / length);
+};
+
 export class Viewport {
-  constructor(canvas, { onPick, onPlace, onTransformEnd, onHover, onCamera } = {}) {
+  constructor(canvas, { onPick, onPlace, onTransformEnd, onHover, onCamera, onResize } = {}) {
     this.canvas = canvas;
-    Object.assign(this, { onPick, onPlace, onTransformEnd, onHover, onCamera });
+    Object.assign(this, { onPick, onPlace, onTransformEnd, onHover, onCamera, onResize });
+    this.mode = 'translate';
     this.renderer = new ThreeWorldRenderer(canvas);
     this.camera = new THREE.PerspectiveCamera((FOV * 180) / Math.PI, 1, 0.1, 900);
     this.camera.position.set(14, 22, 30);
@@ -80,8 +122,8 @@ export class Viewport {
     this.selected = null;
     this.hovered = null;
     this.ghost = null;
-    // The gizmo moves this stand-in; its position, turn and scale become the group's placement.
-    // YXZ keeps the turn readable in rotation.y whatever the angle.
+    // The gizmo moves this stand-in; its position and turn become the group's placement (its size
+    // is the resize handles' job). YXZ keeps the turn readable in rotation.y whatever the angle.
     this.proxy = new THREE.Object3D();
     this.proxy.rotation.order = 'YXZ';
     this.renderer.scene.add(this.proxy);
@@ -112,22 +154,17 @@ export class Viewport {
     });
     this.gizmo.addEventListener('objectChange', () => {
       if (!this.selected) return;
-      if (this.gizmo.mode === 'scale') {
-        // One size factor for the whole object: whichever handle moved sets all three.
-        const s = this.proxy.scale,
-          last = this.lastScale ?? 1,
-          moved = [s.x, s.y, s.z].reduce((a, b) =>
-            Math.abs(b - last) > Math.abs(a - last) ? b : a,
-          );
-        s.setScalar(Math.max(0.1, moved));
-        this.lastScale = s.x;
-      }
       this.session.preview(this.selected.id, this.proxyPlacement());
       this.updateOutlines();
     });
     this.selectionBox = outline(ACCENT, 1);
     this.hoverBox = outline(HOVER, 0.7);
     this.renderer.scene.add(this.selectionBox, this.hoverBox);
+    this.handles = resizeHandles();
+    this.renderer.scene.add(this.handles);
+    this.raycaster = new THREE.Raycaster();
+    // Handles are listened to before the gizmo and the camera, so grabbing one never orbits.
+    this.bindHandles();
     this.bindPointer();
     this.frame = this.frame.bind(this);
     requestAnimationFrame(this.frame);
@@ -148,11 +185,14 @@ export class Viewport {
     this.setHover(null);
     this.attachGizmo();
   }
+  // 'translate' and 'rotate' use the gizmo; 'scale' shows the resize handles instead.
   setGizmoMode(mode) {
-    this.gizmo.setMode(mode);
+    this.mode = mode;
+    if (mode !== 'scale') this.gizmo.setMode(mode);
     // Objects only turn about the vertical axis.
     this.gizmo.showX = this.gizmo.showZ = mode !== 'rotate';
     this.applySnap();
+    this.attachGizmo();
   }
   setSnap(on) {
     this.snap = on;
@@ -161,7 +201,6 @@ export class Viewport {
   applySnap() {
     this.gizmo.setTranslationSnap(this.snap ? 0.1 : null);
     this.gizmo.setRotationSnap(this.snap ? Math.PI / 12 : null);
-    this.gizmo.setScaleSnap(this.snap ? 0.05 : null);
   }
   select(group) {
     this.selected = group;
@@ -169,10 +208,12 @@ export class Viewport {
     this.updateOutlines();
   }
   attachGizmo() {
-    if (this.selected && this.tool === 'select' && !this.selected.hidden) {
+    const editing = this.selected && this.tool === 'select' && !this.selected.hidden;
+    if (editing && this.mode !== 'scale') {
       this.syncProxy();
       this.gizmo.attach(this.proxy);
     } else this.gizmo.detach();
+    this.handles.visible = !!editing && this.mode === 'scale';
   }
   // Puts the gizmo's stand-in where the selected group is (after an undo, or a typed value).
   syncProxy() {
@@ -180,19 +221,17 @@ export class Viewport {
     if (!p) return;
     this.proxy.position.set(...p.pos);
     this.proxy.rotation.set(0, p.turn || 0, 0);
-    this.proxy.scale.setScalar(p.scale ?? 1);
-    this.lastScale = p.scale ?? 1;
   }
   refresh() {
     if (this.selected && !this.session.groups.has(this.selected.id)) this.selected = null;
-    if (this.selected && !this.gizmo.dragging) this.attachGizmo();
+    if (this.selected && !this.gizmo.dragging && !this.resizing) this.attachGizmo();
     this.updateOutlines();
   }
   proxyPlacement() {
     return {
       pos: this.proxy.position.toArray(),
       turn: this.proxy.rotation.y,
-      scale: this.proxy.scale.x,
+      scale: this.selected?.placement.scale ?? 1,
     };
   }
   setHover(group) {
@@ -210,7 +249,7 @@ export class Viewport {
       pad = 0.04;
     holder.position.set(...pos);
     holder.rotation.set(0, turn, 0);
-    holder.scale.setScalar(scale);
+    holder.scale.set(...scaleOf(scale));
     holder.box.position.set((min[0] + max[0]) / 2, (min[1] + max[1]) / 2, (min[2] + max[2]) / 2);
     holder.box.scale.set(max[0] - min[0] + pad, max[1] - min[1] + pad, max[2] - min[2] + pad);
     if (color !== undefined) holder.box.material.color.setHex(color);
@@ -286,6 +325,172 @@ export class Viewport {
     });
   }
 
+  // Resize handles: a square on each side and the top of the selection's box stretches it that way
+  // (the opposite side stays put); the round one on a top corner, or Shift on any, resizes it
+  // evenly. Each keeps the same size on screen.
+  placeHandles() {
+    if (!this.handles.visible || !this.selected) return;
+    const group = this.selected,
+      { min, max } = group.box,
+      { pos, turn = 0 } = group.placement,
+      scale = scaleOf(group.placement.scale),
+      c = Math.cos(turn),
+      s = Math.sin(turn);
+    for (const handle of this.handles.children) {
+      const { axis, side } = handle.userData,
+        local = [0, 1, 2].map(
+          (i) =>
+            (axis === null
+              ? max[i]
+              : i === axis
+                ? side > 0
+                  ? max[i]
+                  : min[i]
+                : (min[i] + max[i]) / 2) * scale[i],
+        ),
+        at = [
+          pos[0] + local[0] * c + local[2] * s,
+          pos[1] + local[1],
+          pos[2] - local[0] * s + local[2] * c,
+        ];
+      handle.position.set(...at);
+      handle.rotation.set(0, turn, 0);
+      handle.scale.setScalar(this.camera.position.distanceTo(handle.position) * 0.02);
+      // A side whose box is flat (a rug's height) has nothing to stretch.
+      handle.visible = axis === null || max[axis] - min[axis] > 1e-3;
+      handle.material.color.setHex(handle === this.hotHandle ? HOVER : handle.userData.colour);
+    }
+  }
+  handleAt(event) {
+    if (!this.handles.visible) return null;
+    const r = this.canvas.getBoundingClientRect();
+    this.camera.updateMatrixWorld();
+    this.raycaster.setFromCamera(
+      new THREE.Vector2(
+        ((event.clientX - r.left) / r.width) * 2 - 1,
+        -((event.clientY - r.top) / r.height) * 2 + 1,
+      ),
+      this.camera,
+    );
+    return (
+      this.raycaster.intersectObjects(this.handles.children.filter((h) => h.visible))[0]?.object ||
+      null
+    );
+  }
+  bindHandles() {
+    const c = this.canvas,
+      capture = { capture: true };
+    c.addEventListener(
+      'pointerdown',
+      (e) => {
+        if (e.button !== 0 || !this.selected) return;
+        const handle = this.handleAt(e);
+        if (!handle) return;
+        e.stopImmediatePropagation();
+        c.setPointerCapture(e.pointerId);
+        this.startResize(handle, e);
+      },
+      capture,
+    );
+    c.addEventListener(
+      'pointermove',
+      (e) => {
+        if (this.resizing) {
+          e.stopImmediatePropagation();
+          this.resize(e);
+          return;
+        }
+        const hot = this.handleAt(e);
+        if (hot !== this.hotHandle) {
+          this.hotHandle = hot;
+          c.style.cursor = hot ? (hot.userData.axis === null ? 'nwse-resize' : 'grab') : '';
+        }
+      },
+      capture,
+    );
+    c.addEventListener(
+      'pointerup',
+      (e) => {
+        if (!this.resizing) return;
+        e.stopImmediatePropagation();
+        const { group, placement } = this.resizing;
+        this.resizing = null;
+        if (placement) this.onTransformEnd?.(group.id, placement);
+      },
+      capture,
+    );
+  }
+  // The line a handle is dragged along, in the world: its side's direction (or, for the corner,
+  // out from the base centre through it), from where the handle was grabbed.
+  startResize(handle, event) {
+    const group = this.selected,
+      start = {
+        ...group.placement,
+        pos: [...group.placement.pos],
+        scale: scaleOf(group.placement.scale),
+      },
+      { axis, side } = handle.userData,
+      turn = start.turn || 0,
+      c = Math.cos(turn),
+      s = Math.sin(turn),
+      local = axis === 0 ? [side, 0, 0] : axis === 2 ? [0, 0, side] : axis === 1 ? [0, 1, 0] : null,
+      origin = handle.position.toArray(),
+      direction = local
+        ? [local[0] * c + local[2] * s, local[1], -local[0] * s + local[2] * c]
+        : normalise(origin.map((v, i) => v - start.pos[i]));
+    this.resizing = { group, handle, start, origin, direction, placement: null };
+    this.resizing.from = this.alongLine(event);
+  }
+  // How far along the drag line the cursor's ray passes closest to it.
+  alongLine(event) {
+    const ray = this.ray(event),
+      { origin, direction } = this.resizing;
+    if (!ray) return 0;
+    const dir = normalise(ray.dir),
+      w = origin.map((v, i) => v - ray.origin[i]),
+      b = dot(direction, dir),
+      denominator = 1 - b * b;
+    if (Math.abs(denominator) < 1e-6) return this.resizing.from ?? 0;
+    return (b * dot(dir, w) - dot(direction, w)) / denominator;
+  }
+  resize(event) {
+    const r = this.resizing,
+      { group, start } = r,
+      { axis, side } = r.handle.userData,
+      { min, max } = group.box,
+      moved = this.alongLine(event) - r.from,
+      even = axis === null || event.shiftKey,
+      // The measured side: the dragged one, or (resizing evenly from the corner) the widest.
+      i = axis ?? [0, 1, 2].reduce((a, k) => (max[k] - min[k] > max[a] - min[a] ? k : a), 0),
+      extent = max[i] - min[i],
+      before = extent * start.scale[i],
+      // From the corner the drag runs diagonally: count its share along the measured side.
+      grow =
+        axis === null ? (moved * before) / Math.hypot(...dimensions(group, start.scale)) : moved;
+    let after = Math.max(0.05, before + grow);
+    if (this.snap) after = Math.max(0.05, Math.round(after / 0.05) * 0.05);
+    const factor = after / before,
+      scale = even
+        ? start.scale.map((v) => v * factor)
+        : start.scale.map((v, k) => (k === i ? v * factor : v)),
+      pos = [...start.pos];
+    if (!even) {
+      // Keep the opposite side where it was: move the base centre by how far that side would shift.
+      const fixed = side > 0 ? min[i] : max[i],
+        shift = fixed * (start.scale[i] - scale[i]),
+        turn = start.turn || 0,
+        local = [0, 0, 0];
+      local[i] = shift;
+      pos[0] += local[0] * Math.cos(turn) + local[2] * Math.sin(turn);
+      pos[1] += local[1];
+      pos[2] += -local[0] * Math.sin(turn) + local[2] * Math.cos(turn);
+    }
+    r.placement = { pos, turn: start.turn, scale };
+    this.session.preview(group.id, r.placement);
+    this.updateOutlines();
+    this.onResize?.(group, r.placement);
+  }
+
   // Placing from the catalogue: a see-through copy of `source` follows the cursor.
   startPlacing(source) {
     this.cancelPlacing();
@@ -340,9 +545,7 @@ export class Viewport {
   }
   focus(group) {
     if (!group) return;
-    const { min, max } = group.box,
-      size =
-        Math.max(max[0] - min[0], max[1] - min[1], max[2] - min[2]) * (group.placement.scale ?? 1);
+    const size = Math.max(...dimensions(group));
     this.flyTo(group.placement.pos, Math.min(260, Math.max(4, size * 2.4)));
   }
   flyTo(target, distance, instant = false) {
@@ -371,6 +574,7 @@ export class Viewport {
       this.onCamera?.();
     }
     this.orbit.update();
+    this.placeHandles();
     this.render(time);
   }
   render(time) {

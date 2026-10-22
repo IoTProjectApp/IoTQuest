@@ -51,12 +51,12 @@ The game builds its world in code (`public/world-model.js`, `public/regions.js`,
 
 - **Top bar:** the city to edit; **House**, **Garden** and **Town** to jump the camera; undo and redo; whether everything is saved; **Play-test**; and **Save**.
 - **Tools** on the left:
-  - **Select** (`V`) picks an object and shows a gizmo. **Move** (`G`) has arrows to drag along and squares to drag across a plane. **Turn** (`R`) turns the object about the vertical axis. **Size** (`S`) changes its overall size. **Snap** keeps moves to 10 cm steps and turns to 15° steps.
+  - **Select** (`V`) picks an object and shows a gizmo. **Move** (`G`) has arrows to drag along and squares to drag across a plane. **Turn** (`R`) turns the object about the vertical axis. **Resize** (`S`) shows handles on the object's box: drag a square on a side or on top to stretch it that way (the opposite side stays put), or drag the round one on a top corner, or hold Shift, to resize it evenly. **Snap** keeps moves to 10 cm steps, turns to 15° steps and sizes to 5 cm steps.
   - **Object** (`O`) opens the catalogue along the bottom, with tabs for Furniture, Garden, Buildings and Street, plus a search box. Click an item, then click in the world to place it. `R` turns it while placing, Shift-click places several, and `Esc` stops.
   - **Delete** (`X`) removes whatever you click.
   - **Camera** (`C`) only moves the view, so you cannot change anything by accident.
 - **Inspector** on the right:
-  - When an object is selected, it shows the object's name, its id and whether it is as built, moved or added. You can type an exact position, turn and size. **Focus**, **Duplicate**, **Reset** (back to how the code builds it) and **Delete** act on the object.
+  - When an object is selected, it shows the object's name, its id and whether it is as built, changed or added. You can type an exact position, turn, and width, height and depth in metres. **Focus**, **Duplicate**, **Reset** (back to how the code builds it) and **Delete** act on the object.
   - When nothing is selected, it lists every change in the city. Click a change to go to that object, or use its arrow to undo just that change.
 - **Camera:** drag to orbit, right-drag to pan, scroll to zoom, and press `F` to focus on the selection.
 
@@ -93,6 +93,7 @@ export default {
     "kyoto": {
       "edits": {
         "furniture/sofa#1": {"pos": [-9.07, 0.23, -3.5], "turn": 1.5708, "scale": 1},
+        "furniture/dining-table#1": {"pos": [-5.98, 0.23, -2.5], "turn": 0, "scale": [1.145, 1, 1]},
         "furniture/car#1": {"removed": true}
       },
       "added": [
@@ -105,7 +106,7 @@ export default {
 
 - `pos` is where the object's base centre goes: the middle of its footprint, at its lowest point, in metres. y is up.
 - `turn` is a turn about the vertical axis, in radians.
-- `scale` is one size factor for the whole object.
+- `scale` is the object's size: one factor (`1.25`) when it is resized evenly, or three (`[1.2, 1, 0.8]`) when it is stretched, for its width, height and depth along its own sides before it is turned.
 - Added objects carry their own parts, measured from their base centre, so they do not depend on the object they were copied from.
 
 With an empty file the game builds every world exactly as before; a test (`tests/world-layout.test.mjs`) checks that. When the game builds a city (`buildWorldModel` in `public/world3d.js`), `applyWorldLayout` in `public/world-layout.js` applies its changes.

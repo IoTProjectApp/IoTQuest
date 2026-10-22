@@ -6,6 +6,7 @@ import { dressed } from '../../../public/character-settings.js';
 import { findPeople, GROUPS, walksAlone, movesLocked } from './people.js';
 import { CharacterSession, DEFAULTS } from './session.js';
 import { Stage } from './stage.js';
+import { reactionsSection, bindReactions } from './reactions-panel.js';
 import {
   ClipError,
   readClipFile,
@@ -344,6 +345,7 @@ function renderInspector() {
               : '<p class="note">Walking speed is set by what they are doing (a game, a swim, a queue); clip speed still applies.</p>'
       }
     </section>
+    ${reactionsSection({ own, defaults: s.own(DEFAULTS), isDefaults: defaults, locked })}
     <section>
       <div class="section-head"><h3>Imported clips</h3><button class="button" id="import-clip" title="Bring in an animation from a .glb, .gltf or .fbx file, such as a Mixamo download">${icon('plus', 16)}Import clip…</button></div>
       ${importedList()}
@@ -452,6 +454,16 @@ function bindInspector(el, target) {
   for (const b of el.querySelectorAll('[data-section]'))
     b.addEventListener('click', () => s.reset(target, b.dataset.section));
   $('reset-all').addEventListener('click', () => s.reset(target));
+  bindReactions(el, {
+    own: s.own(target),
+    defaults: s.own(DEFAULTS),
+    isDefaults: target === DEFAULTS,
+    set: (list, label) => s.set(target, 'reactions', list, label),
+    tryIt: (reaction) => {
+      setMode('stand');
+      stage.tryReaction(reaction);
+    },
+  });
   $('import-clip').addEventListener('click', importClip);
   for (const b of el.querySelectorAll('[data-remove-clip]'))
     b.addEventListener('click', () => removeClip(b.dataset.removeClip));

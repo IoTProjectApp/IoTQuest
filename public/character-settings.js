@@ -11,6 +11,7 @@
 //             (see character-clips.js)
 //   speed     how fast they walk, as a factor (residents and the household)
 //   rate      how fast their idle or activity clip plays, as a factor
+//   reactions clips they play when something happens (see character-reactions.js)
 // A person's own settings come before the defaults, and the defaults before what the code picks.
 // Ids are the game's own: 'player' (the technician), 'Maya', 'worker:shop-floor:0',
 // 'bus:0:1>1:1:2'... With no settings everyone is as the code makes them.

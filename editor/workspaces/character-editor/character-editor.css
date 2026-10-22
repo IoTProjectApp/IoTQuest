@@ -231,3 +231,38 @@
   justify-content: flex-end;
   gap: 8px;
 }
+
+/* Reactions */
+.reaction {
+  margin-bottom: 4px;
+}
+.reaction.set > .row > span {
+  color: var(--accent);
+}
+.reaction .row {
+  grid-template-columns: 120px 1fr;
+}
+.reaction .icon-only {
+  flex: none;
+  width: 30px;
+  height: 30px;
+}
+.reaction-details {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+  margin: -2px 0 10px 128px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.reaction-details label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.reaction-details .select {
+  width: auto;
+}
+.reaction-details .input {
+  width: 64px;
+}

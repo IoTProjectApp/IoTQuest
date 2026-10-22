@@ -2954,9 +2954,11 @@ function finishTests(m, ds) {
       };
     }
     logs = [m.resident + ': Great work! ' + m.title + ' is complete.'];
+    residentReacts(m.resident, 'thanks');
     toast('✦ Quest complete! ' + m.badge + ' badge · ' + m.xp + ' XP');
   } else {
     logs = ['Tests found something to improve. Review the failed scenarios.'];
+    residentReacts(m.resident, 'fail');
     toast('Some scenarios failed. Check the conditions and try again.');
   }
   recordEvidence({
@@ -4044,6 +4046,13 @@ function residentialResidents(engine = world3d) {
     };
   });
 }
+// A resident's reaction (character-reactions.js) to one of their quests, found by the name the
+// quest gives them.
+function residentReacts(name, trigger) {
+  if (!world3d) return;
+  const key = characterPositions().find((c) => c.name === name)?.key ?? name;
+  world3d.reactTo(key, trigger);
+}
 function characterPositions(engine = world3d) {
   if (engine)
     return engine.model.actors
@@ -4253,6 +4262,8 @@ function openConversation(key, area) {
     location: currentLocation() ?? null,
   });
   activeConversation.section = character?.section;
+  // They react to the chat, or to the quests they are thanking the technician for.
+  world3d?.reactTo(key, activeConversation.thanked.length ? 'thanks' : 'chat');
   // Thanks are said once; chats count towards each of this resident's quests in progress reports.
   for (const i of activeConversation.thanked) done(i).thanked = true;
   const chats = (locationProfile().chats ??= {});

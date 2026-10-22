@@ -6,6 +6,7 @@ import { isHousehold } from './section-residents.js';
 import { castFor, isWoman, TECHNICIAN } from './people-cast.js';
 import { CLIPS, walkTime } from './character-clips.js';
 import { settingsFor, dressed, knownClip } from './character-settings.js';
+import { Reactions, conditionsFrom } from './character-reactions.js';
 import { outfitFor, TECHNICIAN_OUTFIT } from './character-outfits.js';
 import { addDeviceDetails } from './device-objects.js';
 import { catalogueLamps } from './catalogue-devices.js';
@@ -106,6 +107,8 @@ export class World3D {
     this.disposed = false;
     this.controlListeners = [];
     this.visualClock = 0;
+    // Clips people play when something happens (character-reactions.js).
+    this.reactions = new Reactions();
     this.drag = null;
     this.matrix = null;
     this.day = 1;
@@ -1076,10 +1079,26 @@ export class World3D {
       standIn: actor.parts,
     };
   }
+  // Plays someone's reaction to a trigger (see character-reactions.js): 'chat', 'thanks', 'fail'.
+  reactTo(id, trigger) {
+    return this.reactions.fire(id, trigger, this.visualClock);
+  }
+  // Lays this frame's reactions over the characters: to the technician coming near, to the
+  // weather, and to whatever reactTo() started. Reduced motion keeps everyone as they are.
+  react(state) {
+    const characters = this.model.characters;
+    if (!characters?.length || state.reduced) return;
+    const technician = characters.find((c) => c.key === 'player'),
+      player = technician ? { x: technician.x, z: technician.z } : null,
+      conditions = conditionsFrom(state.env);
+    for (const character of characters)
+      this.reactions.apply(character, this.visualClock, { player, conditions });
+  }
   // Works out what this frame shows (camera, sun, fog, the nearest lamps and shadow casters) and
   // has the renderer draw it.
   render(t, dt, s = this.getState()) {
     this.animate(s, t, dt);
+    this.react(s);
     const width = Math.max(1, this.canvas.clientWidth),
       height = Math.max(1, this.canvas.clientHeight),
       dpr = Math.min(this.renderer.maxPixelRatio || 2, globalThis.devicePixelRatio || 1);

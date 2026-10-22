@@ -5,6 +5,7 @@ import * as THREE from '../../../public/vendor/three.module.min.js';
 import { OrbitControls } from '/editor/three/OrbitControls.js';
 import { ThreeCharacters } from '../../../public/three-characters.js';
 import { CLIPS, walkTime } from '../../../public/character-clips.js';
+import { Reactions } from '../../../public/character-reactions.js';
 
 const KEY = 'preview';
 // A resident's ordinary walking pace, in metres a second; their speed setting scales it.
@@ -64,6 +65,14 @@ export class Stage {
     this.dress = dress;
     this.look = look;
   }
+  // Plays a reaction once on the person ("Try it"), turning them to the camera if it says so.
+  tryReaction(reaction) {
+    this.trial = new Reactions({
+      people: { [KEY]: { reactions: [{ ...reaction, cooldown: 0 }] } },
+    });
+    this.trialClock = 0;
+    this.trial.fire(KEY, reaction.trigger, 0);
+  }
   // Walking pulls the camera back to show the whole circle; standing brings it in close.
   setMode(mode) {
     this.mode = mode;
@@ -98,7 +107,14 @@ export class Stage {
     this.orbit.update();
     if (this.look) {
       if (this.playing) this.clock += dt * (this.look.rate || 1);
-      this.characters.update([this.state(dt)], this.camera.position.toArray());
+      const person = this.state(dt);
+      if (this.trial) {
+        this.trialClock += dt;
+        const { x, z } = this.camera.position;
+        this.trial.apply(person, this.trialClock, { player: { x, z }, sense: false });
+        if (!this.trial.playing.has(KEY)) this.trial = null;
+      }
+      this.characters.update([person], this.camera.position.toArray());
     }
     this.renderer.render(this.scene, this.camera);
   }

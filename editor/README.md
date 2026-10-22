@@ -295,10 +295,29 @@ export default {
 };
 ```
 
-- **The keys:** `model`, `outfit` (pieces as in `public/character-outfits.js`, with `null` taking a piece off), `walk`, `idle`, `activity` (`false` for none), `speed` and `rate`.
+- **The keys:** `model`, `outfit` (pieces as in `public/character-outfits.js`, with `null` taking a piece off), `walk`, `idle`, `activity` (`false` for none), `speed`, `rate` and `reactions` (see Reactions below).
 - **Order:** a person's own settings come before `defaults`, and both before what the code picks.
 - **Ids** are the game's own: `player` is the technician, and others look like `Maya`, `worker:shop-floor:0` or `bus:0:1>1:1:2`.
 - **An empty file** leaves everyone as the code makes them, which `tests/character-settings.test.mjs` checks. `public/character-settings.js` applies the settings.
+
+### Reactions
+
+The inspector's **Reactions** section sets a clip someone plays when something happens. They blend into it, play it, then blend back into what they were doing.
+
+| Reacts to                  | Set off by                                                  | Plays again after (default) |
+| -------------------------- | ----------------------------------------------------------- | --------------------------- |
+| The technician comes near  | the technician coming within 3 m (once per approach)        | 20 s                        |
+| A chat opens               | the technician opening a chat with them                     | 0 s                         |
+| One of their quests passes | their quest's tests passing, or a chat where they thank you | 0 s                         |
+| Their quest's tests fail   | their quest's tests failing                                 | 10 s                        |
+| It is cold / hot outside   | an outdoor temperature under 10 °C / over 30 °C             | 45 s                        |
+| It is raining              | rain over 20                                                | 45 s                        |
+| It is night                | light under 15                                              | 60 s                        |
+
+- **For each:** a clip (any played on the spot, imported ones too), **For** (once through, or looped for a number of seconds), **Again after** (the cooldown) and **Turn to the technician**. The play button tries it on the stage, turning them to the camera.
+- **One at a time:** a reaction to the weather or to the technician coming near waits while another plays; a chat, a pass or a failure cuts in.
+- **Everyone and one person:** a person's reaction to something replaces everyone's; **Nothing** on a person keeps them still where everyone else reacts. The judo class does not react, and reduced motion turns reactions off.
+- **Saved** with the other settings, as `reactions: [{ trigger, clip, seconds?, cooldown?, face? }]`, triggers `near`, `chat`, `thanks`, `fail`, `cold`, `hot`, `rain`, `night`; `clip: false` for Nothing. `public/character-reactions.js` plays them; with none saved, everyone is as before (`tests/character-reactions.test.mjs`).
 
 ### Importing clips
 

@@ -57,6 +57,7 @@ The game builds its world in code (`public/world-model.js`, `public/regions.js`,
   - **Select** (`V`) picks an object and shows a gizmo. **Move** (`G`) has arrows to drag along and squares to drag across a plane. **Turn** (`R`) turns the object about the vertical axis. **Resize** (`S`) shows handles on the object's box: drag a square on a side or on top to stretch it that way (the opposite side stays put), or drag the round one on a top corner, or hold Shift, to resize it evenly. **Snap** keeps moves to 10 cm steps, turns to 15° steps and sizes to 5 cm steps.
   - **Object** (`O`) opens the catalogue along the bottom, with tabs for Furniture, Garden, Buildings and Street, plus a search box. Click an item, then click in the world to place it. `R` turns it while placing, Shift-click places several, and `Esc` stops.
   - **Delete** (`X`) removes whatever you click.
+  - **House** (`H`) edits the house itself: its walls, doorways and room floors (see below).
   - **Camera** (`C`) only moves the view, so you cannot change anything by accident.
 - **Inspector** on the right:
   - When an object is selected, it shows the object's name, its id and whether it is as built, changed or added. You can type an exact position, turn, and width, height and depth in metres. **Focus**, **Duplicate**, **Reset** (back to how the code builds it) and **Delete** act on the object.
@@ -83,7 +84,25 @@ Everything is edited as whole objects (an edit group). For example, moving a sof
 | Street    | Street lights and bus stops                                                                                  | `town/street-light#7`, `town/bus-stop#2`              |
 | Added     | Copies placed from the catalogue                                                                             | `added/1`                                             |
 
-Not editable here: the house's own walls, floors and roof (planned), the landscape beyond the property, and moving people and vehicles. Roads, junctions and traffic signals are edited in the **Street Editor**.
+The house's walls and floors are edited with the **House** tool (below). Not editable here: the house's roof, the landscape beyond the property, and moving people and vehicles. Roads, junctions and traffic signals are edited in the **Street Editor**.
+
+### The House tool: walls and rooms
+
+The house is a grid of six rooms: wall **lines** run across it (left, left inner, right inner and right; back, middle and front), and each wall stands on one line, from one line to another. Click a wall or a room's floor in the world, or pick one from the lists in the inspector.
+
+- **Move a wall:** drag the arrow on a selected wall, or type its position. Moving a wall moves every wall on its line (the middle wall's three stretches move together), stretches the walls that end on it, and resizes the rooms either side, floors included. A room's doorways keep their place in the room. A room's inspector shows its four walls, so typing there resizes the room.
+- **The outer walls stay put** (shown with a lock): the roof, the garden and the town are built around them.
+- **Height and colour** of each wall, and the **colour** of each room's floor.
+- **Doorways:** each wall lists its doorways by their middle along the wall and their width. Add one (it goes in the middle of the longest solid stretch), change one, or close one.
+
+Each change is checked before it is made, and a change that fails is not made (the toast says why):
+
+- every room stays at least 2.5 m each way;
+- each room's quest spot (where its devices go and its resident stands) stays inside the room;
+- every room can still be walked into from outside through doorways;
+- walls are 0.3–2.5 m high, doorways 0.8–4 m wide, inside their wall and not overlapping.
+
+Furniture, windows and the household stay where they are: if a moved wall now runs through something, the inspector names it so you can move it with **Select**. Some cities rebuild part of the house in their own style (court houses, round houses): there the walls cannot move, but the walls they keep can change height, colour and doorways, and a city with no grid walls shows none.
 
 ### The saved layout
 
@@ -101,7 +120,12 @@ export default {
       },
       "added": [
         {"id": "added/1", "name": "Tree", "kind": "garden/tree", "pos": [5, 0, 8], "turn": 0, "scale": 1, "parts": [...], "colliders": [...]}
-      ]
+      ],
+      "house": {
+        "lines": {"divider-left": -7.6},
+        "walls": {"back": {"height": 1.8, "color": "#d9c7a8", "openings": [{"at": -6, "width": 1.2}]}},
+        "rooms": {"Kitchen": {"color": "#c9b79a"}}
+      }
     }
   }
 };
@@ -111,6 +135,7 @@ export default {
 - `turn` is a turn about the vertical axis, in radians.
 - `scale` is the object's size: one factor (`1.25`) when it is resized evenly, or three (`[1.2, 1, 0.8]`) when it is stretched, for its width, height and depth along its own sides before it is turned.
 - Added objects carry their own parts, measured from their base centre, so they do not depend on the object they were copied from.
+- `house` holds changes to the house itself (`public/house-shell.js` describes them): where inner wall lines stand (`lines`, in metres on x or z), each wall's `height`, `color` and `openings` (doorways, by their middle and width), and each room floor's `color`. Only what differs is kept. The house is changed before objects are placed, so furniture stands where it was saved. If the house changes have a problem in a city (its code changed, say), the game leaves all of them out and lists why in `model.layoutWarnings`.
 
 With an empty file the game builds every world exactly as before; a test (`tests/world-layout.test.mjs`) checks that. When the game builds a city (`buildWorldModel` in `public/world3d.js`), `applyWorldLayout` in `public/world-layout.js` applies its changes.
 
@@ -126,7 +151,7 @@ buildTree(...);
 tag(); // …until the next tag
 ```
 
-An id ending in `#` is numbered in build order (`garden/tree#1`, `garden/tree#2`, …), so keep that order stable. **Changing an existing group's id, or the order of numbered groups, detaches saved edits from their object.** The test above will tell you if a committed edit no longer finds its object. House furniture is tagged per piece in `house-objects.js`. Town lots, furnishings and bus stops are grouped in `tagTownGroups` in `community-world.js`. New builders should tag what a person would want to move as one thing, and leave untagged what should stay put.
+An id ending in `#` is numbered in build order (`garden/tree#1`, `garden/tree#2`, …), so keep that order stable. **Changing an existing group's id, or the order of numbered groups, detaches saved edits from their object.** The test above will tell you if a committed edit no longer finds its object. The house's walls and rooms are not edit groups: `createWorldModel` records them in `model.shell` (each wall's lines, doorways, height and parts), so keep the grid's walls built through `shellWall` there. House furniture is tagged per piece in `house-objects.js`. Town lots, furnishings and bus stops are grouped in `tagTownGroups` in `community-world.js`. New builders should tag what a person would want to move as one thing, and leave untagged what should stay put.
 
 ## Street Editor
 

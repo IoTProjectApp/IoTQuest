@@ -5,6 +5,15 @@ import { Viewport, dimensions } from './viewport.js';
 import { catalogueItems, Thumbnails } from './catalogue.js';
 import { CATEGORIES } from './names.js';
 import { scaleOf } from '../../../public/world-layout.js';
+import {
+  LINES,
+  LOCKED_LINES,
+  ROOMS,
+  WALL_NAMES,
+  LINE_NAMES,
+  LIMITS,
+  segments,
+} from '../../../public/house-shell.js';
 import { icon } from '../../ui/icons.js';
 
 const shell = window.editorShell;
@@ -20,6 +29,7 @@ const TOOLS = {
   select: { label: 'Select', icon: 'select' },
   object: { label: 'Object', icon: 'object' },
   erase: { label: 'Delete', icon: 'erase' },
+  house: { label: 'House', icon: 'home' },
   camera: { label: 'Camera', icon: 'camera' },
 };
 const GIZMO = {
@@ -107,8 +117,30 @@ const viewport = new Viewport($('canvas'), {
   onTransformEnd(id, placement) {
     state.session.move(id, placement, GIZMO[state.gizmo].label);
   },
+  onHousePick(target) {
+    viewport.selectHouse(target);
+    renderInspector();
+    hint();
+  },
+  // While a wall is dragged: the house as it would be, and the position in the inspector.
+  onHouseDrag(line, at) {
+    const house = JSON.parse(JSON.stringify(state.session.changes.house || {}));
+    (house.lines ??= {})[line] = at;
+    state.session.previewHouse(house);
+    const input = document.querySelector(`[data-line="${line}"]`);
+    if (input) input.value = at.toFixed(2);
+  },
+  onHouseEnd(line, at) {
+    moveLine(line, at);
+  },
   onHover(group) {
     const label = $('hover-label');
+    if (state.tool === 'house') {
+      label.hidden = !group;
+      if (group) label.textContent = houseName(group);
+      label.classList.remove('erase');
+      return;
+    }
     label.hidden = !group || group === viewport.selected;
     if (!label.hidden) {
       label.textContent = state.tool === 'erase' ? `Remove ${group.name}` : group.name;
@@ -198,6 +230,8 @@ function setTool(tool) {
   for (const b of $('tools').children) b.classList.toggle('active', b.dataset.tool === tool);
   $('catalogue').hidden = tool !== 'object';
   $('gizmo-bar').hidden = tool !== 'select';
+  if (tool === 'house') viewport.select(null);
+  renderInspector();
   $('canvas').style.cursor = tool === 'erase' ? 'crosshair' : 'default';
   if (tool === 'object') renderCatalogue();
   hint();
@@ -235,33 +269,37 @@ function hint() {
         ['R', 'turns it'],
         ['Esc', 'stops'],
       )
-    : state.tool === 'object'
-      ? 'Pick something from the catalogue below, then click in the world to place it'
-      : state.tool === 'erase'
-        ? keys(['Click', 'an object to remove it'], ['⌘Z', 'brings it back'])
-        : state.tool === 'camera'
-          ? keys(['Drag', 'to orbit'], ['Right-drag', 'to pan'], ['Scroll', 'to zoom'])
-          : viewport.selected && state.gizmo === 'scale'
-            ? keys(
-                ['Drag a square', 'to stretch that way'],
-                ['the round one or Shift', 'resizes evenly'],
-                ['G', 'back to moving'],
-                ['Esc', 'deselects'],
-              )
-            : viewport.selected
+    : state.tool === 'house'
+      ? viewport.selectedWall() && !LOCKED_LINES[viewport.selectedWall().line]
+        ? keys(['Drag the arrow', 'to move the wall'], ['Esc', 'deselects'])
+        : keys(['Click', 'a wall or a room floor'], ['Drag', 'to orbit'], ['Scroll', 'to zoom'])
+      : state.tool === 'object'
+        ? 'Pick something from the catalogue below, then click in the world to place it'
+        : state.tool === 'erase'
+          ? keys(['Click', 'an object to remove it'], ['⌘Z', 'brings it back'])
+          : state.tool === 'camera'
+            ? keys(['Drag', 'to orbit'], ['Right-drag', 'to pan'], ['Scroll', 'to zoom'])
+            : viewport.selected && state.gizmo === 'scale'
               ? keys(
-                  ['Drag the handles', 'to move'],
-                  ['G R S', 'move, turn, size'],
-                  ['F', 'focus'],
-                  ['Delete', 'removes'],
+                  ['Drag a square', 'to stretch that way'],
+                  ['the round one or Shift', 'resizes evenly'],
+                  ['G', 'back to moving'],
                   ['Esc', 'deselects'],
                 )
-              : keys(
-                  ['Click', 'an object to select it'],
-                  ['Drag', 'to orbit'],
-                  ['Right-drag', 'to pan'],
-                  ['Scroll', 'to zoom'],
-                );
+              : viewport.selected
+                ? keys(
+                    ['Drag the handles', 'to move'],
+                    ['G R S', 'move, turn, size'],
+                    ['F', 'focus'],
+                    ['Delete', 'removes'],
+                    ['Esc', 'deselects'],
+                  )
+                : keys(
+                    ['Click', 'an object to select it'],
+                    ['Drag', 'to orbit'],
+                    ['Right-drag', 'to pan'],
+                    ['Scroll', 'to zoom'],
+                  );
   $('hint').innerHTML = text;
 }
 
@@ -330,6 +368,7 @@ function renderInspector() {
     group = viewport.selected,
     el = $('inspector');
   if (!s) return;
+  if (state.tool === 'house') return renderHouse(el);
   if (!group) {
     const list = s.changeList();
     el.innerHTML = `
@@ -370,6 +409,11 @@ function renderInspector() {
       li.addEventListener('click', (e) => {
         const id = li.dataset.id,
           revert = e.target.closest('[data-revert]');
+        if (id.startsWith('house:')) {
+          if (revert) s.resetHouse(id);
+          else setTool('house');
+          return;
+        }
         if (revert) {
           if (id.startsWith('added/')) s.remove(id);
           else s.reset(id);
@@ -477,6 +521,229 @@ function removeSelected() {
   toast(`Removed ${group.name}. Undo brings it back.`);
 }
 
+// ---- House: walls and rooms -----------------------------------------------------------------
+const houseName = (target) =>
+  target.kind === 'wall' ? WALL_NAMES[target.id] : target.id + ' floor';
+const colourValue = (c) => (/^#[0-9a-f]{6}$/i.test(c || '') ? c : '#ffffff');
+// Saves a change to the house, or says why it cannot be made.
+function editHouse(label, change) {
+  const problems = state.session.editHouse(label, change);
+  if (problems.length) {
+    toast(problems[0].text, true);
+    viewport.refresh();
+    renderInspector();
+  }
+  return !problems.length;
+}
+function moveLine(line, at) {
+  editHouse('Move ' + LINE_NAMES[line], (house) => {
+    house.lines ??= {};
+    if (Math.abs(at - LINES[line][1]) < 5e-4) delete house.lines[line];
+    else house.lines[line] = at;
+  });
+}
+function editWall(id, label, change) {
+  return editHouse(label + ' ' + WALL_NAMES[id].toLowerCase(), (house) => {
+    house.walls ??= {};
+    change((house.walls[id] ??= {}));
+  });
+}
+function onHouseBack() {
+  viewport.selectHouse(null);
+  renderInspector();
+  hint();
+}
+// A line's position: a number to type in, or why it cannot move.
+function lineField(line, label, info, at) {
+  const locked = LOCKED_LINES[line] || (!info.whole && 'This city builds its own house.');
+  return `<label class="field" title="${escape(locked || 'Where the wall stands, in metres')}"><span>${label}${locked ? ' ' + icon('lock', 12) : ''}</span>
+    <input class="input" type="number" step="0.1" data-line="${line}" value="${at.toFixed(2)}" ${locked ? 'disabled' : ''} /></label>`;
+}
+const caution = (text, symbol = 'warning') =>
+  `<div class="caution">${icon(symbol, 16)}<span>${escape(text)}</span></div>`;
+function renderHouse(el) {
+  const s = state.session,
+    info = s.houseInfo(),
+    target = viewport.house,
+    walls = s.walls(),
+    house = s.changes.house || {},
+    positions = Object.fromEntries(
+      Object.keys(LINES).map((l) => [l, house.lines?.[l] ?? LINES[l][1]]),
+    );
+  const notes =
+    (!walls.length
+      ? caution('This city builds its own house, with no walls to change here.')
+      : !info.whole
+        ? caution(
+            'This city rebuilds part of the house in its own style: walls cannot move here, but you can change their height, colour and doorways.',
+          )
+        : '') +
+    (s.houseProblems || [])
+      .map((p) => caution('Saved house changes left out: ' + p.text))
+      .join('') +
+    s
+      .houseWarnings()
+      .map((w) => caution(w.text))
+      .join('');
+  if (!target) {
+    el.innerHTML = `
+      <section>
+        <h2>House</h2>
+        <p class="muted">Click a wall to move it, change its height or colour, or add and remove doorways. Click a room's floor to resize the room or recolour its floor.</p>
+        ${notes}
+      </section>
+      <section>
+        <h3>Rooms</h3>
+        <div class="pick-list">${info.rooms
+          .map(
+            (r) =>
+              `<button class="button" data-room="${escape(r)}">${escape(r)}${house.rooms?.[r] ? ' •' : ''}</button>`,
+          )
+          .join('')}</div>
+      </section>
+      <section>
+        <h3>Walls</h3>
+        <div class="pick-list">${walls
+          .map(
+            (w) =>
+              `<button class="button" data-wall="${w.id}">${escape(WALL_NAMES[w.id])}${house.walls?.[w.id] || house.lines?.[w.line] !== undefined ? ' •' : ''}</button>`,
+          )
+          .join('')}</div>
+      </section>`;
+    for (const b of el.querySelectorAll('[data-room]'))
+      b.addEventListener('click', () => pickHouse({ kind: 'room', id: b.dataset.room }));
+    for (const b of el.querySelectorAll('[data-wall]'))
+      b.addEventListener('click', () => pickHouse({ kind: 'wall', id: b.dataset.wall }));
+    return;
+  }
+  if (target.kind === 'room') {
+    const [l, r, b, f] = ROOMS[target.id],
+      floor = s.model.shell.rooms.find((x) => x.id === target.id)?.parts[0],
+      changed = !!house.rooms?.[target.id];
+    el.innerHTML = `
+      <section>
+        <h2>${escape(target.id)}</h2>
+        <div class="chips"><span class="chip">Room</span><span class="chip">${(positions[r] - positions[l]).toFixed(2)} × ${(positions[f] - positions[b]).toFixed(2)} m</span></div>
+        ${notes}
+      </section>
+      <section>
+        <h3>Its walls (metres)</h3>
+        <p class="muted small">Moving a wall resizes the rooms either side of it. The outer walls stay put.</p>
+        <div class="grid2">
+          ${lineField(l, 'Left side (x)', info, positions[l])}
+          ${lineField(r, 'Right side (x)', info, positions[r])}
+          ${lineField(b, 'Back (z)', info, positions[b])}
+          ${lineField(f, 'Front (z)', info, positions[f])}
+        </div>
+      </section>
+      <section>
+        <h3>Floor</h3>
+        <label class="field colour"><span>Colour</span><input type="color" id="floor-colour" value="${colourValue(floor?.color)}" /></label>
+      </section>
+      <section><div class="actions">
+        <button class="button" id="house-back">${icon('back', 16)}All walls and rooms</button>
+        <button class="button" id="floor-reset" ${changed ? '' : 'disabled'}>${icon('reset', 16)}Floor as built</button>
+      </div></section>`;
+    $('floor-colour').addEventListener('change', (e) =>
+      editHouse(`Colour the ${target.id.toLowerCase()} floor`, (h) => {
+        h.rooms ??= {};
+        h.rooms[target.id] = { color: e.target.value };
+      }),
+    );
+    $('floor-reset').addEventListener('click', () => s.resetHouse('house:rooms:' + target.id));
+  } else {
+    const wall = walls.find((w) => w.id === target.id);
+    if (!wall) {
+      viewport.selectHouse(null);
+      return renderHouse(el);
+    }
+    const moved = house.lines?.[wall.line] !== undefined,
+      changed = !!house.walls?.[wall.id] || moved;
+    el.innerHTML = `
+      <section>
+        <h2>${escape(WALL_NAMES[wall.id])}</h2>
+        <div class="id">house/${wall.id}</div>
+        <div class="chips"><span class="chip">Wall</span><span class="chip ${changed ? 'changed' : ''}">${changed ? 'Changed' : 'As built'}</span><span class="chip">${(wall.to - wall.from).toFixed(2)} m long</span></div>
+        ${LOCKED_LINES[wall.line] ? caution(LOCKED_LINES[wall.line], 'lock') : ''}
+        ${notes}
+      </section>
+      <section>
+        <h3>Wall</h3>
+        <div class="grid2">
+          ${lineField(wall.line, wall.axis === 'x' ? 'Position (z)' : 'Position (x)', info, wall.at)}
+          <label class="field"><span>Height (m)</span><input class="input" type="number" step="0.05" min="${LIMITS.height[0]}" max="${LIMITS.height[1]}" id="wall-height" value="${wall.height.toFixed(2)}" /></label>
+          <label class="field colour"><span>Colour</span><input type="color" id="wall-colour" value="${colourValue(wall.color)}" /></label>
+        </div>
+        ${LOCKED_LINES[wall.line] || !info.whole ? '' : `<p class="muted small">Moving it moves every wall along ${escape(LINE_NAMES[wall.line])} and resizes the rooms either side. Furniture stays where it is.</p>`}
+      </section>
+      <section>
+        <h3>Doorways</h3>
+        ${
+          wall.openings.length
+            ? wall.openings
+                .map(
+                  (o, i) => `<div class="doorway">
+                <label class="field"><span>Middle (${wall.axis})</span><input class="input" type="number" step="0.1" data-door="${i}" data-key="at" value="${o.at.toFixed(2)}" /></label>
+                <label class="field"><span>Width (m)</span><input class="input" type="number" step="0.1" min="${LIMITS.opening[0]}" max="${LIMITS.opening[1]}" data-door="${i}" data-key="width" value="${o.width.toFixed(2)}" /></label>
+                <button class="revert" data-remove-door="${i}" title="Close this doorway">${icon('close', 14)}</button></div>`,
+                )
+                .join('')
+            : '<p class="muted">No doorways: a solid wall.</p>'
+        }
+        <button class="button" id="add-door">${icon('plus', 16)}Add a doorway</button>
+      </section>
+      <section><div class="actions">
+        <button class="button" id="house-back">${icon('back', 16)}All walls and rooms</button>
+        <button class="button" id="wall-reset" ${house.walls?.[wall.id] ? '' : 'disabled'}>${icon('reset', 16)}Wall as built</button>
+        ${moved ? `<button class="button" id="line-reset">${icon('reset', 16)}Back where it was</button>` : ''}
+      </div></section>`;
+    $('wall-height').addEventListener('change', (e) => {
+      const v = parseFloat(e.target.value);
+      if (Number.isFinite(v)) editWall(wall.id, 'Change the height of the', (w) => (w.height = v));
+    });
+    $('wall-colour').addEventListener('change', (e) =>
+      editWall(wall.id, 'Colour the', (w) => (w.color = e.target.value)),
+    );
+    const openings = () => wall.openings.map((o) => ({ ...o }));
+    for (const input of el.querySelectorAll('[data-door]'))
+      input.addEventListener('change', () => {
+        const v = parseFloat(input.value);
+        if (!Number.isFinite(v)) return;
+        const list = openings();
+        list[Number(input.dataset.door)][input.dataset.key] = v;
+        editWall(wall.id, 'Change a doorway in the', (w) => (w.openings = list));
+      });
+    for (const b of el.querySelectorAll('[data-remove-door]'))
+      b.addEventListener('click', () => {
+        const list = openings().filter((_, i) => i !== Number(b.dataset.removeDoor));
+        editWall(wall.id, 'Close a doorway in the', (w) => (w.openings = list));
+      });
+    $('add-door').addEventListener('click', () => {
+      // In the middle of the longest solid stretch.
+      const [a, b] = segments(wall).reduce((x, y) => (y[1] - y[0] > x[1] - x[0] ? y : x)),
+        width = Math.min(0.9, b - a - 2 * LIMITS.end);
+      if (width < LIMITS.opening[0]) return toast('There is no room for another doorway.', true);
+      const list = [...openings(), { at: Math.round(((a + b) / 2) * 100) / 100, width }];
+      editWall(wall.id, 'Add a doorway to the', (w) => (w.openings = list));
+    });
+    $('wall-reset').addEventListener('click', () => s.resetHouse('house:walls:' + wall.id));
+    $('line-reset')?.addEventListener('click', () => s.resetHouse('house:lines:' + wall.line));
+  }
+  $('house-back').addEventListener('click', onHouseBack);
+  for (const input of el.querySelectorAll('[data-line]'))
+    input.addEventListener('change', () => {
+      const v = parseFloat(input.value);
+      if (Number.isFinite(v)) moveLine(input.dataset.line, v);
+    });
+  for (const input of el.querySelectorAll('input'))
+    input.addEventListener('keydown', (e) => e.key === 'Enter' && input.blur());
+}
+function pickHouse(target) {
+  viewport.selectHouse(target);
+  renderInspector();
+  hint();
+}
+
 // ---- Undo, save, play-test ------------------------------------------------------------------
 function undo(redo = false) {
   const label = redo ? state.session.redo() : state.session.undo();
@@ -542,13 +809,15 @@ document.addEventListener('keydown', (e) => {
   if (mod) return;
   if (e.key === 'Escape') {
     if (state.placing) stopPlacing();
+    else if (state.tool === 'house') onHouseBack();
     else select(null);
     return;
   }
   if (state.placing && key === 'r')
     return viewport.turnGhost(((e.shiftKey ? -1 : 1) * Math.PI) / 4);
-  if (e.key === 'Delete' || e.key === 'Backspace') return removeSelected();
-  const tool = { v: 'select', o: 'object', x: 'erase', c: 'camera' }[key];
+  if ((e.key === 'Delete' || e.key === 'Backspace') && state.tool !== 'house')
+    return removeSelected();
+  const tool = { v: 'select', o: 'object', x: 'erase', c: 'camera', h: 'house' }[key];
   if (tool) return setTool(tool);
   if (state.tool === 'select') {
     const mode = { g: 'translate', r: 'rotate', s: 'scale' }[key];

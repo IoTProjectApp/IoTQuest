@@ -15,6 +15,7 @@ import {
   clipToGlb,
   clipEntry,
 } from './clip-import.js';
+import { PoseEditor, POSING } from './pose-editor.js';
 import { icon } from '../../ui/icons.js';
 
 const shell = window.editorShell;
@@ -28,7 +29,7 @@ const label = (clip) => clip.replace(/([a-z])([A-Z])/g, '$1 $2');
 // The name a clip being imported plays under until it is added (no real clip has a space).
 const PREVIEW = ' importing';
 // The clips to choose from (imported ones join while the editor is open).
-const clipNames = () => Object.keys(CLIPS).filter((name) => name !== PREVIEW);
+const clipNames = () => Object.keys(CLIPS).filter((name) => name !== PREVIEW && name !== POSING);
 const walks = () => clipNames().filter((name) => CLIPS[name].stride),
   others = () => clipNames().filter((name) => !CLIPS[name].stride);
 
@@ -41,8 +42,25 @@ const state = {
   // Imported clips as saved (public/data/clips.js), and the one being imported, if any.
   clips: { version: 1, clips: {} },
   importing: null,
+  // Whether the pose editor is making a clip (it plays as POSING).
+  posing: false,
 };
 const stage = new Stage($('stage'));
+const poser = new PoseEditor(stage, $('pose-panel'), {
+  CLIPS,
+  forgetClip: (name) => forgetClip(name),
+  show: (posing) => {
+    state.posing = posing;
+    if (posing) setMode('stand');
+    showStage();
+  },
+  clipNames: () => clipNames(),
+  label,
+  nameProblem,
+  save: (name, clip, made, editing) => saveMade(name, clip, made, editing),
+  toast: (text, error) => toast(text, error),
+  icon,
+});
 
 // ---- Static chrome --------------------------------------------------------------------------
 $('home').innerHTML = icon('back');
@@ -345,7 +363,9 @@ function renderInspector() {
       }
     </section>
     <section>
-      <div class="section-head"><h3>Imported clips</h3><button class="button" id="import-clip" title="Bring in an animation from a .glb, .gltf or .fbx file, such as a Mixamo download">${icon('plus', 16)}Import clip…</button></div>
+      <div class="section-head"><h3>Clips</h3>
+        <button class="button" id="make-clip" title="Make a clip by posing them at a few moments on a timeline">${icon('person', 16)}Make…</button>
+        <button class="button" id="import-clip" title="Bring in an animation from a .glb, .gltf or .fbx file, such as a Mixamo download">${icon('plus', 16)}Import…</button></div>
       ${importedList()}
     </section>
     <section>
@@ -453,6 +473,9 @@ function bindInspector(el, target) {
     b.addEventListener('click', () => s.reset(target, b.dataset.section));
   $('reset-all').addEventListener('click', () => s.reset(target));
   $('import-clip').addEventListener('click', importClip);
+  $('make-clip').addEventListener('click', makeClip);
+  for (const b of el.querySelectorAll('[data-edit-clip]'))
+    b.addEventListener('click', () => makeClip(b.dataset.editClip));
   for (const b of el.querySelectorAll('[data-remove-clip]'))
     b.addEventListener('click', () => removeClip(b.dataset.removeClip));
 }
@@ -465,7 +488,8 @@ function importedList() {
   return `<ul class="imported">${names
     .map((name) => {
       const c = state.clips.clips[name];
-      return `<li><span>${escape(label(name))}</span><span class="note">${c.stride ? `walk, ${c.stride} m a step cycle` : 'on the spot'} · ${c.duration} s</span>
+      return `<li><span>${escape(label(name))}</span><span class="note">${c.made ? 'made here' : c.stride ? `walk, ${c.stride} m a step cycle` : 'on the spot'} · ${c.duration} s</span>
+        ${c.made ? `<button class="reset-one" data-edit-clip="${escape(name)}" title="Change ${escape(name)}'s poses">${icon('person', 14)}</button>` : ''}
         <button class="reset-one" data-remove-clip="${escape(name)}" title="Remove ${escape(name)} from the game">${icon('erase', 14)}</button></li>`;
     })
     .join('')}</ul>`;
@@ -502,6 +526,7 @@ async function importClip() {
 // A picked file ({ name, ext, bytes }): read its clip and show it on whoever is picked.
 async function startImport(picked) {
   if (!stage.ready) return toast('Wait for the person to appear, then import.', true);
+  if (poser.open) poser.close();
   try {
     const { clip, count } = await readClipFile(picked, await clipLoaders());
     state.importing = {
@@ -541,6 +566,7 @@ function refit() {
 // The person on stage, playing the clip being imported if there is one.
 function showStage() {
   const look = lookOf(state.target);
+  if (state.posing) return stage.show({ ...look, activity: POSING, rate: 1 });
   if (!state.importing?.fit) return stage.show(look);
   stage.show(
     state.importing.kind === 'walk'
@@ -628,6 +654,37 @@ async function addClip() {
   } catch (error) {
     toast('Could not add the clip: ' + error.message, true);
   }
+}
+// ---- Made clips (pose-editor.js) ------------------------------------------------------------
+// Opens the pose editor: a new clip from the standing clip, or a made one to change.
+function makeClip(name) {
+  if (!stage.ready) return toast('Wait for the person to appear, then try again.', true);
+  if (state.importing) closeImport();
+  const entry = typeof name === 'string' ? state.clips.clips[name] : null;
+  if (entry?.made) poser.start({ name, made: entry.made, editing: true });
+  else poser.start({ from: lookOf(state.target).idle || 'Idle' });
+}
+// Saves a made clip like an imported one, keeping its poses (`made`) to change later.
+async function saveMade(name, clip, made, editing) {
+  if (!shell?.saveClip) throw Error('Saving a clip needs the editor (scripts/world-editor.sh).');
+  const { GLTFExporter } = await clipLoaders(),
+    glb = await clipToGlb(clip, GLTFExporter);
+  await shell.saveClip(name, new Uint8Array(glb));
+  const saved = await shell.read('clips'),
+    entry = { ...clipEntry(name, { duration: made.length }), made };
+  saved.clips[name] = entry;
+  await shell.write('clips', saved);
+  state.clips = saved;
+  if (editing) forgetClip(name);
+  IMPORTED_CLIPS[name] = entry;
+  CLIPS[name] = { duration: entry.duration };
+  stage.characters.clips.set(name, clip);
+  renderInspector();
+  toast(
+    editing
+      ? `Saved ${label(name)}.`
+      : `Added ${label(name)}: pick it as a standing clip or an activity.`,
+  );
 }
 async function removeClip(name) {
   const users = Object.entries({
@@ -746,6 +803,7 @@ const typing = () => /^(INPUT|SELECT|TEXTAREA)$/.test(document.activeElement?.ta
 document.addEventListener('keydown', (e) => {
   const mod = e.metaKey || e.ctrlKey,
     key = e.key.toLowerCase();
+  if (!mod && poser.key(e)) return;
   if (mod && !shell) {
     if (key === 'z') return (e.preventDefault(), typing() || undo(e.shiftKey));
     if (key === 's') return (e.preventDefault(), save());
@@ -771,7 +829,7 @@ shell?.onMenu((command) => {
 });
 
 // For test scripts and the developer console.
-window.characterEditor = { state, stage, startImport };
+window.characterEditor = { state, stage, startImport, poser };
 
 async function start() {
   const saved = shell

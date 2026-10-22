@@ -81,7 +81,10 @@ export class Stage {
     const c = this.canvas,
       width = Math.max(1, c.clientWidth),
       height = Math.max(1, c.clientHeight);
-    if (c.width !== Math.round(width * devicePixelRatio)) {
+    if (
+      c.width !== Math.round(width * devicePixelRatio) ||
+      c.height !== Math.round(height * devicePixelRatio)
+    ) {
       this.renderer.setPixelRatio(devicePixelRatio);
       this.renderer.setSize(width, height, false);
       this.camera.aspect = width / height;
@@ -100,6 +103,8 @@ export class Stage {
       if (this.playing) this.clock += dt * (this.look.rate || 1);
       this.characters.update([this.state(dt)], this.camera.position.toArray());
     }
+    // The pose editor's dots and rings follow the body (pose-editor.js).
+    this.onFrame?.(dt);
     this.renderer.render(this.scene, this.camera);
   }
   // The person this frame, as the game describes a character.

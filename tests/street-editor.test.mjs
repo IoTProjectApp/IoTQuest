@@ -246,3 +246,89 @@ test('a network of only roads at angles still builds corners, crossings and turn
     'people can walk round',
   );
 });
+
+test('roads can be widened and curved, but not locked ones, each in one undoable step', () => {
+  const s = new StreetSession(empty);
+  assert.equal(s.setLanes('2:1', '3:1', 2), true);
+  assert.deepEqual(s.road('2:1', '3:1'), { a: '2:1', b: '3:1', lanes: 2 });
+  assert.equal(s.setBend('3:-1', '4:-1', { x: 120.004, z: -104 }), true);
+  assert.deepEqual(s.road('3:-1', '4:-1').bend, { x: 120, z: -104 });
+  assert.deepEqual(s.errors, []);
+  // Locked roads keep their shape: driveways join them.
+  assert.equal(s.setLanes('1:2', '2:2', 2), false);
+  assert.equal(s.setBend('0:1', '0:2', { x: -60, z: 24 }), false);
+  s.undo();
+  assert.equal(s.road('3:-1', '4:-1').bend, undefined);
+  s.undo();
+  assert.equal(s.road('2:1', '3:1').lanes, undefined);
+  assert.equal(s.isChanged(), false);
+  // Dragging previews without recording; the release records one step.
+  s.setBend('3:-1', '4:-1', { x: 118, z: -100 }, true);
+  assert.equal(s.undoStack.length, 0);
+  // Straightening takes the bend away.
+  s.setBend('3:-1', '4:-1', null);
+  assert.equal('bend' in s.road('3:-1', '4:-1'), false);
+});
+
+test('a junction on a wide road keeps both halves wide', () => {
+  const s = new StreetSession(empty);
+  s.setLanes('2:1', '3:1', 2);
+  const id = s.splitRoad('2:1', '3:1', 72, 0);
+  assert.equal(s.road('2:1', id).lanes, 2);
+  assert.equal(s.road(id, '3:1').lanes, 2);
+});
+
+test('roundabouts: any junction but a locked one, with a warning where fewer than three roads meet', () => {
+  const s = new StreetSession(empty);
+  assert.equal(s.setControl('4:1', 'roundabout'), true);
+  assert.equal(s.junction('4:1').control, 'roundabout');
+  assert.equal(s.setControl('3:1', 'roundabout'), false, 'locked: the stations');
+  assert.deepEqual(s.errors, []);
+  assert.ok(s.map.junctions.find((j) => j.id === '4:1').roundabout);
+  // A corner junction with only two roads.
+  s.setControl('5:-1', 'roundabout');
+  assert.ok(
+    s.problems.some((p) => p.level === 'warning' && /5:-1 is a roundabout/.test(p.message)),
+  );
+});
+
+test('the checks follow curves: too sharp, through a lot, or across another road', () => {
+  const s = new StreetSession(empty);
+  // A bend far out to one side turns too tightly for cars.
+  s.setBend('3:-1', '4:-1', { x: 120, z: -150 });
+  assert.ok(s.errors.some((p) => /bends too sharply/.test(p.message)));
+  // Bent the other way it runs into the block south of it.
+  s.setBend('3:-1', '4:-1', { x: 120, z: -78 });
+  assert.ok(s.errors.some((p) => /runs through/.test(p.message)));
+  // A curve's length is measured along it.
+  s.setBend('3:-1', '4:-1', { x: 120, z: -104 });
+  assert.deepEqual(s.errors, []);
+  // Curved across its neighbour: the crossing is found along the curve.
+  const t = new StreetSession(empty);
+  t.drawRoad({ x: 230, z: 20 }, { x: 230, z: 120 });
+  t.setBend(t.layout.roads.at(-1).a, t.layout.roads.at(-1).b, { x: 180, z: 70 });
+  assert.ok(t.errors.some((p) => /cross without a junction/.test(p.message)));
+});
+
+test('the town draws wide roads, curves and roundabouts', () => {
+  const layout = defaultStreetLayout(),
+    road = (a, b) => layout.roads.find((r) => r.a === a && r.b === b);
+  road('4:1', '5:1').lanes = 2;
+  road('3:-1', '4:-1').bend = { x: 120, z: -104 };
+  layout.junctions.find((j) => j.id === '4:1').control = 'roundabout';
+  const model = createRegionalModel('legacy');
+  addCommunityWorld(model, undefined, { streets: layout });
+  const asphalt = model.objects.filter(
+    (m) => m.community && m.color === '#414950' && m.shape === 'box' && m.size[1] === 0.05,
+  );
+  assert.ok(
+    asphalt.some((m) => m.size[2] === 18),
+    'eighteen metres of asphalt on the wide road',
+  );
+  // The curve: many short turned pieces.
+  assert.ok(asphalt.filter((m) => m.rotation[1] !== 0).length >= 24);
+  const island = model.objects.filter((m) => m.color === '#7f9c6b');
+  assert.equal(island.length, 1, "the roundabout's island");
+  // No traffic lights at the roundabout.
+  assert.ok(!model.community.signals.some((h) => h.junction === '4:1'));
+});

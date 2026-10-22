@@ -3,7 +3,7 @@ import { civicLots } from './community-civic.js';
 import { residentialLots } from './community-residences.js';
 import { Runtime } from './runtime.js';
 import { communityDevices } from './community-missions.js';
-import { buildStreetNetwork, streetLayoutFor, pavement } from './street-network.js';
+import { buildStreetNetwork, streetLayoutFor, pavement, linePart } from './street-network.js';
 // Metres and seconds. Rendering and controllers share this fixed-step simulation.
 export const LEFT_DRIVING = new Set(['JPN', 'AUS', 'KEN', 'ZAF', 'IND', 'IDN', 'GBR', 'NZL']);
 const distance = (a, b) => Math.hypot(a.x - b.x, a.z - b.z);
@@ -271,17 +271,26 @@ export function createCommunity(location = {}, layout = streetLayoutFor(location
       if (!edge) continue;
       const start = roads.nodes[edge.from],
         end = roads.nodes[edge.to];
-      const length = Math.hypot(end.x - start.x, end.z - start.z),
-        dx = (end.x - start.x) / length,
+      const length = Math.hypot(end.x - start.x, end.z - start.z);
+      let dx = (end.x - start.x) / length,
         dz = (end.z - start.z) / length;
       // 6 m past halfway in the direction of travel, so the two directions' stops are staggered
       // at opposite ends of the block rather than facing each other.
-      const at = length / 2 + 6;
+      let at = length / 2 + 6,
+        x = start.x + dx * at,
+        z = start.z + dz * at;
+      // On a curved road, as far along its curve.
+      if (edge.points.length > 2) {
+        at = edge.length / 2 + 6;
+        const { points, startDir } = linePart(edge.points, at, at);
+        ({ x, z } = points[0]);
+        [dx, dz] = startDir;
+      }
       edge.busStop = {
         id: `${from}>${to}`,
         at,
-        x: start.x + dx * at,
-        z: start.z + dz * at,
+        x,
+        z,
         dx,
         dz,
         // Towards the kerb on this lane's side of the road.

@@ -5,9 +5,9 @@ import { CommunitySimulation } from '../../../public/community-sim.js';
 import { createRegionalModel } from '../../../public/regions.js';
 import { addCommunityWorld } from '../../../public/community-world.js';
 import { prepareWorldMaterials } from '../../../public/world-materials.js';
-import { LOCKED, lockedRoad } from '../../../public/street-network.js';
+import { LOCKED, lockedRoad, lineLength } from '../../../public/street-network.js';
 import { StreetSession } from './session.js';
-import { PlanView } from './plan.js';
+import { PlanView, bendHandle } from './plan.js';
 import { icon } from '../../ui/icons.js';
 
 const shell = window.editorShell;
@@ -31,6 +31,7 @@ const CONTROL_CHOICES = [
   ['signals', 'Signals', '#5fd38a', 'Traffic lights with pedestrian crossings'],
   ['stop', 'Stop', '#e8604c', 'Every arm stops, then goes in turn'],
   ['giveway', 'Give way', '#f2b84b', 'Slow down, go in turn when clear'],
+  ['roundabout', 'Roundabout', '#4f9cf9', 'A circle round an island: give way to it, drive round'],
   ['none', 'Uncontrolled', '#6e7785', 'First come, first through; gives way to pedestrians'],
 ];
 const cityName = (id) => (id === 'legacy' ? 'Willowbrook' : locationById(id)?.city || id);
@@ -201,6 +202,16 @@ $('plan').addEventListener('pointerdown', (e) => {
     hit = plan.hit(s.layout, at);
   $('plan').focus();
   if (state.tool === 'select') {
+    // The selected road's handle: drag it to curve the road.
+    if (plan.hitHandle(s.layout, at)) {
+      const [a, b] = plan.selected.road,
+        reason = lockedRoad(a, b);
+      if (reason) return toast(`This road stays straight: ${reason}.`);
+      const bend = s.road(a, b).bend;
+      state.bendDrag = { road: [a, b], start: bend ? { ...bend } : null, moved: false };
+      $('plan').setPointerCapture(e.pointerId);
+      return;
+    }
     plan.selected = hit && (hit.junction ? { junction: hit.junction } : { road: hit.road });
     if (hit?.junction) {
       const reason = s.lockedJunction(hit.junction);
@@ -262,6 +273,12 @@ $('plan').addEventListener('pointermove', (e) => {
   const s = state.session;
   if (!s) return;
   const at = townAt(e);
+  if (state.bendDrag) {
+    const p = state.snap ? { x: Math.round(at.x), z: Math.round(at.z) } : at;
+    state.bendDrag.moved = true;
+    s.setBend(...state.bendDrag.road, p, true);
+    return;
+  }
   if (state.drag) {
     const p = snapped(at, state.drag.id);
     state.drag.moved = true;
@@ -286,6 +303,18 @@ $('plan').addEventListener('pointermove', (e) => {
           : hit && (hit.junction ? { junction: hit.junction } : { road: hit.road });
 });
 $('plan').addEventListener('pointerup', () => {
+  const bend = state.bendDrag;
+  state.bendDrag = null;
+  if (bend?.moved) {
+    // Put it back, then curve it as one undoable step.
+    const s = state.session,
+      road = s.road(...bend.road),
+      to = road.bend;
+    if (bend.start) road.bend = bend.start;
+    else delete road.bend;
+    s.setBend(...bend.road, to);
+    return;
+  }
   const drag = state.drag;
   state.drag = null;
   plan.guides = [];
@@ -310,14 +339,20 @@ function hint() {
           ['1', 'back to the plan'],
         )
       : {
-          select: plan.selected
-            ? keys(['Drag a junction', 'to move it'], ['Delete', 'removes'], ['Esc', 'deselects'])
-            : keys(
-                ['Click', 'a junction or road'],
-                ['Drag a junction', 'to move it'],
-                ['Scroll', 'to zoom'],
-                ['Right-drag', 'to pan'],
-              ),
+          select: plan.selected?.road
+            ? keys(
+                ['Drag the handle', 'to curve the road'],
+                ['Delete', 'removes'],
+                ['Esc', 'deselects'],
+              )
+            : plan.selected
+              ? keys(['Drag a junction', 'to move it'], ['Delete', 'removes'], ['Esc', 'deselects'])
+              : keys(
+                  ['Click', 'a junction or road'],
+                  ['Drag a junction', 'to move it'],
+                  ['Scroll', 'to zoom'],
+                  ['Right-drag', 'to pan'],
+                ),
           road: state.drawing
             ? keys(
                 ['Click', 'to end the road here'],
@@ -414,7 +449,7 @@ function renderJunction(el, s, j) {
     <section>
       <h2>Junction ${escape(j.id)}</h2>
       <div class="chips"><span class="chip">${roads.length} road${roads.length === 1 ? '' : 's'}</span>
-        <span class="chip">${built?.signal ? 'Signals' : { stop: 'Stop', giveway: 'Give way' }[j.control] || 'Uncontrolled'}</span></div>
+        <span class="chip">${built?.signal ? 'Signals' : { stop: 'Stop', giveway: 'Give way', roundabout: 'Roundabout' }[j.control] || 'Uncontrolled'}</span></div>
       ${locked ? `<div class="locked">${icon('lock', 16)}<span>Stays in place: ${escape(locked)}.</span></div>` : ''}
     </section>
     <section>
@@ -428,7 +463,7 @@ function renderJunction(el, s, j) {
       <h3>Control</h3>
       <div class="controls">${CONTROL_CHOICES.map(
         ([value, label, colour, about]) =>
-          `<button data-control="${value ?? ''}" class="${current === value ? 'active' : ''}" title="${escape(about)}" ${j.id === '1:1' ? 'disabled' : ''}><span class="swatch" style="background:${colour}"></span>${label}</button>`,
+          `<button data-control="${value ?? ''}" class="${current === value ? 'active' : ''}" title="${escape(value === 'roundabout' && locked ? 'A locked junction cannot become a roundabout' : about)}" ${j.id === '1:1' || (value === 'roundabout' && locked) ? 'disabled' : ''}><span class="swatch" style="background:${colour}"></span>${label}</button>`,
       ).join('')}</div>
       ${j.id === '1:1' ? `<p class="muted" style="margin-top:8px">Always signals: students' programs run these lights.</p>` : ''}
     </section>
@@ -469,7 +504,8 @@ function renderJunction(el, s, j) {
 function renderRoad(el, s, [a, b]) {
   const ja = s.junction(a),
     jb = s.junction(b),
-    length = Math.hypot(jb.x - ja.x, jb.z - ja.z),
+    road = s.road(a, b),
+    length = lineLength(s.roadLine(road)),
     locked = lockedRoad(a, b),
     stops = (s.map?.busStops || []).filter(
       (stop) => stop.id === `${a}>${b}` || stop.id === `${b}>${a}`,
@@ -477,8 +513,24 @@ function renderRoad(el, s, [a, b]) {
   el.innerHTML = `
     <section>
       <h2>Road ${escape(a)} – ${escape(b)}</h2>
-      <div class="chips"><span class="chip">${Math.round(length)} m</span><span class="chip">A lane each way</span>${stops.length ? `<span class="chip">${stops.length} bus stop${stops.length > 1 ? 's' : ''}</span>` : ''}</div>
+      <div class="chips"><span class="chip">${Math.round(length)} m</span><span class="chip">${road.lanes === 2 ? 'Two lanes each way' : 'A lane each way'}</span>${road.bend ? '<span class="chip">Curved</span>' : ''}${stops.length ? `<span class="chip">${stops.length} bus stop${stops.length > 1 ? 's' : ''}</span>` : ''}</div>
       ${locked ? `<div class="locked">${icon('lock', 16)}<span>Stays: ${escape(locked)}.</span></div>` : ''}
+    </section>
+    <section>
+      <h3>Lanes</h3>
+      <div class="segmented" role="group" aria-label="Lanes">
+        <button data-lanes="1" class="${road.lanes === 2 ? '' : 'active'}" ${locked ? 'disabled' : ''}>One each way</button>
+        <button data-lanes="2" class="${road.lanes === 2 ? 'active' : ''}" ${locked ? 'disabled' : ''}>Two each way</button>
+      </div>
+      <p class="muted" style="margin-top:8px">Two lanes each way make an 18 m road: traffic picks the lane for its turn.</p>
+    </section>
+    <section>
+      <h3>Shape</h3>
+      <div class="segmented" role="group" aria-label="Shape">
+        <button data-shape="straight" class="${road.bend ? '' : 'active'}" ${locked ? 'disabled' : ''}>Straight</button>
+        <button data-shape="curved" class="${road.bend ? 'active' : ''}" ${locked ? 'disabled' : ''}>Curved</button>
+      </div>
+      <p class="muted" style="margin-top:8px">${road.bend ? 'Drag the round handle on the road to change its curve.' : 'Drag the handle halfway along the road, or choose Curved, to bend it.'}</p>
     </section>
     <section>
       <h3>Ends</h3>
@@ -486,7 +538,7 @@ function renderRoad(el, s, [a, b]) {
         <button class="button" data-junction="${escape(a)}">${escape(a)}</button>
         <button class="button" data-junction="${escape(b)}">${escape(b)}</button>
       </div>
-      <p class="muted" style="margin-top:10px">Move a road by dragging the junctions at its ends. Lane count, widths and markings come with the road look tools.</p>
+      <p class="muted" style="margin-top:10px">Move a road by dragging the junctions at its ends.</p>
     </section>
     <section>
       <div class="actions">
@@ -498,6 +550,20 @@ function renderRoad(el, s, [a, b]) {
     btn.addEventListener('click', () => {
       plan.selected = { junction: btn.dataset.junction };
       renderInspector();
+    });
+  for (const btn of el.querySelectorAll('[data-lanes]'))
+    btn.addEventListener('click', () => s.setLanes(a, b, Number(btn.dataset.lanes)));
+  for (const btn of el.querySelectorAll('[data-shape]'))
+    btn.addEventListener('click', () => {
+      if (btn.dataset.shape === 'straight') return s.setBend(a, b, null);
+      if (road.bend) return;
+      // A gentle curve to start from: a sixth of the road's length to one side of its middle.
+      const middle = bendHandle(s.layout, [a, b]),
+        side = length / 6;
+      s.setBend(a, b, {
+        x: middle.x - ((jb.z - ja.z) / length) * side,
+        z: middle.z + ((jb.x - ja.x) / length) * side,
+      });
     });
   $('focus').addEventListener('click', () =>
     plan.focus({ x: (ja.x + jb.x) / 2, z: (ja.z + jb.z) / 2 }),

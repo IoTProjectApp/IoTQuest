@@ -6,6 +6,10 @@ import {
   LOCKED,
   lockedRoad,
   CONTROLS,
+  roadLine,
+  roadDirection,
+  lineLength,
+  roadSize,
 } from '../../../public/street-network.js';
 import { createCommunity } from '../../../public/community-sim.js';
 
@@ -14,9 +18,11 @@ const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 const round = (v) => Math.round(v * 100) / 100;
 export const MIN_ROAD = 28;
 export const MIN_ANGLE = 40;
+// The tightest a curved road may bend: the radius of its sharpest part, in metres.
+export const MIN_RADIUS = 15;
 // A road is in a lot when it comes within this distance of it: the asphalt's half width less a
 // little, as some lots (the parking) are drawn right up to the kerb.
-const LOT_MARGIN = 5;
+const lotMargin = (road) => roadSize(road).asphalt / 2 - 1;
 let gridBusStops = null;
 
 export class StreetSession {
@@ -58,6 +64,13 @@ export class StreetSession {
   }
   hasRoad(a, b) {
     return this.layout.roads.some((r) => (r.a === a && r.b === b) || (r.a === b && r.b === a));
+  }
+  road(a, b) {
+    return this.layout.roads.find((r) => (r.a === a && r.b === b) || (r.a === b && r.b === a));
+  }
+  // A road's centre line: two points, or many along its curve.
+  roadLine(road) {
+    return roadLine(this.junction(road.a), this.junction(road.b), road);
   }
   // Why a junction cannot be moved or removed, or null.
   lockedJunction(id) {
@@ -146,9 +159,10 @@ export class StreetSession {
     if (lockedRoad(a, b)) return null;
     const id = this.nextId();
     this.commit(`Add junction on ${a}–${b}`, (l) => {
+      const lanes = this.road(a, b)?.lanes ? { lanes: 2 } : {};
       l.roads = l.roads.filter((r) => !((r.a === a && r.b === b) || (r.a === b && r.b === a)));
       l.junctions.push({ id, x: round(x), z: round(z) });
-      l.roads.push({ a, b: id }, { a: id, b });
+      l.roads.push({ a, b: id, ...lanes }, { a: id, b, ...lanes });
     });
     return id;
   }
@@ -165,8 +179,13 @@ export class StreetSession {
         if (end.road) {
           const [a, b] = end.road;
           if (lockedRoad(a, b)) return null;
+          const lanes = l.roads.find(
+            (r) => ((r.a === a && r.b === b) || (r.a === b && r.b === a)) && r.lanes,
+          )
+            ? { lanes: 2 }
+            : {};
           l.roads = l.roads.filter((r) => !((r.a === a && r.b === b) || (r.a === b && r.b === a)));
-          l.roads.push({ a, b: id }, { a: id, b });
+          l.roads.push({ a, b: id, ...lanes }, { a: id, b, ...lanes });
         }
         return id;
       };
@@ -189,11 +208,38 @@ export class StreetSession {
   setControl(id, control) {
     if (id === '1:1') return false;
     if (control && !CONTROLS.includes(control)) return false;
+    // A roundabout changes how every road meets the junction, which a locked one cannot.
+    if (control === 'roundabout' && this.lockedJunction(id)) return false;
     return this.commit('Change junction ' + id, (l) => {
       const j = l.junctions.find((j) => j.id === id);
       if (control) j.control = control;
       else delete j.control;
     });
+  }
+  // One lane each way, or two (a wider road). Not on a locked road, whose driveways depend on it.
+  setLanes(a, b, lanes) {
+    if (lockedRoad(a, b) || ![1, 2].includes(lanes)) return false;
+    return this.commit(`${lanes === 2 ? 'Widen' : 'Narrow'} road ${a}–${b}`, (l) => {
+      const road = l.roads.find((r) => (r.a === a && r.b === b) || (r.a === b && r.b === a));
+      if (lanes === 2) road.lanes = 2;
+      else delete road.lanes;
+    });
+  }
+  // Curves a road through `at` ({ x, z }), or straightens it (null). `preview` changes it without
+  // recording, while dragging.
+  setBend(a, b, at, preview = false) {
+    if (lockedRoad(a, b)) return false;
+    const apply = (l) => {
+      const road = l.roads.find((r) => (r.a === a && r.b === b) || (r.a === b && r.b === a));
+      if (at) road.bend = { x: round(at.x), z: round(at.z) };
+      else delete road.bend;
+    };
+    if (preview) {
+      apply(this.layout);
+      this.emit();
+      return true;
+    }
+    return this.commit(`${at ? 'Curve' : 'Straighten'} road ${a}–${b}`, apply);
   }
   // Opens or closes the zebra crossing over the road from junction `id` towards `towards`.
   toggleCrossing(id, towards) {
@@ -220,7 +266,11 @@ export class StreetSession {
       { junctions, roads } = this.layout,
       byId = Object.fromEntries(junctions.map((j) => [j.id, j])),
       add = (level, message, select, at) => problems.push({ level, message, select, at });
-    const mid = (r) => ({ x: (byId[r.a].x + byId[r.b].x) / 2, z: (byId[r.a].z + byId[r.b].z) / 2 });
+    const mid = (r) =>
+      r.bend
+        ? { x: r.bend.x, z: r.bend.z }
+        : { x: (byId[r.a].x + byId[r.b].x) / 2, z: (byId[r.a].z + byId[r.b].z) / 2 };
+    const lines = new Map(roads.map((r) => [r, roadLine(byId[r.a], byId[r.b], r)]));
     let map = null;
     try {
       map = createCommunity({ ...this.location, id: this.location.id || 'editor' }, this.layout);
@@ -228,9 +278,8 @@ export class StreetSession {
       add('error', 'The town cannot be built from this layout: ' + error.message);
     }
     for (const r of roads) {
-      const a = byId[r.a],
-        b = byId[r.b],
-        length = Math.hypot(b.x - a.x, b.z - a.z);
+      const line = lines.get(r),
+        length = lineLength(line);
       if (length < MIN_ROAD)
         add(
           'error',
@@ -238,8 +287,18 @@ export class StreetSession {
           { road: [r.a, r.b] },
           mid(r),
         );
+      if (r.bend) {
+        const radius = tightestRadius(line);
+        if (radius < MIN_RADIUS)
+          add(
+            'error',
+            `Road ${r.a}–${r.b} bends too sharply (${Math.round(radius)} m round): curves need at least ${MIN_RADIUS} m for cars to follow them.`,
+            { road: [r.a, r.b] },
+            mid(r),
+          );
+      }
       for (const lot of map?.buildings || [])
-        if (segmentHitsBox(a, b, lot, LOT_MARGIN))
+        if (line.slice(1).some((p, i) => segmentHitsBox(line[i], p, lot, lotMargin(r))))
           add(
             'error',
             `Road ${r.a}–${r.b} runs through ${lot.name}.`,
@@ -250,7 +309,18 @@ export class StreetSession {
     for (const [i, r] of roads.entries())
       for (const s of roads.slice(i + 1)) {
         if ([s.a, s.b].includes(r.a) || [s.a, s.b].includes(r.b)) continue;
-        const at = crossingPoint(byId[r.a], byId[r.b], byId[s.a], byId[s.b]);
+        const one = lines.get(r),
+          two = lines.get(s);
+        let at = null;
+        for (let i = 1; i < one.length && !at; i++)
+          for (let k = 1; k < two.length && !at; k++)
+            at = crossingPoint(
+              one[i - 1],
+              one[i],
+              two[k - 1],
+              two[k],
+              one.length > 2 || two.length > 2,
+            );
         if (at)
           add(
             'error',
@@ -260,7 +330,10 @@ export class StreetSession {
           );
       }
     for (const j of junctions) {
-      const arms = this.roadsAt(j.id).map((r) => byId[r.a === j.id ? r.b : r.a]);
+      const arms = this.roadsAt(j.id).map((r) => byId[r.a === j.id ? r.b : r.a]),
+        directions = this.roadsAt(j.id).map((r) =>
+          roadDirection(j, byId[r.a === j.id ? r.b : r.a], r),
+        );
       if (!arms.length) add('error', `Junction ${j.id} has no roads.`, { junction: j.id }, j);
       else if (arms.length === 1)
         add(
@@ -269,7 +342,7 @@ export class StreetSession {
           { junction: j.id },
           j,
         );
-      const angles = arms.map((k) => Math.atan2(k.z - j.z, k.x - j.x)).sort((a, b) => a - b);
+      const angles = directions.map(([x, z]) => Math.atan2(z, x)).sort((a, b) => a - b);
       for (const [i, angle] of angles.entries()) {
         const next = i + 1 < angles.length ? angles[i + 1] : angles[0] + 2 * Math.PI,
           gap = ((next - angle) * 180) / Math.PI;
@@ -283,6 +356,13 @@ export class StreetSession {
           break;
         }
       }
+      if (j.control === 'roundabout' && arms.length < 3)
+        add(
+          'warning',
+          `Junction ${j.id} is a roundabout with ${arms.length} road${arms.length === 1 ? '' : 's'}: roundabouts suit three or more.`,
+          { junction: j.id },
+          j,
+        );
       const signalled = j.control ? j.control === 'signals' : arms.length >= 3;
       if (signalled && arms.length > 4)
         add(
@@ -390,14 +470,32 @@ export function segmentHitsBox(a, b, box, margin) {
   }
   return true;
 }
-// Where segments a–b and c–d cross (not at their ends), or null.
-export function crossingPoint(a, b, c, d) {
+// The radius of the sharpest part of a line: how tightly a curved road bends.
+export function tightestRadius(points) {
+  let radius = Infinity;
+  for (let i = 1; i < points.length - 1; i++) {
+    const [a, b, c] = [points[i - 1], points[i], points[i + 1]],
+      turn = Math.abs(
+        Math.atan2(
+          (b.x - a.x) * (c.z - b.z) - (b.z - a.z) * (c.x - b.x),
+          (b.x - a.x) * (c.x - b.x) + (b.z - a.z) * (c.z - b.z),
+        ),
+      ),
+      length = (Math.hypot(b.x - a.x, b.z - a.z) + Math.hypot(c.x - b.x, c.z - b.z)) / 2;
+    if (turn > 1e-9) radius = Math.min(radius, length / turn);
+  }
+  return radius;
+}
+// Where segments a–b and c–d cross (not at their ends), or null. `inside` counts crossings
+// anywhere along them, for pieces of curved roads whose ends are not junctions.
+export function crossingPoint(a, b, c, d, inside = false) {
   const r = [b.x - a.x, b.z - a.z],
     s = [d.x - c.x, d.z - c.z],
     cross = r[0] * s[1] - r[1] * s[0];
   if (Math.abs(cross) < 1e-9) return null;
   const t = ((c.x - a.x) * s[1] - (c.z - a.z) * s[0]) / cross,
     u = ((c.x - a.x) * r[1] - (c.z - a.z) * r[0]) / cross;
-  if (t <= 0.02 || t >= 0.98 || u <= 0.02 || u >= 0.98) return null;
+  const near = inside ? 0 : 0.02;
+  if (t <= near || t >= 1 - near || u <= near || u >= 1 - near) return null;
   return { x: a.x + r[0] * t, z: a.z + r[1] * t };
 }

@@ -267,7 +267,7 @@ The game's people are rigged, motion-captured characters (Mixamo models in `publ
   - **Model:** which of the characters plays them.
   - **Clothes:** top and bottom colours, stripes, a hi-vis vest and its lettering, a cap or hard hat, a backpack and a badge. Each piece can be as built, none (taken off) or your choice.
   - **Movement:** their walk, their standing clip, an activity played on the spot instead of both (or **None** to take away one the code gives them), walking speed, and clip speed.
-  - **Imported clips:** animations brought in from files (see [Importing clips](#importing-clips)).
+  - **Clips:** animations you make by posing (see [Making clips](#making-clips)) or bring in from files (see [Importing clips](#importing-clips)).
   - Every row has its own reset arrow, and each section and the whole person can be reset too.
 
 Changes show on the stage at once. Undo and redo (`⌘Z`, `⇧⌘Z`) cover every change. **Save** (`⌘S`) writes them all, and **Play-test** opens the game.
@@ -321,7 +321,7 @@ The inspector's **Reactions** section sets a clip someone plays when something h
 
 ### Importing clips
 
-**Import clip…** (in the inspector's **Imported clips** section) brings in an animation from a `.glb`, `.gltf` (with its data inside it) or `.fbx` file, such as a Mixamo download.
+**Import…** (in the inspector's **Clips** section) brings in an animation from a `.glb`, `.gltf` (with its data inside it) or `.fbx` file, such as a Mixamo download.
 
 1. Pick the file. Its first animation is fitted to the game's skeleton by bone name (`mixamorig:Hips`, `mixamorig1:Hips` and plain `Hips` all find `mixamorigHips`). A clip in metres is scaled to the game's centimetres. A clip none of whose bones match is refused; bones the clip does not move hold their pose, and the panel says how many match.
 2. Choose **On the spot** (it plays where the person stands, as an idle or activity) or **A walk**. A walk must travel (download Mixamo walks with _In Place_ off): the editor measures how far one cycle goes, its stride, so feet keep pace when the game moves the person. Either way the travel is taken out of the clip, as with the game's own clips.
@@ -341,6 +341,39 @@ export default {
 
 - **The game** (`public/character-clips.js`) adds each valid entry to its clips, and the renderer loads each file after the game's own clips. With the file empty the game is exactly as before (`tests/character-clips.test.mjs`).
 - **Publishing a clip:** `public/models/` is not committed, because Mixamo's terms keep their files out of this public repository. Commit `public/data/clips.js` here, and add the clip's `.glb` to the private models repository (`IoTProjectApp/iotquest-models`, folder `people/`), then update `COMMIT` in `scripts/fetch-models.mjs`. Until a clip's file is there, anyone set to play it stands in the Idle clip instead.
+
+### Making clips
+
+**Make…** (in the inspector's **Clips** section) opens the pose editor along the bottom of the stage: make a clip by posing whoever is picked at a few moments, and the editor fills in the moments between.
+
+- **It starts** with one pose at 0 s: the person's standing clip, as it begins. **Take the pose from** a clip at a moment (Idle at 0.5 s, say) replaces the pose at the playhead with that moment of the clip.
+- **Turning a joint:** click a dot on the body (or pick the joint from the list) and drag the rings to turn it. The joints are the hips (the whole body), lower back, chest, neck and head, and each side's collarbone, shoulder, elbow, wrist, hip, knee and ankle. Fingers and toes hold the starting pose.
+- **The timeline:** each diamond is a pose. Click or drag on the track to move the playhead, and drag a diamond to move that pose in time. Turning a joint between poses adds a pose there. **Add pose** (`K`) keeps the in-between pose as one, and **Remove** (`Delete`) takes the pose at the playhead away.
+- **Mirror** (`M`) swaps left and right at the playhead, as in a mirror. **Copy** and **Paste** carry a pose to another moment. **Reset joint** puts the chosen joint back as the starting pose has it.
+- **Between poses:** **To the next pose** sets how the pose at the playhead moves on to the next: _Smooth_ (eases in and out), _Steady_, _Quick, then settle_, or _Hold, then snap_.
+- **Length and looping:** changing the length stretches or squeezes the poses with it. A looping clip moves from its last pose back to its first by the end; one that does not loop holds its last pose.
+- **Play** (`Space`) plays it; `←` and `→` step a frame. `Z` and `⇧Z` undo and redo inside the pose editor, and `Esc` cancels.
+- **Add to the game** saves it exactly like an imported clip: `public/models/people/clip-<Name>.glb` and an entry in `public/data/clips.js`, so it can be anyone's standing clip or activity. Made clips play on the spot. Each is listed as _made here_, and its person button opens it again (its name stays, and saving replaces it).
+
+A made clip's entry keeps its poses under `made`, so it can be changed later (`editor/workspaces/character-editor/keyframes.js` describes them):
+
+```js
+Waving: {
+  file: 'clip-Waving.glb',
+  duration: 2,
+  made: {
+    length: 2,
+    loop: true,
+    base: { hips: [0.6, 98.1, 1.2], bones: { mixamorigHips: [0, 0, 0, 1] /* every bone */ } },
+    keys: [
+      { t: 0, pose: { mixamorigRightArm: [0.62, 0.03, 0.58, 0.53] /* each joint */ } },
+      { t: 0.5, ease: 'out', pose: { mixamorigRightForeArm: [0.1, 0, 0.3, 0.95] } },
+    ],
+  },
+},
+```
+
+`base` is the whole body as the clip it started from has it, and each pose turns joints from there. The game reads only the file and duration; `tests/pose-editor.test.mjs` checks the filling in, mirroring, the checks and the saved form.
 
 ## Quest Editor
 

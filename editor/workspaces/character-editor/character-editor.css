@@ -266,3 +266,159 @@
 .reaction-details .input {
   width: 64px;
 }
+
+/* Clips: made ones can be opened again */
+.imported li {
+  display: flex;
+}
+.imported li > span:first-child {
+  flex: 1;
+}
+.section-head .button + .button {
+  margin-left: 6px;
+}
+
+/* The pose editor (pose-editor.js), along the bottom of the stage */
+.pose-panel {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 14px;
+  border: 1px solid var(--line-strong);
+  border-radius: 12px;
+  background: var(--panel);
+  box-shadow: 0 10px 32px rgb(0 0 0 / 40%);
+}
+.pose-panel[hidden] {
+  display: none;
+}
+.pose-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 8px 12px;
+}
+.pose-row.pose-tools,
+.pose-row.end {
+  align-items: center;
+}
+.pose-row.end {
+  justify-content: flex-end;
+}
+.pose-row.end > .note {
+  flex: 1;
+  margin: 0;
+}
+.pose-panel .field {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.pose-panel .field span {
+  color: var(--muted);
+  font-size: 11px;
+}
+.pose-panel .field.name .input {
+  width: 170px;
+}
+.pose-panel .field.short .input {
+  width: 72px;
+}
+.pose-panel .input.tiny {
+  width: 64px;
+}
+.pose-panel .field small {
+  color: var(--faint);
+  font-size: 11px;
+}
+.pose-panel .bad,
+.pose-panel .field small.bad {
+  color: var(--danger);
+}
+.pose-panel .check {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  color: var(--muted);
+}
+.pose-panel .divider {
+  width: 1px;
+  height: 22px;
+  background: var(--line-strong);
+}
+.pose-panel .pose-tools .note {
+  margin: 0;
+}
+.timeline {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.timeline .time {
+  min-width: 96px;
+  color: var(--muted);
+  font: 12px var(--mono);
+  text-align: right;
+}
+.timeline .track {
+  position: relative;
+  flex: 1;
+  height: 40px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--bg);
+  cursor: ew-resize;
+  touch-action: none;
+}
+.timeline .ruler {
+  position: absolute;
+  inset: 0 10px;
+}
+.timeline .tick {
+  position: absolute;
+  bottom: 2px;
+  transform: translateX(-50%);
+  color: var(--faint);
+  font: 10px var(--mono);
+  pointer-events: none;
+}
+.timeline .tick::before {
+  content: '';
+  position: absolute;
+  left: 50%;
+  bottom: 14px;
+  width: 1px;
+  height: 6px;
+  background: var(--line-strong);
+}
+.timeline .key {
+  position: absolute;
+  top: 6px;
+  width: 14px;
+  height: 14px;
+  margin-left: -7px;
+  padding: 0;
+  border: 2px solid var(--warn);
+  border-radius: 2px;
+  background: var(--panel-raised);
+  transform: rotate(45deg);
+  cursor: grab;
+}
+.timeline .key.active {
+  border-color: var(--accent);
+  background: var(--accent);
+}
+.timeline .playhead {
+  position: absolute;
+  top: -4px;
+  bottom: -4px;
+  width: 2px;
+  margin-left: -1px;
+  background: var(--accent);
+  pointer-events: none;
+}

@@ -250,7 +250,7 @@ export default {
 
 ## Quest Editor
 
-A quest is a request from someone in the game: wire some sensors and outputs, and program when each output turns on. The Quest Editor writes new quests. It also shows the built-in quests, so you can read them and copy one to start from.
+A quest is a request from someone in the game: wire some sensors and outputs, and program when each output turns on. The Quest Editor writes new quests and changes the built-in ones.
 
 ### Layout
 
@@ -264,7 +264,20 @@ A quest is a request from someone in the game: wire some sensors and outputs, an
     - **Suggest tests** adds a test either side of each threshold.
 - **The check** on the right, run again after every change. It shows whether the quest is **Ready to play**, or what to fix; how the worked solution does on each board and language; its code; and the Guide's steps.
 
-A built-in quest is read-only. **Copy as a new quest** makes it your own. Timed quests, which play out over time, can't be copied: the editor writes rule quests only.
+### Changing built-in quests
+
+Pick a built-in quest to change it in place:
+
+- **Rule quests:** their story, devices, rules and tests.
+- **Timed quests,** which play out over time with sequences of their own: their story only.
+
+Changed quests are marked in the list. **Reset to original** puts a quest back, and **Copy as a new quest** makes a separate quest of your own instead. A changed quest is checked exactly like a new one before it can be saved. If you change a threshold, the check also warns when the goal, hint or the resident's words still give the old number.
+
+What the game does on top of your changes:
+
+- **Local titles:** each city gives the first eight quests a local title of its own, so a new title for one of those shows only where none is set.
+- **Advanced versions:** some quests have an Advanced version with rules of its own. If you change a quest's devices, rules or tests, yours apply at both levels.
+- **Every city:** changes apply wherever the quest is played.
 
 ### The check
 
@@ -309,6 +322,7 @@ export default {
 };
 ```
 
+- **Changes to built-in quests** go in `edits`, keyed by the quest's place in the game's list, with only the fields that differ, and `of` naming the quest's own title: `"edits": {"builtin:0": {"of": "Light the Path", "title": "Light the Garden Path", "conditions": ["light < 2000"], "scenarios": [...]}}`. If the code moves or renames that quest, the change is left out (with a warning) rather than landing on another quest. A change that would make the quest unplayable is left out too.
 - **Test readings** are stored as the game stores them, with light-type sensors as levels 0–100 that a program reads as level × 40.95. The editor shows and takes program readings.
 - **Your quests come after the built-in quests,** in the file's order. The game remembers progress by a quest's place in that list, so adding quests never disturbs saved games. Deleting one of your quests moves the ones after it up, and the editor warns you.
 - **A quest that fails to build in the game** is left out with a warning, rather than stopping the game.

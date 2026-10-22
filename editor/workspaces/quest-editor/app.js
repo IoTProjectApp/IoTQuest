@@ -1,6 +1,7 @@
 // The Quest Editor workspace: your quests and the built-in ones, the quest form (story, devices,
 // rules, tests), the live check, and saving to public/data/quests.js.
-import { components, defaults } from '../../../public/missions.js';
+import { components, defaults, missions } from '../../../public/missions.js';
+import { isRuleQuest } from '../../../public/authored-quests.js';
 import { HOME_AREAS } from '../../../public/home-areas.js';
 import { readingRange } from '../../../public/diagnostics.js';
 import { coachSteps } from '../../../public/code-coach.js';
@@ -8,7 +9,6 @@ import {
   QuestSession,
   checkQuest,
   builtInQuests,
-  canCopy,
   resultsFromRules,
   toReading,
   toLevel,
@@ -58,6 +58,17 @@ function checkOf(quest) {
   return result;
 }
 
+// The check for a built-in quest as you have changed it.
+function checkBuiltInOf(index) {
+  const s = state.session,
+    key = JSON.stringify(s.builtInSpec(index)) + JSON.stringify(s.titlesBut('builtin-' + index)),
+    cached = state.checks.get('builtin-' + index);
+  if (cached?.key === key) return cached.result;
+  const result = s.checkBuiltIn(index);
+  state.checks.set('builtin-' + index, { key, result });
+  return result;
+}
+
 // ---- The list -------------------------------------------------------------------------------
 function renderList() {
   const s = state.session,
@@ -68,7 +79,10 @@ function renderList() {
       (q.area || '').toLowerCase().includes(search) ||
       (q.resident || '').toLowerCase().includes(search);
   const mine = s.quests.filter(match),
-    theirs = builtIn.map((m, i) => ({ m, i })).filter(({ m }) => match(m));
+    // Built-in quests as they now stand (with your changes), edited ones marked.
+    theirs = builtIn
+      .map((_, i) => ({ m: s.builtInSpec(i), i, timed: !isRuleQuest(missions[i]) }))
+      .filter(({ m }) => match(m));
   const active = (kind, id) => state.pick?.kind === kind && state.pick.id === id;
   $('list').innerHTML =
     `<h3>Your quests</h3>` +
@@ -84,13 +98,13 @@ function renderList() {
       : `<p class="empty">${search ? 'None match.' : 'None yet: start one with New quest, or copy a built-in quest.'}</p>`) +
     `<h3>Built-in quests</h3>` +
     theirs
-      .map(
-        ({
-          m,
-          i,
-        }) => `<button class="entry ${active('builtin', i) ? 'active' : ''}" data-builtin="${i}" title="${escape(m.area)} · ${escape(m.resident)}">
-          <span class="label">${escape(m.title)}</span><span class="meta">${canCopy(m) ? '' : 'timed'}</span></button>`,
-      )
+      .map(({ m, i, timed }) => {
+        const edited = s.isEdited(i),
+          ok = edited && !checkBuiltInOf(i).errors.length;
+        return `<button class="entry ${active('builtin', i) ? 'active' : ''}" data-builtin="${i}" title="${escape(m.area)} · ${escape(m.resident)}${edited ? ' · changed' : ''}">
+          ${edited ? `<span class="state ${ok ? 'ok' : 'bad'}" title="${ok ? 'Changed, ready' : 'Changed, has problems'}"></span>` : ''}
+          <span class="label">${escape(m.title)}</span><span class="meta">${timed ? 'timed' : ''}</span></button>`;
+      })
       .join('');
   for (const b of $('list').querySelectorAll('[data-mine]'))
     b.addEventListener('click', () => pick({ kind: 'mine', id: b.dataset.mine }));
@@ -113,7 +127,12 @@ function render() {
   const s = state.session,
     pickNow = state.pick;
   if (pickNow?.kind === 'mine' && s.quest(pickNow.id)) renderMine(s.quest(pickNow.id));
-  else if (pickNow?.kind === 'builtin') renderBuiltIn(builtIn[pickNow.id]);
+  else if (pickNow?.kind === 'builtin')
+    renderMine(s.builtInSpec(pickNow.id), {
+      kind: 'builtin',
+      index: pickNow.id,
+      timed: !isRuleQuest(missions[pickNow.id]),
+    });
   else {
     $('form').innerHTML = `<div class="blank"><h2>Write a quest</h2>
       <p>Start a new quest, or pick a built-in one to read and copy. Every quest is checked against a
@@ -133,8 +152,11 @@ const options = (list, selected) =>
     )
     .join('');
 
-function renderMine(q) {
+// One quest's form: one of yours, or a built-in one (target.kind 'builtin', with its index; a timed
+// one shows its story only).
+function renderMine(q, target = { kind: 'mine' }) {
   const s = state.session,
+    builtInQuest = target.kind === 'builtin',
     outputs = outputsOf(q),
     sensors = sensorsOf(q),
     fromRules = resultsFromRules(q),
@@ -146,9 +168,15 @@ function renderMine(q) {
   $('form').innerHTML = `
     <div class="heading">
       <h1>${escape(q.title)}</h1>
-      <button class="button" id="duplicate">${icon('copy', 16)}Duplicate</button>
-      <button class="button danger" id="delete">${icon('erase', 16)}Delete</button>
+      ${
+        builtInQuest
+          ? `<button class="button" id="reset-quest" ${s.isEdited(target.index) ? '' : 'disabled'}>${icon('reset', 16)}Reset to original</button>
+             <button class="button" id="copy" ${target.timed ? 'disabled' : ''}>${icon('copy', 16)}Copy as a new quest</button>`
+          : `<button class="button" id="duplicate">${icon('copy', 16)}Duplicate</button>
+             <button class="button danger" id="delete">${icon('erase', 16)}Delete</button>`
+      }
     </div>
+    ${builtInQuest ? builtInNotes(target) : ''}
     <section class="card">
       <h2>Story</h2>
       <p class="sub">Who asks, where, and what they want. Students read this in the game.</p>
@@ -172,6 +200,11 @@ function renderMine(q) {
       </div>
       <datalist id="residents">${RESIDENTS.map((r) => `<option value="${escape(r)}"></option>`).join('')}</datalist>
     </section>
+    ${
+      target.timed
+        ? `<section class="card"><h2>Devices, rules and tests</h2><p class="sub">A timed quest plays out over time with sequences of its own, so only its story can change here. It plays as the game makes it.</p>
+            <div class="devices">${q.ids.map((id) => `<span class="device ${device(id)?.output ? 'output' : ''}"><span class="kind">${device(id)?.output ? 'Output' : 'Sensor'}</span>${escape(device(id)?.name || id)}</span>`).join('')}</div></section>`
+        : `
     <section class="card">
       <h2>Devices</h2>
       <p class="sub">What students install and wire. Pins are assigned the way the game assigns them.</p>
@@ -226,9 +259,10 @@ function renderMine(q) {
         <button class="button" id="from-rules" title="Set every test's results to what the rules say">${icon('check', 16)}Results from the rules</button>
         <button class="button" id="suggest" title="Add a test either side of each threshold">${icon('reset', 16)}Suggest tests</button>
       </div>
-    </section>`;
-  bindMine(q);
-  renderCheck(q, checkOf(q));
+    </section>`
+    }`;
+  bindMine(q, target);
+  renderCheck(q, builtInQuest ? checkBuiltInOf(target.index) : checkOf(q));
 }
 const rangeText = (d) => {
   const [lo, hi, unit] = readingRange(d) || [];
@@ -286,10 +320,13 @@ function ruleEditor(q, id, i, sensors) {
       .join('')}
     <button class="link" data-addclause="${i}" ${signals.length ? '' : 'disabled'}>${icon('plus', 12)} Add a condition</button></div>`;
 }
-function bindMine(q) {
+function bindMine(q, target = { kind: 'mine' }) {
   const s = state.session,
     form = $('form'),
-    edit = (label, change) => s.edit(q.id, label, change);
+    edit = (label, change) =>
+      target.kind === 'builtin'
+        ? s.editBuiltIn(target.index, label, change)
+        : s.edit(q.id, label, change);
   for (const input of form.querySelectorAll('[data-text]'))
     input.addEventListener('change', () =>
       edit('Change ' + input.dataset.text, (x) => (x[input.dataset.text] = input.value)),
@@ -312,7 +349,7 @@ function bindMine(q) {
             .filter(Boolean)),
       ),
     );
-  $('add-device').addEventListener('change', (e) => {
+  $('add-device')?.addEventListener('change', (e) => {
     const id = e.target.value;
     if (!id) return;
     edit('Add ' + device(id).name, (x) => {
@@ -410,7 +447,7 @@ function bindMine(q) {
     el.addEventListener('click', () =>
       edit('Remove test', (x) => x.scenarios.splice(Number(el.dataset.drop), 1)),
     );
-  $('add-test').addEventListener('click', () =>
+  $('add-test')?.addEventListener('click', () =>
     edit('Add test', (x) => {
       const last = x.scenarios.at(-1);
       x.scenarios.push([
@@ -420,13 +457,13 @@ function bindMine(q) {
       ]);
     }),
   );
-  $('from-rules').addEventListener('click', () =>
+  $('from-rules')?.addEventListener('click', () =>
     edit('Results from the rules', (x) => {
       const results = resultsFromRules(x);
       x.scenarios.forEach((t, r) => (t[2] = results[r]));
     }),
   );
-  $('suggest').addEventListener('click', () =>
+  $('suggest')?.addEventListener('click', () =>
     edit('Suggest tests', (x) => {
       // Either side of each threshold, every other reading as usual, results from the rules.
       const seen = new Set(x.scenarios.map(([name]) => name));
@@ -449,14 +486,14 @@ function bindMine(q) {
       x.scenarios.forEach((t, r) => t[2].length || (t[2] = results[r]));
     }),
   );
-  $('duplicate').addEventListener('click', () => {
+  $('duplicate')?.addEventListener('click', () => {
     const id = state.session.create({
       ...JSON.parse(JSON.stringify(q)),
       title: q.title + ' (copy)',
     });
     pick({ kind: 'mine', id });
   });
-  $('delete').addEventListener('click', () => {
+  $('delete')?.addEventListener('click', () => {
     const later = state.session.quests.length - 1 - state.session.quests.indexOf(q);
     if (
       !confirm(
@@ -470,64 +507,27 @@ function bindMine(q) {
     state.session.remove(q.id);
     state.pick = null;
   });
-}
-
-// ---- A built-in quest, to read and copy ------------------------------------------------------
-function renderBuiltIn(m) {
-  const copyable = canCopy(m),
-    outs = m.ids.filter((id) => device(id)?.output),
-    ins = m.ids.filter((id) => device(id) && !device(id).output);
-  $('form').innerHTML = `
-    <div class="heading">
-      <h1>${escape(m.title)}</h1>
-      <button class="button primary" id="copy" ${copyable ? '' : 'disabled'}>${icon('copy', 16)}Copy as a new quest</button>
-    </div>
-    <div class="heading"><span class="notice">${copyable ? 'A built-in quest: read-only. Copy it to make your own version.' : 'A timed quest: it runs sequences the Quest Editor does not write, so it cannot be copied.'}</span></div>
-    <section class="card readonly"><h2>Story</h2><dl>
-      <dt>Who asks</dt><dd>${escape(m.resident)} · ${escape(m.role || 'Resident')}</dd>
-      <dt>Where</dt><dd>${escape(m.area)}</dd>
-      <dt>What they say</dt><dd>${escape(m.quote || '–')}</dd>
-      <dt>Goal</dt><dd>${escape(m.goal)}</dd>
-      <dt>XP</dt><dd>${m.xp}</dd></dl></section>
-    <section class="card readonly"><h2>Devices</h2><div class="devices">${m.ids
-      .map(
-        (id) =>
-          `<span class="device ${device(id)?.output ? 'output' : ''}"><span class="kind">${device(id)?.output ? 'Output' : 'Sensor'}</span>${escape(device(id)?.name || id)}</span>`,
-      )
-      .join('')}</div></section>
-    ${
-      m.conditions?.length
-        ? `<section class="card readonly"><h2>Rules</h2><dl>${outs
-            .map(
-              (id, i) =>
-                `<dt>${escape(device(id).name)}</dt><dd class="rule-text">${escape(m.conditions[i])}</dd>`,
-            )
-            .join('')}</dl></section>`
-        : ''
-    }
-    ${
-      m.scenarios?.length
-        ? `<section class="card"><h2>Tests</h2><div class="tests"><table><thead><tr><th>Test</th>${ins.map((id) => `<th>${escape(device(id).name)}</th>`).join('')}${outs.map((id) => `<th class="output">${escape(device(id).name)}</th>`).join('')}</tr></thead><tbody>${m.scenarios
-            .map(
-              ([name, env, expected]) =>
-                `<tr><td>${escape(name)}</td>${ins
-                  .map((id) => {
-                    const sg = device(id).signal;
-                    return `<td>${sg in env ? Math.round(toReading(sg, env[sg]) * 100) / 100 : '<span class="range">as usual</span>'}</td>`;
-                  })
-                  .join(
-                    '',
-                  )}${outs.map((_, i) => `<td><span class="onoff ${expected[i] ? 'on' : ''}">${expected[i] ? 'ON' : 'OFF'}</span></td>`).join('')}</tr>`,
-            )
-            .join('')}</tbody></table></div></section>`
-        : ''
-    }`;
-  $('copy').addEventListener('click', () => {
-    const id = state.session.copy(m);
-    if (id) pick({ kind: 'mine', id });
+  $('reset-quest')?.addEventListener('click', () => s.resetBuiltIn(target.index));
+  $('copy')?.addEventListener('click', () => {
+    const id = s.create({ ...JSON.parse(JSON.stringify(q)), title: q.title + ' (copy)' });
+    pick({ kind: 'mine', id });
   });
-  $('check').innerHTML =
-    `<section><h3>Built-in quest</h3><p class="muted">Copy it to change it; your copy is checked here.</p></section>`;
+}
+// What a built-in quest's changes mean in the game.
+function builtInNotes(target) {
+  const m = missions[target.index],
+    notes = [
+      `Built-in quest ${target.index + 1} of ${builtIn.length}. Your changes apply wherever it is played; Reset to original puts it back.`,
+    ];
+  if (target.index < 8)
+    notes.push(
+      'Each city gives this quest a local title of its own, so a new title shows only where none is set.',
+    );
+  if (m.advanced && !target.timed)
+    notes.push(
+      'It has an Advanced version: if you change its devices, rules or tests, yours apply at both levels.',
+    );
+  return `<div class="heading"><span class="notice">${notes.map(escape).join('<br />')}</span></div>`;
 }
 
 // ---- The check ------------------------------------------------------------------------------
@@ -535,6 +535,12 @@ function renderCheck(q, result) {
   const { errors, warnings, runs, mission } = result,
     ok = !errors.length,
     run = runs.find((r) => r.board === 'ESP32' && r.language === state.language);
+  if (result.timed) {
+    $('check').innerHTML =
+      `<section><div class="verdict ${ok ? 'ok' : 'bad'}">${icon(ok ? 'check' : 'warning', 18)}<div>${ok ? 'Story changes only' : 'Fix before saving'}
+      <span>${ok ? 'A timed quest plays as the game makes it; its story is yours to change.' : errors.map(escape).join(' ')}</span></div></div></section>`;
+    return;
+  }
   let steps = [];
   try {
     if (mission)
@@ -615,6 +621,17 @@ async function save() {
   if (broken) {
     pick({ kind: 'mine', id: broken.id });
     toast(`"${broken.title}" has problems to fix before saving.`, true);
+    return false;
+  }
+  const brokenBuiltIn = Object.keys(state.session.edits)
+    .map((key) => Number(key.split(':')[1]))
+    .find((i) => checkBuiltInOf(i).errors.length);
+  if (brokenBuiltIn !== undefined) {
+    pick({ kind: 'builtin', id: brokenBuiltIn });
+    toast(
+      `Your changes to "${state.session.builtInSpec(brokenBuiltIn).title}" need fixing before saving.`,
+      true,
+    );
     return false;
   }
   try {

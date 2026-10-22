@@ -17,6 +17,10 @@ import {
   buildAuthoredQuest,
   AuthoredQuestError,
   expectedFor,
+  ORIGINALS,
+  STORY,
+  RULES,
+  isRuleQuest,
 } from '../../../public/authored-quests.js';
 
 export const BOARDS = ['ESP32', 'Raspberry Pi Pico'];
@@ -37,9 +41,11 @@ export const outputsOf = (spec) => spec.ids.filter((id) => device(id)?.output);
 export const sensorsOf = (spec) => spec.ids.filter((id) => device(id) && !device(id).output);
 
 export class QuestSession {
-  constructor(saved = { version: 1, quests: [] }) {
-    this.saved = clone(saved);
+  constructor(saved = { version: 1, quests: [], edits: {} }) {
+    this.saved = { version: 1, quests: clone(saved.quests || []), edits: clone(saved.edits || {}) };
     this.quests = clone(saved.quests || []);
+    // Changes to built-in quests, by place ('builtin:12'), as saved.
+    this.edits = clone(saved.edits || {});
     this.undoStack = [];
     this.redoStack = [];
     this.listeners = new Set();
@@ -54,15 +60,23 @@ export class QuestSession {
   quest(id) {
     return this.quests.find((q) => q.id === id);
   }
+  // Everything that can change, for undo: your quests and your changes to built-in ones.
+  snapshot() {
+    return clone({ quests: this.quests, edits: this.edits });
+  }
+  restoreSnapshot({ quests, edits }) {
+    this.quests = quests;
+    this.edits = edits;
+  }
   commit(label, change) {
-    const before = clone(this.quests);
+    const before = this.snapshot();
     const result = change(this.quests);
     if (result === false) {
-      this.quests = before;
+      this.restoreSnapshot(before);
       return false;
     }
-    if (same(before, this.quests)) return false;
-    this.undoStack.push({ label, quests: before });
+    if (same(before, this.snapshot())) return false;
+    this.undoStack.push({ label, state: before });
     this.redoStack = [];
     this.emit();
     return true;
@@ -76,8 +90,8 @@ export class QuestSession {
   step(from, to) {
     const entry = from.pop();
     if (!entry) return null;
-    to.push({ label: entry.label, quests: clone(this.quests) });
-    this.quests = entry.quests;
+    to.push({ label: entry.label, state: this.snapshot() });
+    this.restoreSnapshot(entry.state);
     this.emit();
     return entry.label;
   }
@@ -153,11 +167,87 @@ export class QuestSession {
     while (this.quest(id)) id = `${base}-${n++}`;
     return id;
   }
+  // ---- Built-in quests: changed in place, by their place in the game's list ----
+  // The quest's fields as the code makes them.
+  original(index) {
+    const m = missions[index];
+    return clone(
+      ORIGINALS.get(index) ??
+        Object.fromEntries([...STORY, ...RULES].map((k) => [k, m[k] ?? null])),
+    );
+  }
+  // The quest as it now stands: as the code makes it, with your changes.
+  builtInSpec(index) {
+    const { of, ...changes } = this.edits['builtin:' + index] || {};
+    return { id: 'builtin-' + index, ...this.original(index), ...clone(changes) };
+  }
+  isEdited(index) {
+    return 'builtin:' + index in this.edits;
+  }
+  // Changes a built-in quest: `change(spec)` edits it in place; only what differs from the original
+  // is kept. Devices, rules and tests change only on rule quests.
+  editBuiltIn(index, label, change) {
+    return this.commit(label, () => {
+      const spec = this.builtInSpec(index),
+        original = this.original(index);
+      change(spec);
+      const differs = [...STORY, ...(isRuleQuest(missions[index]) ? RULES : [])].filter(
+        (k) => !same(spec[k], original[k]),
+      );
+      if (!differs.length) delete this.edits['builtin:' + index];
+      else
+        this.edits['builtin:' + index] = {
+          of: original.title,
+          ...Object.fromEntries(differs.map((k) => [k, spec[k]])),
+        };
+    });
+  }
+  resetBuiltIn(index) {
+    return this.commit('Reset to original', () => {
+      delete this.edits['builtin:' + index];
+    });
+  }
+  // Every quest's title but this one's, as they now stand: titles must stay their own.
+  titlesBut(id) {
+    return [
+      ...builtInQuests()
+        .map((m) => missions.indexOf(m))
+        .map((i) => ['builtin-' + i, this.builtInSpec(i).title]),
+      ...this.quests.map((q) => [q.id, q.title]),
+    ]
+      .filter(([other]) => other !== id)
+      .map(([, title]) => String(title).toLowerCase());
+  }
+  // The check for a built-in quest as you have changed it.
+  checkBuiltIn(index) {
+    const spec = this.builtInSpec(index);
+    if (isRuleQuest(missions[index])) {
+      const result = checkQuest(spec, { titles: this.titlesBut(spec.id) }),
+        original = this.original(index),
+        numbers = (conditions) =>
+          new Set((conditions || []).join(' ').match(/-?\d+(\.\d+)?/g) || []);
+      // A threshold taken out of the rules but still in the words students read.
+      const now = numbers(spec.conditions);
+      for (const n of numbers(original.conditions))
+        if (!now.has(n))
+          for (const k of ['goal', 'hint', 'quote'])
+            if (new RegExp(`(^|[^\\d.])${n.replace('.', '\\.')}([^\\d]|$)`).test(spec[k] || ''))
+              result.warnings.push(`The ${k} still says ${n}, which the rules no longer use.`);
+      return result;
+    }
+    // A timed quest: only its story can change; it plays as the code makes it.
+    const errors = ['title', 'goal', 'area', 'resident']
+      .filter((k) => !String(spec[k] ?? '').trim())
+      .map((k) => `Its ${k} is empty.`);
+    if (this.titlesBut(spec.id).includes(String(spec.title).toLowerCase()))
+      errors.push(`Another quest is called "${spec.title}".`);
+    return { errors, warnings: [], runs: [], mission: null, timed: true };
+  }
   isChanged() {
-    return !same(this.quests, this.saved.quests || []);
+    return !same(this.snapshot(), { quests: this.saved.quests, edits: this.saved.edits });
   }
   savedFile() {
-    return { version: 1, quests: clone(this.quests) };
+    return { version: 1, quests: clone(this.quests), edits: clone(this.edits) };
   }
   markSaved() {
     this.saved = this.savedFile();
@@ -208,7 +298,7 @@ const IDLE = {
 // Everything that must hold before a quest is saved: it builds, its title is its own, it wires on
 // both boards, the worked solution passes every test on both boards in both languages, and a
 // program that does nothing fails. Errors stop saving; warnings do not.
-export function checkQuest(spec, { others = [] } = {}) {
+export function checkQuest(spec, { others = [], titles = null } = {}) {
   const errors = [],
     warnings = [],
     runs = [];
@@ -220,10 +310,12 @@ export function checkQuest(spec, { others = [] } = {}) {
     errors.push(error.message);
     return { errors, warnings, runs, mission };
   }
-  const titles = [...builtInQuests(), ...others.filter((q) => q.id !== spec.id)].map((q) =>
-    q.title.toLowerCase(),
-  );
-  if (titles.includes(mission.title.toLowerCase()))
+  const taken =
+    titles ??
+    [...builtInQuests(), ...others.filter((q) => q.id !== spec.id)].map((q) =>
+      q.title.toLowerCase(),
+    );
+  if (taken.includes(mission.title.toLowerCase()))
     errors.push(`Another quest is called "${mission.title}".`);
   for (const board of BOARDS) {
     const wiring = validate(defaults(mission.ids, board), board);

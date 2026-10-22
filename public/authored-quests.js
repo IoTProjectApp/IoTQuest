@@ -10,6 +10,13 @@
 //   0-100, read by the program as level x 40.95), and 1 or 0 for each output in order.
 // Each is rebuilt and checked here, like teacher quests (custom-quests.js), and joins the game
 // after the built-in quests, in the file's order, so saved progress for earlier quests is kept.
+//
+// The same file holds changes to built-in quests, keyed by the quest's place in the game's list:
+//   edits: { 'builtin:12': { of: 'Storm Watch', title?, goal?, ... } }
+// `of` is the quest's own title, so a change never lands on another quest if the code moves one;
+// only the fields given change. Story fields (title, area, resident, role, quote, goal, xp, badge,
+// learn, hint) can change on any quest; devices, rules and tests (ids, conditions, scenarios) only
+// on rule quests, where they are checked like a new quest's and then apply at every level.
 import AUTHORED from './data/quests.js';
 import { evaluateCondition } from './situation.js';
 import { baseEnv } from './signals.js';
@@ -116,6 +123,69 @@ export function buildAuthoredQuest(spec, components) {
 // `env` holds levels as the game stores them; the rules are read in the program's units.
 export const expectedFor = (conditions, env) =>
   conditions.map((condition) => (evaluateCondition(condition, env) ? 1 : 0));
+
+export const STORY = [
+  'title',
+  'area',
+  'resident',
+  'role',
+  'quote',
+  'goal',
+  'xp',
+  'badge',
+  'learn',
+  'hint',
+];
+export const RULES = ['ids', 'conditions', 'scenarios'];
+// A built-in quest whose devices, rules and tests can be edited (timed quests cannot).
+export const isRuleQuest = (m) =>
+  Array.isArray(m.conditions) &&
+  m.conditions.length > 0 &&
+  Array.isArray(m.scenarios) &&
+  !m.sequences &&
+  !m.starter &&
+  !m.prewired;
+// Each changed quest's fields as the code made them, by place: what Reset puts back.
+export const ORIGINALS = new Map();
+
+// Applies the saved changes to built-in quests, in place. A change that names a quest no longer
+// there, or that would leave it unplayable, is left out (and reported).
+export function applyQuestEdits(missions, components, saved = AUTHORED) {
+  for (const [key, edit] of Object.entries(saved?.edits || {})) {
+    const index = Number(key.split(':')[1]),
+      m = missions[index];
+    try {
+      if (!m || m.title !== edit.of)
+        throw new AuthoredQuestError(`no built-in quest "${edit.of}" at place ${index}`);
+      const fields = Object.fromEntries(
+        Object.entries(edit).filter(([k]) => STORY.includes(k) || RULES.includes(k)),
+      );
+      const rules = RULES.some((k) => k in fields);
+      if (rules && !isRuleQuest(m))
+        throw new AuthoredQuestError('its rules are timed and cannot change');
+      // A rule quest is checked as a whole new quest would be; a timed quest's story must still
+      // have a title, a goal, a place and someone asking.
+      if (isRuleQuest(m))
+        buildAuthoredQuest({ ...m, ...fields, id: 'builtin-' + index }, components);
+      else
+        for (const k of ['title', 'goal', 'area', 'resident'])
+          if (k in fields && !text(fields[k])) throw new AuthoredQuestError(`its ${k} is empty`);
+      ORIGINALS.set(
+        index,
+        Object.fromEntries([...STORY, ...RULES].map((k) => [k, structuredClone(m[k])])),
+      );
+      Object.assign(m, structuredClone(fields));
+      // Edited rules hold at every level: the Advanced version's own rules give way to them.
+      if (rules && m.advanced) {
+        m.advanced = { ...m.advanced };
+        for (const k of RULES) delete m.advanced[k];
+      }
+    } catch (error) {
+      if (!(error instanceof AuthoredQuestError)) throw error;
+      console.warn(`Change to quest "${edit?.of}" left out: ${error.message}`);
+    }
+  }
+}
 
 // Every saved quest that builds; one that does not is left out (and reported) rather than
 // stopping the game.

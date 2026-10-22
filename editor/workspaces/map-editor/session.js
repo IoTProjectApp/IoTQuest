@@ -11,20 +11,26 @@ import {
   transformGroup,
   groupTemplate,
   partBounds,
+  scaleOf,
 } from '../../../public/world-layout.js';
 import { kindOf, nameOf, categoryOf, cautionFor } from './names.js';
 
 const round = (v, places) => Math.round(v * 10 ** places) / 10 ** places || 0;
-// Placements are stored to the millimetre and a hundredth of a degree, so saved files stay tidy.
-export const tidy = ({ pos, turn = 0, scale = 1 }) => ({
-  pos: pos.map((v) => round(v, 3)),
-  turn: round(turn, 4),
-  scale: round(scale, 3),
-});
+// Placements are stored to the millimetre and a hundredth of a degree, so saved files stay tidy. A
+// size the same every way is stored as one factor, a stretch as [across, up, along].
+export const tidy = ({ pos, turn = 0, scale = 1 }) => {
+  const size = scaleOf(scale).map((v) => round(v, 3));
+  return {
+    pos: pos.map((v) => round(v, 3)),
+    turn: round(turn, 4),
+    scale: size.every((v) => v === size[0]) ? size[0] : size,
+  };
+};
+// Within what tidy() rounds away: half a millimetre, half a ten-thousandth of a radian or factor.
 const same = (a, b) =>
-  a.pos.every((v, i) => Math.abs(v - b.pos[i]) < 5e-4) &&
-  Math.abs((a.turn || 0) - (b.turn || 0)) < 5e-5 &&
-  Math.abs((a.scale ?? 1) - (b.scale ?? 1)) < 5e-4;
+  a.pos.every((v, i) => Math.abs(v - b.pos[i]) <= 5e-4 + 1e-9) &&
+  Math.abs((a.turn || 0) - (b.turn || 0)) <= 5e-5 + 1e-9 &&
+  scaleOf(a.scale).every((v, i) => Math.abs(v - scaleOf(b.scale)[i]) <= 5e-4 + 1e-9);
 const clone = (value) => JSON.parse(JSON.stringify(value));
 const emptyChanges = () => ({ edits: {}, added: [] });
 
@@ -219,7 +225,7 @@ export class WorldSession {
       list.push({
         id,
         name: this.groups.get(id)?.name || id,
-        what: edit.removed ? 'Removed' : 'Moved',
+        what: edit.removed ? 'Removed' : 'Changed',
         missing: !this.groups.has(id),
       });
     for (const a of this.changes.added) list.push({ id: a.id, name: a.name, what: 'Added' });

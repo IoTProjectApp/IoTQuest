@@ -131,6 +131,40 @@ test('moving a group moves its parts and colliders together about its base centr
   sofa.parts.forEach((part, i) => near(part.pos, snapshot.parts[i].pos, 'restored part'));
 });
 
+test('stretching a group one way stretches its parts and collider that way only', () => {
+  const model = build('legacy'),
+    table = editGroups(model).get('furniture/dining-table#1'),
+    snapshot = snapshotGroup(table),
+    [px, py, pz] = table.pivot;
+  transformGroup(table, snapshot, { pos: [px, py, pz], turn: 0, scale: [2, 1, 1] });
+  table.parts.forEach((part, i) => {
+    const o = snapshot.parts[i];
+    near(part.pos, [px + (o.pos[0] - px) * 2, o.pos[1], o.pos[2]], 'part placed');
+    // The table's parts are square-on, so only their width doubles.
+    if (!o.rotation[0] && !o.rotation[2])
+      near(part.size, [o.size[0] * 2, o.size[1], o.size[2]], 'part sized');
+  });
+  near(
+    [table.colliders[0].w, table.colliders[0].d],
+    [snapshot.colliders[0].w * 2, snapshot.colliders[0].d],
+    'collider',
+  );
+  // A quarter turn after stretching: the long side now runs north-south.
+  transformGroup(table, snapshot, { pos: [px, py, pz], turn: Math.PI / 2, scale: [2, 1, 1] });
+  near(
+    [table.colliders[0].w, table.colliders[0].d],
+    [snapshot.colliders[0].d, snapshot.colliders[0].w * 2],
+    'turned',
+  );
+  // One number means the same every way.
+  transformGroup(table, snapshot, { pos: [px, py, pz], turn: 0, scale: 1.5 });
+  near(
+    table.parts[2].size,
+    snapshot.parts[2].size.map((v) => v * 1.5),
+    'even',
+  );
+});
+
 test('a layout moves, removes and adds groups, and reports changes it cannot apply', () => {
   const plain = build('legacy'),
     sofa = editGroups(plain).get('furniture/sofa#1'),

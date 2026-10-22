@@ -45,7 +45,7 @@ test('moves, removals and additions undo and redo, and save in the layout format
   assert.ok(session.model.objects.some((m) => m.editGroup === id));
   assert.deepEqual(
     session.changeList().map((c) => c.what),
-    ['Moved', 'Removed', 'Added'],
+    ['Changed', 'Removed', 'Added'],
   );
 
   assert.equal(session.undo(), 'Add Tree');
@@ -76,6 +76,30 @@ test('moves, removals and additions undo and redo, and save in the layout format
   assert.equal(groups.has('furniture/car#1'), false);
   assert.ok(groups.has('added/1'));
   assert.deepEqual(model.layoutWarnings, []);
+});
+
+test('a stretch saves as three factors, an even resize as one, and the game applies both', () => {
+  const session = new WorldSession('legacy'),
+    bed = session.groups.get('furniture/bed#1'),
+    sofa = session.groups.get('furniture/sofa#1');
+  session.move(bed.id, { ...bed.original, scale: [1.2, 1, 0.8] });
+  session.move(sofa.id, { ...sofa.original, scale: [1.25, 1.25, 1.25] });
+  const saved = session.saved();
+  assert.deepEqual(saved.edits[bed.id].scale, [1.2, 1, 0.8]);
+  assert.equal(saved.edits[sofa.id].scale, 1.25);
+  const model = createRegionalModel('legacy');
+  addCommunityWorld(model);
+  applyWorldLayout(model, 'legacy', { version: 1, locations: { legacy: saved } });
+  const applied = editGroups(model).get(bed.id);
+  applied.parts.forEach((part, i) =>
+    assert.ok(
+      part.size.every((v, k) => Math.abs(v - bed.parts[i].size[k]) < 1e-9),
+      'same as in the editor',
+    ),
+  );
+  // Back to its built size: no change left.
+  session.move(bed.id, { ...bed.original, scale: [1, 1, 1] });
+  assert.equal(session.isChanged(bed.id), false);
 });
 
 test('moving a group back to where it was built clears its change', () => {

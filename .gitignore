@@ -49,3 +49,6 @@ assets-src/
 # Character models: downloaded from the private IoTProjectApp/iotquest-models by
 # scripts/fetch-models.mjs (Mixamo files may not be published in this public repository).
 public/models/
+
+# World editor (editor/): its own Electron install.
+editor/node_modules/

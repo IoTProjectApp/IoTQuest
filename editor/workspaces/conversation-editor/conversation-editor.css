@@ -1,0 +1,329 @@
+/* What only the Conversation Editor has (the rest is in /editor/ui/workspace.css). */
+.workspace.conversations {
+  grid-template-columns: 260px 1fr 400px;
+}
+body > .toast {
+  position: fixed;
+  top: 64px;
+}
+
+/* The people */
+.people {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  border-right: 1px solid var(--line);
+  background: var(--panel);
+}
+.people .search {
+  position: relative;
+  padding: 12px 12px 8px;
+}
+.people .search .input {
+  width: 100%;
+  padding-left: 30px;
+}
+.people .search-icon {
+  position: absolute;
+  left: 21px;
+  top: 18px;
+  color: var(--faint);
+}
+.list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0 8px 12px;
+}
+.list h3 {
+  margin: 14px 8px 4px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.list .empty {
+  margin: 4px 8px;
+  color: var(--faint);
+  font-size: 12px;
+}
+.entry {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 7px 8px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+}
+.entry:hover {
+  background: var(--hover);
+}
+.entry.active {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.entry .label,
+.request .label {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.entry .meta,
+.request .meta {
+  color: var(--faint);
+  font-size: 11px;
+  white-space: nowrap;
+}
+.state {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex: none;
+}
+.state.ok {
+  background: var(--accent);
+}
+.state.bad {
+  background: var(--danger);
+}
+
+/* The chat */
+.chat-stage {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+.chat-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  padding: 18px 24px 14px;
+  border-bottom: 1px solid var(--line);
+}
+.chat-head > div:first-child {
+  flex: 1;
+  min-width: 0;
+}
+.chat-head h1 {
+  margin: 0;
+  font-size: 18px;
+}
+.chat-head p {
+  margin: 2px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+.chat-log {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.bubble {
+  display: flex;
+  gap: 10px;
+  max-width: 640px;
+}
+.bubble.from-technician {
+  align-self: flex-end;
+  flex-direction: row-reverse;
+}
+.bubble .avatar {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: var(--panel-raised);
+  border: 1px solid var(--line-strong);
+  font-weight: 600;
+}
+.bubble.from-technician .avatar {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.bubble > div {
+  padding: 8px 12px;
+  border-radius: 12px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+}
+.bubble.from-technician > div {
+  background: var(--accent-soft);
+  border-color: transparent;
+}
+.bubble strong {
+  font-size: 11px;
+  color: var(--muted);
+}
+.bubble p {
+  margin: 2px 0 0;
+  line-height: 1.5;
+}
+.chat-ask {
+  padding: 12px 24px 18px;
+  border-top: 1px solid var(--line);
+  background: var(--panel);
+}
+.questions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+.questions .button {
+  height: 28px;
+  font-size: 12px;
+}
+.ask-form {
+  display: flex;
+  gap: 8px;
+}
+.ask-form .input {
+  flex: 1;
+}
+.their-requests {
+  margin-top: 10px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.their-requests summary {
+  cursor: pointer;
+}
+.their-requests > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+  max-height: 120px;
+  overflow-y: auto;
+}
+.their-requests .chip {
+  border: 1px solid var(--line-strong);
+  background: none;
+  color: var(--text);
+  cursor: pointer;
+}
+
+/* Lines */
+.scope {
+  margin-top: 12px;
+}
+.line {
+  margin-bottom: 14px;
+}
+.line-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.line small {
+  display: block;
+  color: var(--faint);
+  font-size: 11px;
+  margin-bottom: 4px;
+}
+.line.own strong::after {
+  content: '';
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-left: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  vertical-align: middle;
+}
+.inspector textarea {
+  width: 100%;
+  min-height: 52px;
+  padding: 7px 8px;
+  border: 1px solid var(--line-strong);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+  resize: vertical;
+}
+.inspector textarea::placeholder {
+  color: var(--faint);
+}
+.inspector textarea:focus {
+  border-color: var(--accent);
+  outline: none;
+}
+.words {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 4px;
+}
+.word {
+  padding: 1px 6px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: none;
+  color: var(--muted);
+  font: 11px var(--mono);
+  cursor: pointer;
+}
+.word:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.request {
+  border-bottom: 1px solid var(--line);
+  padding: 6px 0;
+}
+.request summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+}
+.request textarea {
+  margin-top: 8px;
+}
+.problems[hidden] {
+  display: none;
+}
+.issues {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.issues li {
+  display: flex;
+  gap: 8px;
+  padding: 4px 0;
+  font-size: 12px;
+}
+.issues .error {
+  color: var(--danger);
+}
+.issues .warning {
+  color: var(--warn);
+}
+.issues li span {
+  color: var(--text);
+}
+.link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  font-size: 12px;
+  cursor: pointer;
+}

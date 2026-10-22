@@ -2,6 +2,10 @@ import * as THREE from './vendor/three.module.min.js';
 import { GLTFLoader } from './vendor/three-addons/GLTFLoader.js';
 import { clone } from './vendor/three-addons/SkeletonUtils.js';
 import { Outfits } from './three-outfits.js';
+import { Appearance } from './three-appearance.js';
+import { appearanceScale } from './character-appearance.js';
+import { IMPORTED_CLIPS } from './character-clips.js';
+import { modelFile, modelHeight } from './character-models.js';
 
 // Rigged, animated people for the three.js renderer. The game describes each person every frame
 // and this draws them, loading each character model (public/models/people, converted from Mixamo
@@ -12,7 +16,8 @@ import { Outfits } from './three-outfits.js';
 // radians, 0 = +x, as figures.js), clips: [{ name, time, weight }] (blended by weight), standIn
 // (the meshes drawn while it loads), belt (optional colour), carry (optional colour: a toolbox in
 // the right hand), scale (optional; the technician is drawn a little larger to stand out), outfit
-// (optional: recoloured clothes, work wear and badges, see character-outfits.js) }.
+// (optional: recoloured clothes, work wear and badges, see character-outfits.js), appearance
+// (optional: height, build, skin, hair, beard and brows, see character-appearance.js) }.
 //
 // Each model comes in full detail and a light version (-low, about 15% of the triangles): people
 // far from the camera use the light one, and on software WebGL everyone does, because skinning
@@ -49,6 +54,7 @@ export class ThreeCharacters {
       this.sunShadowMaterial = new THREE.ShadowMaterial({ opacity: 0.45, depthWrite: false });
     }
     this.outfits = new Outfits({ shadows });
+    this.appearance = new Appearance({ shadows });
     this.clips = null;
   }
   // The animations, shared by everyone, load with the first person seen.
@@ -56,7 +62,20 @@ export class ThreeCharacters {
     if (this.clipsRequested) return;
     this.clipsRequested = true;
     this.load('animations').then(
-      (gltf) => (this.clips = new Map(gltf.animations.map((c) => [c.name, c]))),
+      (gltf) => {
+        this.clips = new Map(gltf.animations.map((c) => [c.name, c]));
+        // Clips imported in the Character Editor, each in its own file, join as they arrive.
+        for (const [name, { file }] of Object.entries(IMPORTED_CLIPS))
+          this.loader.loadAsync(new URL(file, BASE).href).then(
+            (clipFile) => {
+              const clip = clipFile.animations[0];
+              if (!clip) return;
+              clip.name = name;
+              this.clips.set(name, clip);
+            },
+            (e) => console.warn('Clip ' + name + ' did not load:', e.message),
+          );
+      },
       () => (this.clips = new Map()),
     );
   }
@@ -82,13 +101,17 @@ export class ThreeCharacters {
       if (!o.isSkinnedMesh) return;
       o.frustumCulled = false;
       o.castShadow = this.shadows;
-      // The textures carry the colour; Mixamo's grey base colour would only darken them.
-      for (const m of [].concat(o.material)) m.color.set(0xffffff);
+      // The textures carry the colour; Mixamo's grey base colour would only darken them. (An
+      // imported model's untextured pieces keep their colour: character-models.js.)
+      for (const m of [].concat(o.material)) if (!m.userData.keepColour) m.color.set(0xffffff);
     });
     this.outfits.dress(root, state.file, state.outfit);
+    this.appearance.apply(root, state.file, state.appearance);
     const hips = root.getObjectByName('mixamorigHips');
     const person = {
       model: state.model,
+      // Height and build: their size on each axis, or null for as modelled.
+      size: appearanceScale(state.appearance),
       root,
       hips,
       mixer: new THREE.AnimationMixer(root),
@@ -144,9 +167,10 @@ export class ThreeCharacters {
     for (const state of states) {
       let person = this.people.get(state.key);
       const distance = Math.hypot(state.x - eye[0], state.y - eye[1], state.z - eye[2]),
-        wasLow = person?.file === state.model + '-low',
+        wasLow = person?.file === modelFile(state.model, true),
         low = this.lowDetail || distance > (wasLow ? NEAR : FAR),
-        file = state.model + (low ? '-low' : '');
+        // An imported model (character-models.js) has one file, near and far.
+        file = modelFile(state.model, low);
       this.load(file);
       const entry = this.models.get(file);
       // Until the wanted version has loaded, keep the one already shown, if any.
@@ -161,20 +185,24 @@ export class ThreeCharacters {
       seen.add(state.key);
       person.root.visible = person.shadow.visible = true;
       person.root.position.set(state.x, state.y, state.z);
-      person.root.scale.setScalar(state.scale || 1);
-      person.shadow.scale.setScalar(state.scale || 1);
+      // An imported model's height, then their own height and build (character-appearance.js).
+      const scale = (state.scale || 1) * modelHeight(state.model);
+      person.root.scale.setScalar(scale);
+      if (person.size) person.root.scale.multiply(new THREE.Vector3(...person.size));
+      person.shadow.scale.setScalar(scale * (person.size?.[1] || 1));
       if (person.carry && state.carry) person.carry.material.color.set(state.carry);
       // Models face +z; angle 0 faces +x.
       person.root.rotation.y = Math.PI / 2 - state.angle;
       for (const action of person.actions.values()) action.setEffectiveWeight(0);
       for (const { name, time, weight } of state.clips) {
-        const clip = this.clips.get(name);
+        // An imported clip not here yet (or not downloaded) is stood out in the idle.
+        const clip = this.clips.get(name) || (name in IMPORTED_CLIPS && this.clips.get('Idle'));
         if (!clip) continue;
-        let action = person.actions.get(name);
+        let action = person.actions.get(clip.name);
         if (!action) {
           action = person.mixer.clipAction(clip);
           action.play();
-          person.actions.set(name, action);
+          person.actions.set(clip.name, action);
         }
         action.setEffectiveWeight(weight);
         action.time = Math.min(time, clip.duration);
@@ -210,6 +238,7 @@ export class ThreeCharacters {
     this.sunShadowGeometry?.dispose();
     this.sunShadowMaterial?.dispose();
     this.outfits.dispose();
+    this.appearance.dispose();
     for (const { gltf } of this.models.values())
       gltf?.scene.traverse((o) => {
         if (!o.isMesh) return;

@@ -1,5 +1,6 @@
 import { components } from './missions.js';
 import { clearPath } from './world-math.js';
+import { linesFor, fill, ABOUT_QUESTION } from './conversation-settings.js';
 
 const ANIMATIONS = {
   led: 'the lights glow and cast a pool of light',
@@ -21,6 +22,9 @@ export const conversationQuestions = [
   'How does the weather affect it?',
   'I need help',
 ];
+// The questions to offer: someone with something to say about themselves is asked about it too.
+export const questionsFor = (chat) =>
+  chat?.about ? [...conversationQuestions, ABOUT_QUESTION] : conversationQuestions;
 
 const quote = (text = '') => text.replace(/^[“"]|[”"]$/g, '');
 export function createConversation({
@@ -34,7 +38,15 @@ export function createConversation({
   area = null,
   // A household member visiting about a room they look after says so first.
   looksAfter = null,
+  // Whose lines they say (the name their quests give them, 'Maya' in every city), where (a
+  // location, or null at home), and the lines (data/conversations.js unless given).
+  person = resident,
+  location = null,
+  settings,
 }) {
+  const lines = linesFor(person, location?.id ?? null, settings),
+    say = (slot, values) =>
+      fill(lines[slot], { name: resident, city: location?.city ?? 'town', ...values });
   const requests = quests
     .map((mission, index) => ({ mission, index, complete: !!completed[index] }))
     .filter((r) => (area ? r.mission.area === area : r.mission.resident === resident));
@@ -48,30 +60,35 @@ export function createConversation({
     requests.find((r) => r.index === currentIndex) ||
     requests[0];
   const hello = selected
-    ? (urgent[selected.index] ? `${urgent[selected.index]}, so I need this now. ` : '') +
-      `${quote(selected.mission.quote)} Ask me about ${selected.mission.title}, or pick another request below.`
-    : 'I have no requests here right now. You can explore the house and garden.';
+    ? (urgent[selected.index] ? say('urgent', { reason: urgent[selected.index] }) + ' ' : '') +
+      `${quote(selected.mission.quote)} ${say('ask', { title: selected.mission.title })}`
+    : say('noRequests');
   return {
     key,
     resident,
     requests,
     thanked: thanks.map((r) => r.index),
     selectedIndex: selected?.index ?? null,
+    about: say('about').trim(),
+    idle: say('idle'),
     messages: [
       {
         speaker: 'resident',
         text: thanks.length
-          ? `${thanks.map(thankYou).join(' ')} ${selected?.complete ? '' : 'Next, ' + hello}`.trim()
-          : 'Hello! ' +
-            (looksAfter ? `I look after the ${looksAfter.toLowerCase()}. ` : '') +
+          ? `${thanks.map((r) => thankYou(r, say)).join(' ')} ${selected?.complete ? '' : say('next') + ' ' + hello}`.trim()
+          : say('greeting') +
+            ' ' +
+            (looksAfter ? say('looksAfter', { area: looksAfter.toLowerCase() }) + ' ' : '') +
             hello,
       },
     ],
   };
 }
-function thankYou({ mission: m }) {
-  const action = (m.ids || []).map((id) => ANIMATIONS[id]).find(Boolean);
-  return `Thank you! ${m.title} works${action ? ': ' + action : ''}.`;
+function thankYou({ mission: m }, say) {
+  const effect = (m.ids || []).map((id) => ANIMATIONS[id]).find(Boolean);
+  return effect
+    ? say('thanks', { title: m.title, effect })
+    : say('thanksPlain', { title: m.title });
 }
 
 export function selectedRequest(chat) {
@@ -102,8 +119,16 @@ export function sendConversationMessage(
   append(chat, 'technician', text);
   const request = selectedRequest(chat),
     q = text.toLowerCase();
+  if (chat.about && /yourself|about you|who are you/.test(q)) {
+    append(chat, 'resident', chat.about);
+    return true;
+  }
   if (!request) {
-    append(chat, 'resident', 'I have no requests here yet. Try talking to another resident.');
+    append(
+      chat,
+      'resident',
+      chat.idle ?? 'I have no requests here yet. Try talking to another resident.',
+    );
     return true;
   }
   const m = request.mission,

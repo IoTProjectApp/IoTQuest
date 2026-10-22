@@ -1,3 +1,4 @@
+import { alongRoad } from './street-network.js';
 // Each incoming lane gets a kerbside head facing upstream, on its own driving side.
 export function buildTrafficSignals({ sim, box }) {
   const signals = [];
@@ -6,12 +7,35 @@ export function buildTrafficSignals({ sim, box }) {
       n.id.endsWith('>' + junction.id + ':in'),
     );
     for (const lane of incoming) {
-      const axis = Math.abs(lane.x - junction.x) > 10 ? 'EW' : 'NS';
-      const facing =
-        axis === 'EW' ? [Math.sign(lane.x - junction.x), 0] : [0, Math.sign(lane.z - junction.z)];
+      // The phase this lane moves in (street-network.js pairs an angled road's arms), and the
+      // direction back up it, towards oncoming traffic.
+      const axis =
+        sim.map.roads.edges[lane.id]?.find((e) => e.junction)?.axis ??
+        (Math.abs(lane.x - junction.x) > 10 ? 'EW' : 'NS');
+      const from = sim.map.junctions.find((j) => j.id === lane.id.split('>')[0]),
+        length = from && Math.hypot(from.x - junction.x, from.z - junction.z),
+        // Lanes from driveways rather than junctions face straight up their own axis.
+        facing = from
+          ? [(from.x - junction.x) / length, (from.z - junction.z) / length]
+          : axis === 'EW'
+            ? [Math.sign(lane.x - junction.x), 0]
+            : [0, Math.sign(lane.z - junction.z)];
+      const square = Math.abs(facing[0]) < 1e-9 || Math.abs(facing[1]) < 1e-9;
       const kerb = junction.farmAccess && axis === 'EW' ? 3.8 : 6.8;
-      const x = axis === 'EW' ? lane.x : junction.x + Math.sign(lane.x - junction.x) * kerb;
-      const z = axis === 'NS' ? lane.z : junction.z + Math.sign(lane.z - junction.z) * kerb;
+      // Beside the stop line, on the lane's own side of the road.
+      const normal = [-facing[1], facing[0]],
+        side = Math.sign((lane.x - junction.x) * normal[0] + (lane.z - junction.z) * normal[1]),
+        along = (lane.x - junction.x) * facing[0] + (lane.z - junction.z) * facing[1];
+      const x = !square
+        ? junction.x + facing[0] * along + normal[0] * side * kerb
+        : Math.abs(facing[1]) < 1e-9
+          ? lane.x
+          : junction.x + Math.sign(lane.x - junction.x) * kerb;
+      const z = !square
+        ? junction.z + facing[1] * along + normal[1] * side * kerb
+        : Math.abs(facing[0]) < 1e-9
+          ? lane.z
+          : junction.z + Math.sign(lane.z - junction.z) * kerb;
       const yaw = Math.atan2(facing[0], facing[1]);
       const extra = { trafficSignal: junction.id, incomingLane: lane.id, surface: 'steel' };
       const pole = box(x, 1.7, z, 0.13, 3.4, 0.13, '#637474', extra);
@@ -38,16 +62,12 @@ export function buildTrafficSignals({ sim, box }) {
         });
       }
       // A bumper stops before the pedestrian crossing, in its own lane.
-      box(
-        lane.x - facing[0] * 2,
-        0.17,
-        lane.z - facing[1] * 2,
-        axis === 'EW' ? 0.15 : 4,
-        0.025,
-        axis === 'NS' ? 0.15 : 4,
-        '#eee9db',
-        { surface: 'plain', trafficStopLine: lane.id },
-      );
+      const line = alongRoad(facing, 0.15, 0.025, 4);
+      box(lane.x - facing[0] * 2, 0.17, lane.z - facing[1] * 2, ...line.size, '#eee9db', {
+        surface: 'plain',
+        trafficStopLine: lane.id,
+        rotation: line.rotation,
+      });
       signals.push(head);
     }
   }

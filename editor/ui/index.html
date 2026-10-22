@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>IoT Quest Editor</title>
+    <link rel="stylesheet" href="shell.css" />
+    <style>
+      main {
+        max-width: 1040px;
+        margin: 0 auto;
+        padding: 64px 32px;
+      }
+      header h1 {
+        margin: 0 0 6px;
+        font-size: 26px;
+        letter-spacing: -0.01em;
+      }
+      header p {
+        margin: 0;
+        color: var(--muted);
+        font-size: 14px;
+      }
+      h2 {
+        margin: 40px 0 14px;
+        color: var(--muted);
+        font-size: 12px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+      }
+      .cards {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+        gap: 16px;
+      }
+      .card {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+        padding: 20px;
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        background: var(--panel);
+        color: inherit;
+        text-decoration: none;
+        transition:
+          border-color 0.15s,
+          background 0.15s;
+      }
+      .card:hover,
+      .card:focus-visible {
+        border-color: var(--accent);
+        background: var(--panel-raised);
+      }
+      .card .badge {
+        display: grid;
+        place-items: center;
+        width: 44px;
+        height: 44px;
+        border-radius: 10px;
+        background: var(--accent-soft);
+        color: var(--accent);
+      }
+      .card h3 {
+        margin: 0;
+        font-size: 16px;
+      }
+      .card p {
+        margin: 0;
+        color: var(--muted);
+        flex: 1;
+      }
+      .card .writes {
+        color: var(--faint);
+        font-size: 12px;
+      }
+      .card .writes code {
+        font: 12px var(--mono);
+        color: var(--muted);
+      }
+      .card .open {
+        align-self: flex-start;
+        margin-top: 4px;
+      }
+      footer {
+        margin-top: 40px;
+        color: var(--faint);
+        font-size: 12px;
+      }
+      footer code {
+        font-family: var(--mono);
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <header>
+        <h1>IoT Quest Editor</h1>
+        <p>Development tools for the game. Nothing here is built or deployed.</p>
+      </header>
+      <h2>Workspaces</h2>
+      <div class="cards" id="cards"></div>
+      <footer>Adding a workspace: see <code>editor/README.md</code>.</footer>
+    </main>
+    <script type="module" src="home.js"></script>
+  </body>
+</html>

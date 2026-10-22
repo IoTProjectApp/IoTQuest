@@ -1,3 +1,4 @@
+import { pavement } from './street-network.js';
 export const FARM_SERVICE_YARD = { x: 9, z: 47, w: 46, d: 30, gateX: 32, gateZ: 48, gateWidth: 8 };
 const curve = (a, b, c, d) =>
   Array.from({ length: 33 }, (_, i) => {
@@ -81,8 +82,8 @@ export function connectFarmDriveway(sim, origin) {
       roads.edge(a.id, b.id, { junction: j.id, axis: a.axis, turn: a.axis !== axisOut, points });
     }
   // Main-street pedestrians cross the driveway at its controlled entrance.
-  const north = '0:1/-1/1',
-    south = '0:2/-1/-1';
+  const north = pavement(walks, '0:1/-1/1'),
+    south = pavement(walks, '0:2/-1/-1');
   walks.edges[north] = walks.edges[north].filter((e) => e.to !== south);
   walks.edges[south] = walks.edges[south].filter((e) => e.to !== north);
   const a = local(40, 44),
@@ -195,7 +196,7 @@ export function drawFarmDriveway({ box, origin, sim }) {
 export function connectFarmFootpath(sim, origin) {
   const walks = sim.map.walks,
     home = 'home-public-path',
-    town = '0:1/1/-1';
+    town = pavement(walks, '0:1/1/-1');
   walks.edges[home] = walks.edges[home].filter((e) => e.to !== town);
   walks.edges[town] = walks.edges[town].filter((e) => e.to !== home);
   for (const [id, x, z] of [

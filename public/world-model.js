@@ -22,8 +22,22 @@ export function createWorldModel(variant = {}) {
     roofs = [],
     windows = [],
     dynamic = {};
+  // Edit groups for the world editor (editor/, applied by world-layout.js): every mesh made after
+  // tag(id) belongs to that group until the next tag(), as do the colliders added meanwhile. An id
+  // ending in '#' is numbered in build order: 'garden/tree#' becomes 'garden/tree#1', '#2', ...
+  let group = null,
+    groupColliders = 0;
+  const groupCounts = {};
+  const tag = (id = null) => {
+    if (group) for (const c of colliders.slice(groupColliders)) c.editGroup ??= group;
+    if (id?.endsWith('#')) id += groupCounts[id] = (groupCounts[id] || 0) + 1;
+    group = id;
+    groupColliders = colliders.length;
+    return id;
+  };
   const mesh = (shape, pos, size, color, extra = {}) => {
     const m = { shape, pos: [...pos], size: [...size], color, rotation: [0, 0, 0], ...extra };
+    if (group) m.editGroup ??= group;
     objects.push(m);
     return m;
   };
@@ -127,20 +141,45 @@ export function createWorldModel(variant = {}) {
       start = g + 0.75;
     }
   };
+  // The house's shell, for the Map Editor's House tool (applied by house-shell.js): each wall with
+  // the grid lines it stands on and ends at, its doorways and height, and each room's floor parts.
+  const shell = { walls: [], rooms: [] };
+  const shellWall = (id, line, fromLine, toLine, openings, height, build) => {
+    const firstPart = objects.length,
+      firstCollider = colliders.length;
+    build();
+    shell.walls.push({
+      id,
+      line,
+      fromLine,
+      toLine,
+      openings,
+      height,
+      parts: objects.slice(firstPart),
+      colliders: colliders.slice(firstCollider),
+    });
+  };
   // A raised island, grass and a gravel walkway through the property.
   box(0, -0.53, 0, 33.8, 1, 27.5, '#b0bc83');
   box(0, -0.035, 0, 33.6, 0.1, 27.3, '#abc68b');
   const pathColour = VARIANT_COLOURS.path[variant.path] || null;
-  box(0, 0.035, 5, 2.1, 0.1, 15.5, pathColour || '#dfd4b1');
-  box(-4.6, 0.035, 0.2, 9.2, 0.1, 1.9, pathColour || '#dfd4b1');
-  box(7, 0.035, -0.2, 14, 0.1, 1.6, pathColour || '#ded2ae');
-  box(8.1, 0.045, 3.5, 1.15, 0.1, 7.2, pathColour || '#ddd0ac');
-  box(9.8, 0.035, -5.1, 1.4, 0.1, 7.5, pathColour || '#dfd4b1');
+  for (const [x, z, w, d, c, y = 0.035] of [
+    [0, 5, 2.1, 15.5, '#dfd4b1'],
+    [-4.6, 0.2, 9.2, 1.9, '#dfd4b1'],
+    [7, -0.2, 14, 1.6, '#ded2ae'],
+    [8.1, 3.5, 1.15, 7.2, '#ddd0ac', 0.045],
+    [9.8, -5.1, 1.4, 7.5, '#dfd4b1'],
+  ]) {
+    tag('garden/path#');
+    box(x, y, z, w, 0.1, d, pathColour || c);
+  }
+  tag('garden/stepping-stones');
   for (let i = 0; i < 11; i++) {
     box(0.15 * Math.sin(i), 0.1, 10 - i * 1.12, 1.18, 0.1, 0.66, i % 2 ? '#ece4cd' : '#e3d8be', {
       rotation: [0, ((i % 3) - 1) * 0.13, 0],
     });
   }
+  tag();
   // Six rooms, tiled floors, traversable doorways and low cutaway walls.
   const rooms = [
     ['Bedroom', -10.55, -8.5, '#d9bd92'],
@@ -152,6 +191,7 @@ export function createWorldModel(variant = {}) {
   ];
   box(-5.8, 0.07, -6, 14.9, 0.2, 10.4, '#e9ddc6');
   for (const [name, x, z, c] of rooms) {
+    const firstPart = objects.length;
     box(x, 0.18, z, 4.58, 0.09, 4.8, c);
     const tiled = variant.design && !['Bathroom', 'Utility room', 'Garage'].includes(name);
     // Designed floors cover these default plank lines, so only draw them on plain floors.
@@ -182,24 +222,49 @@ export function createWorldModel(variant = {}) {
             { rounded: false, interiorFloor: true },
           );
     }
+    shell.rooms.push({ id: name, x, z, parts: objects.slice(firstPart) });
   }
-  wallH(-13.1, 1.4, -11, null, 1.55);
-  wallH(-13.1, -8.2, -6, -10.5, 0.95);
-  wallH(-8.2, -3.4, -6, -5.8, 0.95);
-  wallH(-3.4, 1.4, -6, -1.1, 0.95); // bedroom/kitchen doorway
-  wallV(-13.1, -11, -1, [], 1.1);
-  wallV(1.4, -11, -1, [-3.5], 1.1);
-  wallV(-8.2, -11, -1, [-8.5, -3.5], 0.95);
-  wallV(-3.4, -11, -1, [-8.5, -3.5], 0.95);
+  const door = (at, width = 1.5) => ({ at, width }),
+    doors = (...at) => at.map((a) => door(a));
+  shellWall('back', 'back', 'left', 'right', [], 1.55, () => wallH(-13.1, 1.4, -11, null, 1.55));
+  shellWall('middle-left', 'middle', 'left', 'divider-left', [door(-10.5)], 0.95, () =>
+    wallH(-13.1, -8.2, -6, -10.5, 0.95),
+  );
+  shellWall('middle-centre', 'middle', 'divider-left', 'divider-right', [door(-5.8)], 0.95, () =>
+    wallH(-8.2, -3.4, -6, -5.8, 0.95),
+  );
+  shellWall('middle-right', 'middle', 'divider-right', 'right', [door(-1.1)], 0.95, () =>
+    wallH(-3.4, 1.4, -6, -1.1, 0.95),
+  ); // bedroom/kitchen doorway
+  shellWall('left', 'left', 'back', 'front', [], 1.1, () => wallV(-13.1, -11, -1, [], 1.1));
+  shellWall('right', 'right', 'back', 'front', doors(-3.5), 1.1, () =>
+    wallV(1.4, -11, -1, [-3.5], 1.1),
+  );
+  shellWall('divider-left', 'divider-left', 'back', 'front', doors(-8.5, -3.5), 0.95, () =>
+    wallV(-8.2, -11, -1, [-8.5, -3.5], 0.95),
+  );
+  shellWall('divider-right', 'divider-right', 'back', 'front', doors(-8.5, -3.5), 0.95, () =>
+    wallV(-3.4, -11, -1, [-8.5, -3.5], 0.95),
+  );
   // Front wall and three entrances (garage door leaves a wide passage).
-  wallH(-13.1, -8.2, -1, -10.5, 0.55);
-  wallH(-8.2, -3.4, -1, -5.8, 0.55);
-  wallH(-3.4, 1.4, -1, -1.1, 0.55, 3.2);
+  shellWall('front-left', 'front', 'left', 'divider-left', [door(-10.5)], 0.55, () =>
+    wallH(-13.1, -8.2, -1, -10.5, 0.55),
+  );
+  shellWall('front-centre', 'front', 'divider-left', 'divider-right', [door(-5.8)], 0.55, () =>
+    wallH(-8.2, -3.4, -1, -5.8, 0.55),
+  );
+  shellWall('front-right', 'front', 'divider-right', 'right', [door(-1.1, 3.2)], 0.55, () =>
+    wallH(-3.4, 1.4, -1, -1.1, 0.55, 3.2),
+  );
+  // Fittings (windows, doors, blinds) are edit groups of their own, apart from the walls.
   for (const x of [-11.5, -6.7, -1.9]) {
+    tag('house/window#');
     windows.push(box(x, 1.1, -10.88, 1.35, 0.78, 0.065, '#8abec5', { opacity: 0.68 }));
     box(x, 1.1, -10.81, 0.06, 0.85, 0.1, '#fbf1dc');
   }
-  buildHouseObjects({ mesh, colliders, dynamic, design: variant.design });
+  tag();
+  buildHouseObjects({ mesh, tag, colliders, dynamic, design: variant.design });
+  tag('garden/greenhouse');
   // Greenhouse: a framed glasshouse (default), a polytunnel or a lean-to against a brick wall.
   const gx = 9.9,
     gz = -7.1;
@@ -243,6 +308,7 @@ export function createWorldModel(variant = {}) {
     plants.push(buildCrop({ mesh }, x, z, scale, rootHeight));
   }
   for (const x of [6.0, 9.25, 12.5]) {
+    tag('garden/raised-bed#');
     solid(x, 0.22, 4.6, 2.35, 0.35, 5.5, VARIANT_COLOURS.beds[variant.beds] || '#b39166');
     box(x, 0.43, 4.6, 2.08, 0.08, 5.22, '#746a47', { surface: 'soil' });
     for (let i = 0; i < 4; i++) plant(x + (i % 2 ? -0.4 : 0.35), 2.5 + i * 1.37, 0.8 + i * 0.07);
@@ -250,12 +316,14 @@ export function createWorldModel(variant = {}) {
       box(x, 0.5, z, 2.45, 0.2, 0.15, VARIANT_COLOURS.beds[variant.beds] ? '#8f8a7e' : '#c3a073');
   }
   for (const x of [8.7, 11]) {
+    tag('garden/greenhouse-bed#');
     box(x, 0.38, -7.2, 1.45, 0.42, 3.4, '#b99468');
     for (let i = 0; i < 3; i++) plant(x, -8.35 + i * 1.12, 0.75, 0.59);
   }
   // Tank, inlet pipe, visible water volume, pump, and irrigation pipes.
   const tx = 13.05,
     tz = -1.9;
+  tag('garden/tank');
   colliders.push({ x: tx, z: tz, w: 2.12, d: 2.12 });
   shadow(tx, tz, 2.4, 2);
   const [tankBody, tankRib, tankLid] =
@@ -280,7 +348,9 @@ export function createWorldModel(variant = {}) {
   box(tx, 1.05, tz + 1.09, 0.22, 1.7, 0.035, '#e9f3ed');
   dynamic.tankGauge = box(tx, 0.78, tz + 1.12, 0.15, 1.2, 0.04, '#5dabbf');
   beam([tx, 2.28, tz], [tx + 0.45, 2.8, tz], 0.12, '#bed3ce');
+  tag('garden/pump');
   box(11.55, 0.45, -1.2, 0.65, 0.65, 0.55, '#5d8a81');
+  tag('garden/irrigation');
   box(10, 0.15, 0.65, 6.7, 0.08, 0.08, '#617961');
   for (const x of [6, 9.25, 12.5]) box(x, 0.52, 4.4, 0.065, 0.07, 6.6, '#718671');
   // Path lanterns; light emission is controlled only by installed modules.
@@ -291,6 +361,7 @@ export function createWorldModel(variant = {}) {
     [1.35, 6.8],
     [-1.1, 9],
   ]) {
+    tag('garden/lantern#');
     cylinder(x, 0.55, z, 0.055, 1.05, '#65735c');
     box(x, 1.2, z, 0.34, 0.42, 0.34, '#62725d');
     lamps.push(box(x, 1.2, z, 0.24, 0.3, 0.24, '#e3d1a1'));
@@ -300,6 +371,7 @@ export function createWorldModel(variant = {}) {
   // Fence (post-and-rail, white pickets, a stone wall, a hedge or farm wire) and the entrance gate
   // (openable through student output).
   const fencePost = (x, z, alongX) => {
+    tag('garden/fence#');
     const first = objects.length;
     const run = alongX ? [1.45, 0.12] : [0.12, 1.45];
     switch (variant.fence) {
@@ -346,6 +418,7 @@ export function createWorldModel(variant = {}) {
     fencePost(i, 11.55, true);
   }
   for (const x of [-15.5, 15.5]) for (let z = -11.7; z < 12; z += 1.5) fencePost(x, z, false);
+  tag('garden/gate');
   dynamic.gate = box(-0.75, 0.68, 11.55, 1.45, 1.12, 0.12, '#b7996d');
   dynamic.gate.anchor = [-1.5, 0, 11.55];
   dynamic.gate.local = [0.75, 0.68, 0];
@@ -355,12 +428,15 @@ export function createWorldModel(variant = {}) {
   colliders.push(dynamic.gateCollider);
   // The front fence either side of the gate, out to the edge of the walkable garden (x ±14, kept
   // inside the tank so the community district's placement does not move).
+  tag();
   const fenceDepth = { stone: 0.45, hedge: 1.2 }[variant.fence] || 0.15;
   for (const side of [-1, 1]) colliders.push({ x: side * 7.75, z: 11.55, w: 12.5, d: fenceDepth });
+  tag('garden/gate');
   box(1.5, 0.72, 11.55, 0.17, 1.45, 0.17, '#9b805d');
   box(-1.5, 0.72, 11.55, 0.17, 1.45, 0.17, '#9b805d');
   // Trees, hedges, rocks and flowers around the island.
   function tree(x, z, s = 1) {
+    tag('garden/tree#');
     shadow(x, z, 2.5 * s, 2.4 * s);
     buildTree({ mesh }, x, z, s, {
       style: variant.treeStyle || 'broadleaf',
@@ -401,6 +477,7 @@ export function createWorldModel(variant = {}) {
   }
   // An optional garden feature in the open lawn left of the front path.
   const [fx, fz] = [-9.6, 5.6];
+  tag(variant.feature ? 'garden/' + variant.feature : null);
   if (variant.feature === 'birdbath') {
     cylinder(fx, 0.45, fz, 0.12, 0.9, '#c9c4b8');
     cylinder(fx, 0.95, fz, 0.5, 0.12, '#d6d1c5');
@@ -443,12 +520,14 @@ export function createWorldModel(variant = {}) {
     sphere(fx, 1.0, fz, 0.42, '#b98b5b');
     colliders.push({ x: fx, z: fz, w: 0.8, d: 0.8 });
   }
+  tag('garden/back-hedge');
   for (let i = 0; i < 28; i++) {
     const x = -14.6 + i * 1.05,
       z = -12.3;
     sphere(x, 0.6, z, 0.68, i % 2 ? '#87a36a' : '#77965f');
   }
   for (let i = 0; i < 20; i++) {
+    tag(i % 2 ? 'garden/left-shrubs' : 'garden/right-shrubs');
     const x = i % 2 ? -14.6 : 14.7,
       z = -10.5 + Math.floor(i / 2) * 2.2;
     sphere(x, 0.35, z, 0.55, '#8da777');
@@ -460,12 +539,14 @@ export function createWorldModel(variant = {}) {
     [12, 9],
     [-12, 9],
   ]) {
+    tag('garden/flowers#');
     box(x, 0.12, z, 1.7, 0.2, 1.2, '#d5cbb0');
     for (let i = 0; i < 5; i++) {
       cylinder(x - 0.6 + i * 0.27, 0.38, z + (i % 2) * 0.3, 0.035, 0.4, '#7c965d');
       sphere(x - 0.6 + i * 0.27, 0.65, z + (i % 2) * 0.3, 0.13, i % 2 ? '#d6a080' : '#d6bd75');
     }
   }
+  tag();
   // Resident and technician models, with articulated limbs and toolkit.
   function actor(id, x, z, color, skin, hat = false) {
     const parts = [],
@@ -538,10 +619,12 @@ export function createWorldModel(variant = {}) {
     pitchedRoof,
     flatRoof,
     mesh,
+    tag,
     beam,
     box,
     sphere,
     cylinder,
     rooms,
+    shell,
   };
 }

@@ -7,6 +7,7 @@ import { catalogueQuests } from './catalogue-quests.js';
 import { catalogueComponents } from './catalogue-devices.js';
 import { solutionProgram } from './catalogue-program.js';
 import { guidedStarter } from './code-coach.js';
+import { authoredQuests, applyQuestEdits } from './authored-quests.js';
 import { ADC_SIGNALS, adcRead, isPico, picoWiring, baseEnv } from './signals.js';
 // The calm-day sensor levels live in signals.js (which has no imports) so modules in an import
 // cycle with this one can use them; they are re-exported here for existing callers.
@@ -419,6 +420,10 @@ export const missions = [
   ...communityQuests,
   ...catalogueQuests,
 ];
+// Changes made to built-in quests in the Quest Editor, then the quests written there, which come
+// last so the built-in quests keep their places.
+applyQuestEdits(missions, components);
+missions.push(...authoredQuests(components));
 // Energy and water allowed across a quest's tests; a quest can set its own (the AC draws 800 W).
 export const missionBudget = (m) =>
   m.budget || { wh: m.ids.includes('pump') ? 0.35 : 0.15, litres: 45 };

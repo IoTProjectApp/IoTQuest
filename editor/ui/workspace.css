@@ -1,0 +1,372 @@
+/* Shared by every workspace page: the tool rail, stage, inspector, hints, toasts and panels.
+   Link it after shell.css; a workspace adds its own stylesheet for what only it has. */
+body {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.city {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+}
+.city .select {
+  width: 220px;
+}
+
+/* A row of joined buttons, one of them active. */
+.segmented {
+  display: inline-flex;
+  padding: 2px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  background: var(--bg);
+}
+.segmented button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 26px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+}
+.segmented button:hover {
+  color: var(--text);
+}
+.segmented button.active {
+  background: var(--panel-raised);
+  color: var(--text);
+  box-shadow: inset 0 0 0 1px var(--line-strong);
+}
+.save-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--faint);
+  font-size: 12px;
+  margin: 0 4px;
+}
+.save-state::before {
+  content: '';
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--ok);
+}
+.save-state.unsaved {
+  color: var(--warn);
+}
+.save-state.unsaved::before {
+  background: var(--warn);
+}
+
+.workspace {
+  flex: 1;
+  display: grid;
+  grid-template-columns: 76px 1fr 320px;
+  min-height: 0;
+}
+
+/* Tool rail */
+.tools {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 8px;
+  border-right: 1px solid var(--line);
+  background: var(--panel);
+}
+.tools button {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 9px 0 7px;
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  background: none;
+  color: var(--muted);
+  font-size: 11px;
+  cursor: pointer;
+}
+.tools button:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+.tools button.active {
+  background: var(--accent-soft);
+  border-color: rgb(79 156 249 / 45%);
+  color: var(--accent);
+}
+.tools kbd {
+  font-size: 9px;
+  padding: 0 4px;
+  border-bottom-width: 1px;
+}
+
+/* Stage: the 3D view, with the catalogue below it in Object mode. */
+.stage {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+.view {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+}
+#canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  outline: none;
+  cursor: default;
+}
+.toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  color: var(--muted);
+  cursor: pointer;
+}
+.toggle[aria-pressed='true'] {
+  color: var(--accent);
+  border-color: rgb(79 156 249 / 45%);
+}
+.hint {
+  position: absolute;
+  left: 50%;
+  bottom: 14px;
+  transform: translateX(-50%);
+  max-width: calc(100% - 32px);
+  padding: 7px 12px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: rgb(18 21 25 / 85%);
+  backdrop-filter: blur(6px);
+  color: var(--muted);
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  pointer-events: none;
+}
+.hint b {
+  color: var(--text);
+  font-weight: 600;
+}
+.toast {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 8px 14px;
+  border-radius: var(--radius);
+  background: var(--panel-raised);
+  border: 1px solid var(--line-strong);
+  box-shadow: 0 6px 24px rgb(0 0 0 / 35%);
+  font-size: 12px;
+}
+.toast.error {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+.loading {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: var(--bg);
+  color: var(--muted);
+  font-size: 14px;
+}
+.loading[hidden] {
+  display: none;
+}
+
+/* Inspector */
+.inspector {
+  display: flex;
+  flex-direction: column;
+  border-left: 1px solid var(--line);
+  background: var(--panel);
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+.inspector .field .input {
+  width: 100%;
+}
+.inspector section {
+  padding: 16px;
+  border-bottom: 1px solid var(--line);
+}
+.inspector h2 {
+  margin: 0 0 4px;
+  font-size: 15px;
+}
+.inspector h3 {
+  margin: 0 0 10px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.inspector .muted {
+  color: var(--muted);
+  margin: 0;
+}
+.inspector .id {
+  font: 11px var(--mono);
+  color: var(--faint);
+  word-break: break-all;
+}
+.chips {
+  display: flex;
+  gap: 6px;
+  margin: 8px 0 0;
+}
+.chip {
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: var(--panel-raised);
+  border: 1px solid var(--line-strong);
+  color: var(--muted);
+  font-size: 11px;
+}
+.chip.changed {
+  color: var(--accent);
+  border-color: rgb(79 156 249 / 45%);
+}
+.caution {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+  padding: 9px 10px;
+  border-radius: var(--radius);
+  background: var(--warn-soft);
+  color: var(--warn);
+  font-size: 12px;
+}
+.grid3 {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+.grid2 {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+  margin-top: 10px;
+}
+.axis {
+  position: relative;
+}
+.axis .input {
+  width: 100%;
+  padding-left: 20px;
+  padding-right: 4px;
+  font-family: var(--mono);
+  font-size: 12px;
+}
+.axis b {
+  position: absolute;
+  left: 8px;
+  top: 6px;
+  font-size: 11px;
+}
+.axis.x b {
+  color: #ef6b6b;
+}
+.axis.y b {
+  color: #5fd38a;
+}
+.axis.z b {
+  color: #4f9cf9;
+}
+.actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+.actions .button {
+  justify-content: center;
+}
+.changes {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.changes li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 6px 6px 8px;
+  margin: 0 -6px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.changes li:hover {
+  background: var(--hover);
+}
+.changes .name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.changes .what {
+  font-size: 11px;
+  color: var(--muted);
+}
+.changes .what.removed {
+  color: var(--danger);
+}
+.changes .what.added {
+  color: var(--ok);
+}
+.changes .what.missing {
+  color: var(--warn);
+}
+.changes .revert {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: var(--faint);
+  cursor: pointer;
+}
+.changes .revert:hover {
+  background: var(--panel-raised);
+  color: var(--text);
+}
+.shortcuts {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 6px 10px;
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+.shortcuts dt {
+  text-align: right;
+}
+.shortcuts dd {
+  margin: 0;
+}
+.axis.size b {
+  color: var(--muted);
+}

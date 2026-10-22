@@ -4,7 +4,9 @@ import { readFile } from 'node:fs/promises';
 import { existsSync, readdirSync } from 'node:fs';
 import { createRegionalModel } from '../public/regions.js';
 import { addCommunityWorld } from '../public/community-world.js';
-import { judoCharacters, CLIPS, CAST } from '../public/judo-characters.js';
+import { judoCharacters, CAST } from '../public/judo-characters.js';
+// The converted clips (imported ones live in their own files).
+import { BUILT_IN_CLIPS as CLIPS } from '../public/character-clips.js';
 import { World3D } from '../public/world3d.js';
 import { baseEnv } from '../public/missions.js';
 

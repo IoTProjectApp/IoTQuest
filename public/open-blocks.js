@@ -1,3 +1,4 @@
+import { pavement } from './street-network.js';
 import { fromWorld } from './world-math.js';
 import { figure, placeFigure, gaitPose, standPose, SKIN } from './figures.js';
 
@@ -367,7 +368,7 @@ export function addOpenBlocks(model, { sim, origin, box, sphere }) {
   for (const lot of openBlockLots) {
     const b = { ...lot };
     // Entrance from the northern pavement, like the park.
-    const corner = `${Math.floor(b.x / 48) + 1}:3/1/-1`;
+    const corner = pavement(walks, `${Math.floor(b.x / 48) + 1}:3/1/-1`);
     const node = walks.node(`${b.id}:entrance:0`, b.x, 88);
     walks.edge(corner, node);
     walks.edge(node, corner);

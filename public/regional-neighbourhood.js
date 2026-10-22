@@ -1,3 +1,4 @@
+import { pavement } from './street-network.js';
 import { fromWorld } from './world-math.js';
 
 // Convert the older decorative suburb houses into named, selectable private lots.
@@ -43,7 +44,10 @@ export function integrateRegionalNeighbours(model, sim, origin) {
     const stationZ = z + house.facing * (house.d / 2 + 1);
     const corridorZ = z + house.facing * 8;
     const sideX = -48 + block * 48 + (column === perBlock - 1 ? 40 : 8);
-    let previous = `${block + (column === perBlock - 1 ? 1 : 0)}:2/${column === perBlock - 1 ? -1 : 1}/1`;
+    let previous = pavement(
+      sim.map.walks,
+      `${block + (column === perBlock - 1 ? 1 : 0)}:2/${column === perBlock - 1 ? -1 : 1}/1`,
+    );
     for (const [j, [px, pz]] of [
       [sideX, corridorZ],
       [x, corridorZ],

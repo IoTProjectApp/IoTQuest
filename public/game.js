@@ -1,3 +1,4 @@
+import { settingsFor } from './character-settings.js';
 import { recreationLots } from './community-recreation.js';
 import { migrateNeighbourAreas } from './neighbour-profiles.js';
 import { civicLots } from './community-civic.js';
@@ -81,6 +82,7 @@ import {
 } from './custom-quests.js';
 import { buildProgressReport, progressFileName } from './progress-report.js';
 import { understandingQuestions, answerQuestion, understandingScore } from './understanding.js';
+import { readPlayTarget, findPerson, besidePerson } from './editor-play.js';
 const $ = (id) => document.getElementById(id);
 // The test copy at /dev/ (channel.js) saves separately so trying it never changes the main site's
 // progress. It starts from a copy of the main site's progress until it first saves.
@@ -94,16 +96,22 @@ const CHANNEL = globalThis.IOTQUEST_CHANNEL || '',
   IMPORT_BACKUPS = 3;
 const areas = HOME_AREAS.map((a) => [...a]);
 const baseAreas = areas.map((a) => [...a]);
+// A play-test from the IoT Quest Editor (editor-play.js) starts fresh and never saves.
+const PLAY = readPlayTarget(globalThis.location?.search, {
+  locationIds: locations.map((l) => l.id),
+  questCount: missions.length,
+});
 let saved = {};
-try {
-  saved = sanitizeSaved(
-    JSON.parse(
-      localStorage.getItem(STORAGE_KEY) ||
-        (CHANNEL && localStorage.getItem(MAIN_STORAGE_KEY)) ||
-        '{}',
-    ),
-  );
-} catch {}
+if (!PLAY)
+  try {
+    saved = sanitizeSaved(
+      JSON.parse(
+        localStorage.getItem(STORAGE_KEY) ||
+          (CHANNEL && localStorage.getItem(MAIN_STORAGE_KEY)) ||
+          '{}',
+      ),
+    );
+  } catch {}
 let state = {
   mission: 0,
   language: 'cpp',
@@ -423,7 +431,7 @@ function keepUnsavedCode() {
     code: code(),
   };
   try {
-    localStorage.setItem(RECOVERY_KEY, JSON.stringify(unsaved));
+    if (!PLAY) localStorage.setItem(RECOVERY_KEY, JSON.stringify(unsaved));
   } catch {}
   return unsaved;
 }
@@ -510,6 +518,10 @@ function save() {
   clearTimeout(saveTimer);
   saveTimer = null;
   if (staleTab) return;
+  if (PLAY) {
+    $('saved').textContent = 'Editor play-test · progress is not saved';
+    return;
+  }
   if (state.activeLocation !== 'legacy') {
     const p = locationProfile();
     p.mission = state.mission;
@@ -2942,9 +2954,11 @@ function finishTests(m, ds) {
       };
     }
     logs = [m.resident + ': Great work! ' + m.title + ' is complete.'];
+    residentReacts(m.resident, 'thanks');
     toast('✦ Quest complete! ' + m.badge + ' badge · ' + m.xp + ' XP');
   } else {
     logs = ['Tests found something to improve. Review the failed scenarios.'];
+    residentReacts(m.resident, 'fail');
     toast('Some scenarios failed. Check the conditions and try again.');
   }
   recordEvidence({
@@ -4032,6 +4046,13 @@ function residentialResidents(engine = world3d) {
     };
   });
 }
+// A resident's reaction (character-reactions.js) to one of their quests, found by the name the
+// quest gives them.
+function residentReacts(name, trigger) {
+  if (!world3d) return;
+  const key = characterPositions().find((c) => c.name === name)?.key ?? name;
+  world3d.reactTo(key, trigger);
+}
 function characterPositions(engine = world3d) {
   if (engine)
     return engine.model.actors
@@ -4159,7 +4180,11 @@ function leaveVisit() {
 // Moves a walking visitor on by dt seconds; called every frame.
 function updateVisit(dt) {
   const actor = visitor();
-  if (!actor?.walkTo || !stepToward(actor, actor.walkTo, VISIT_SPEED, dt)) return;
+  if (
+    !actor?.walkTo ||
+    !stepToward(actor, actor.walkTo, VISIT_SPEED * settingsFor(actor.id).speed, dt)
+  )
+    return;
   actor.walkTo = null;
   if (visit.phase === 'leaving') return endVisit();
   visit.phase = 'here';
@@ -4232,8 +4257,13 @@ function openConversation(key, area) {
     // A visit is about the room the technician walked into.
     area: area ?? character?.area,
     looksAfter: area && area !== character?.area ? area : null,
+    // Hand-written lines follow the person, whatever the city calls them.
+    person: currentLocation()?.names?.[key] ? key : resident,
+    location: currentLocation() ?? null,
   });
   activeConversation.section = character?.section;
+  // They react to the chat, or to the quests they are thanking the technician for.
+  world3d?.reactTo(key, activeConversation.thanked.length ? 'thanks' : 'chat');
   // Thanks are said once; chats count towards each of this resident's quests in progress reports.
   for (const i of activeConversation.thanked) done(i).thanked = true;
   const chats = (locationProfile().chats ??= {});
@@ -4707,10 +4737,10 @@ function showLocation() {
   updatePlayer();
   save();
 }
-async function enterLocation(id, weather = null) {
+async function enterLocation(id, weather = null, { anyway = false } = {}) {
   const location = locationById(id);
   if (!location) return;
-  if (!isLocationUnlocked(state, location)) {
+  if (!anyway && !isLocationUnlocked(state, location)) {
     toast(
       'Complete ' +
         location.unlockAfter +
@@ -5108,6 +5138,40 @@ function startWorld(createRenderer) {
     $('graphicsMessage').textContent = e.message;
     $('graphicsMessage').hidden = false;
   }
+  if (PLAY) startEditorPlay();
+}
+// Takes an editor play-test to what was being edited: the city, a quest, a spot or a person.
+let editorPlayStarted = false;
+async function startEditorPlay() {
+  if (editorPlayStarted) return;
+  editorPlayStarted = true;
+  const target = PLAY;
+  save();
+  // From the beginning: the globe, as a new player sees it.
+  if (Object.values(target).every((v) => v === null || v === false)) return;
+  if (target.city && target.city !== 'legacy')
+    await enterLocation(target.city, null, { anyway: true });
+  else resumeLegacy();
+  if (target.quest !== null) selectMission(target.quest);
+  let at = target.at;
+  const town = world3d?.model.community?.origin;
+  if (!at && target.place === 'town' && town) at = [town.x, town.z + 12];
+  const person = target.person ? findPerson(characterPositions(), target) : null;
+  if (person) at = besidePerson(person, at || toWorld(state.player));
+  if (at) {
+    const spot = fromWorld(at[0], at[1]);
+    state.player = world3d?.findFree(spot) ?? spot;
+    updatePlayer();
+    // The camera follows the technician from there.
+    if (world3d && !world3d.follow) $('followCamera').click();
+    world3d?.snapCamera?.();
+  }
+  if (person && target.chat) openConversation(person.key);
+  // Maya, Alex and Sam talk even while out of sight, as they do when they call the technician over.
+  else if (!person && target.chat && ['Maya', 'Alex', 'Sam'].includes(target.person))
+    openConversation(target.person);
+  else if (target.person && !person)
+    toast(`${target.name || target.person} is not out right now, so the play-test starts here.`);
 }
 // The world is drawn with three.js, which adds the rigged, animated people; the world starts
 // once three.js has loaded. ?renderer=webgl uses the game's own WebGL renderer instead (the

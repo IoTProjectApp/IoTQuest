@@ -2,6 +2,7 @@ import * as THREE from './vendor/three.module.min.js';
 import { GLTFLoader } from './vendor/three-addons/GLTFLoader.js';
 import { clone } from './vendor/three-addons/SkeletonUtils.js';
 import { Outfits } from './three-outfits.js';
+import { IMPORTED_CLIPS } from './character-clips.js';
 
 // Rigged, animated people for the three.js renderer. The game describes each person every frame
 // and this draws them, loading each character model (public/models/people, converted from Mixamo
@@ -56,7 +57,20 @@ export class ThreeCharacters {
     if (this.clipsRequested) return;
     this.clipsRequested = true;
     this.load('animations').then(
-      (gltf) => (this.clips = new Map(gltf.animations.map((c) => [c.name, c]))),
+      (gltf) => {
+        this.clips = new Map(gltf.animations.map((c) => [c.name, c]));
+        // Clips imported in the Character Editor, each in its own file, join as they arrive.
+        for (const [name, { file }] of Object.entries(IMPORTED_CLIPS))
+          this.loader.loadAsync(new URL(file, BASE).href).then(
+            (clipFile) => {
+              const clip = clipFile.animations[0];
+              if (!clip) return;
+              clip.name = name;
+              this.clips.set(name, clip);
+            },
+            (e) => console.warn('Clip ' + name + ' did not load:', e.message),
+          );
+      },
       () => (this.clips = new Map()),
     );
   }
@@ -168,13 +182,14 @@ export class ThreeCharacters {
       person.root.rotation.y = Math.PI / 2 - state.angle;
       for (const action of person.actions.values()) action.setEffectiveWeight(0);
       for (const { name, time, weight } of state.clips) {
-        const clip = this.clips.get(name);
+        // An imported clip not here yet (or not downloaded) is stood out in the idle.
+        const clip = this.clips.get(name) || (name in IMPORTED_CLIPS && this.clips.get('Idle'));
         if (!clip) continue;
-        let action = person.actions.get(name);
+        let action = person.actions.get(clip.name);
         if (!action) {
           action = person.mixer.clipAction(clip);
           action.play();
-          person.actions.set(name, action);
+          person.actions.set(clip.name, action);
         }
         action.setEffectiveWeight(weight);
         action.time = Math.min(time, clip.duration);

@@ -3,10 +3,16 @@ const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('editorShell', {
   // Saved files by name: 'world-layout' (Map Editor), 'street-layout' (Street Editor),
-  // 'characters' (Character Editor), 'quests' (Quest Editor).
+  // 'characters' and 'clips' (Character Editor), 'quests' (Quest Editor), 'conversations'
+  // (Conversation Editor).
   read: (store) => ipcRenderer.invoke('store:read', store),
   write: (store, value) => ipcRenderer.invoke('store:write', store, value),
   openGame: () => ipcRenderer.invoke('game:open'),
+  // Animation clips: pick a file to import ({ name, ext, bytes } or null), save a converted clip
+  // (binary glTF) as public/models/people/clip-<name>.glb, or remove one.
+  openClip: () => ipcRenderer.invoke('clip:open'),
+  saveClip: (name, bytes) => ipcRenderer.invoke('clip:save', name, bytes),
+  removeClip: (name) => ipcRenderer.invoke('clip:remove', name),
   setUnsaved: (value) => ipcRenderer.send('editor:unsaved', value),
   // Menu commands (save, undo, redo, play-test) arrive as named events.
   onMenu: (handler) => {

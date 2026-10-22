@@ -42,7 +42,7 @@ Each workspace:
 - `/public/…` for the game's own modules;
 - `/editor/ui/…` for the home page and shared files;
 - `/editor/workspaces/…` for the workspaces;
-- `/editor/three/…` for the three.js add-ons the editor needs, taken from `node_modules/three` and pointed at the game's vendored copy.
+- `/editor/three/…` for the three.js add-ons the editor needs, taken from `node_modules/three/examples/jsm` (by short name, such as `OrbitControls.js`, or by path, such as `loaders/FBXLoader.js`) and pointed at the game's vendored copy.
 
 So a workspace imports the game's code with ordinary relative paths (`../../../public/regions.js`), and the same imports work in Node tests. Nothing is cached, so a reload always shows the files as they are on disk. Editor pages may run only their own scripts (a Content Security Policy is set).
 
@@ -217,6 +217,7 @@ The game's people are rigged, motion-captured characters (Mixamo models in `publ
   - **Model:** which of the characters plays them.
   - **Clothes:** top and bottom colours, stripes, a hi-vis vest and its lettering, a cap or hard hat, a backpack and a badge. Each piece can be as built, none (taken off) or your choice.
   - **Movement:** their walk, their standing clip, an activity played on the spot instead of both (or **None** to take away one the code gives them), walking speed, and clip speed.
+  - **Imported clips:** animations brought in from files (see [Importing clips](#importing-clips)).
   - Every row has its own reset arrow, and each section and the whole person can be reset too.
 
 Changes show on the stage at once. Undo and redo (`⌘Z`, `⇧⌘Z`) cover every change. **Save** (`⌘S`) writes them all, and **Play-test** opens the game.
@@ -248,6 +249,29 @@ export default {
 - **Order:** a person's own settings come before `defaults`, and both before what the code picks.
 - **Ids** are the game's own: `player` is the technician, and others look like `Maya`, `worker:shop-floor:0` or `bus:0:1>1:1:2`.
 - **An empty file** leaves everyone as the code makes them, which `tests/character-settings.test.mjs` checks. `public/character-settings.js` applies the settings.
+
+### Importing clips
+
+**Import clip…** (in the inspector's **Imported clips** section) brings in an animation from a `.glb`, `.gltf` (with its data inside it) or `.fbx` file, such as a Mixamo download.
+
+1. Pick the file. Its first animation is fitted to the game's skeleton by bone name (`mixamorig:Hips`, `mixamorig1:Hips` and plain `Hips` all find `mixamorigHips`). A clip in metres is scaled to the game's centimetres. A clip none of whose bones match is refused; bones the clip does not move hold their pose, and the panel says how many match.
+2. Choose **On the spot** (it plays where the person stands, as an idle or activity) or **A walk**. A walk must travel (download Mixamo walks with _In Place_ off): the editor measures how far one cycle goes, its stride, so feet keep pace when the game moves the person. Either way the travel is taken out of the clip, as with the game's own clips.
+3. It plays on whoever is picked. Name it (letters and digits, starting with a capital, not a name already taken) and click **Add to the game**.
+
+The clip is saved, with nothing but a bare skeleton, as `public/models/people/clip-<Name>.glb`, and listed in `public/data/clips.js`. It can then be picked as anyone's walk, standing clip or activity. The bin button removes it (its file too); anyone set to play it goes back to as built.
+
+```js
+export default {
+  version: 1,
+  clips: {
+    Waving: { file: 'clip-Waving.glb', duration: 2.4 },
+    Strut: { file: 'clip-Strut.glb', duration: 1.1, stride: 1.3 },
+  },
+};
+```
+
+- **The game** (`public/character-clips.js`) adds each valid entry to its clips, and the renderer loads each file after the game's own clips. With the file empty the game is exactly as before (`tests/character-clips.test.mjs`).
+- **Publishing a clip:** `public/models/` is not committed, because Mixamo's terms keep their files out of this public repository. Commit `public/data/clips.js` here, and add the clip's `.glb` to the private models repository (`IoTProjectApp/iotquest-models`, folder `people/`), then update `COMMIT` in `scripts/fetch-models.mjs`. Until a clip's file is there, anyone set to play it stands in the Idle clip instead.
 
 ## Quest Editor
 

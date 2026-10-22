@@ -6,7 +6,8 @@
 //       edits: { [groupId]: { pos: [x, y, z], turn, scale } | { removed: true } },
 //       added: [{ id, name, pos: [x, y, z], turn, scale, parts: [...], colliders: [...] }] } } }
 // `pos` is where the group's base centre goes (the middle of its footprint, at its lowest point),
-// `turn` a rotation about the vertical axis in radians and `scale` a uniform size factor. Added
+// `turn` a rotation about the vertical axis in radians, and `scale` its size: one factor, or
+// [across, up, along] factors on the group's own unturned x, y and z (stretching it). Added
 // objects carry their own parts, measured from a base centre at the origin. An empty layout leaves
 // the world exactly as built.
 import WORLD_LAYOUT from './data/world-layout.js';
@@ -43,11 +44,21 @@ export function turnRotation(rotation, turn) {
 // Where a point lands when its group's base centre moves from `from` to `to`, turning and scaling
 // about that centre.
 function place([x, y, z], from, { pos: to, turn = 0, scale = 1 }) {
-  const dx = (x - from[0]) * scale,
-    dz = (z - from[2]) * scale,
+  const [sx, sy, sz] = scaleOf(scale),
+    dx = (x - from[0]) * sx,
+    dz = (z - from[2]) * sz,
     c = Math.cos(turn),
     s = Math.sin(turn);
-  return [to[0] + dx * c + dz * s, to[1] + (y - from[1]) * scale, to[2] - dx * s + dz * c];
+  return [to[0] + dx * c + dz * s, to[1] + (y - from[1]) * sy, to[2] - dx * s + dz * c];
+}
+// A placement's size as three factors (one factor stands for all three).
+export const scaleOf = (scale = 1) => (Array.isArray(scale) ? scale : [scale, scale, scale]);
+// How much a part's side `axis` grows when its group stretches by [sx, sy, sz]: exact for parts
+// square-on to the group, close for parts turned within it.
+function stretch(rotation, axis, [sx, sy, sz]) {
+  if (sx === sy && sy === sz) return sx;
+  const r = rotationMatrix(rotation);
+  return Math.hypot(r[0][axis] * sx, r[1][axis] * sy, r[2][axis] * sz);
 }
 // World-space bounds of a set of meshes (each as its rotated box).
 export function partBounds(parts) {
@@ -99,14 +110,15 @@ export function snapshotGroup(group) {
 }
 // Places a group (from its snapshot) at `placement`: { pos, turn, scale }.
 export function transformGroup(group, snapshot, placement) {
-  const { turn = 0, scale = 1 } = placement,
+  const { turn = 0 } = placement,
+    scale = scaleOf(placement.scale),
     from = snapshot.pivot,
     c = Math.abs(Math.cos(turn)),
     s = Math.abs(Math.sin(turn));
   group.parts.forEach((part, i) => {
     const o = snapshot.parts[i];
     part.pos = place(o.pos, from, placement);
-    part.size = o.size.map((v) => v * scale);
+    part.size = o.size.map((v, axis) => v * stretch(o.rotation, axis, scale));
     part.rotation = turnRotation(o.rotation, turn);
     if (o.anchor) part.anchor = place(o.anchor, from, placement);
   });
@@ -116,8 +128,8 @@ export function transformGroup(group, snapshot, placement) {
     Object.assign(collider, {
       x,
       z,
-      w: (o.w * c + o.d * s) * scale,
-      d: (o.d * c + o.w * s) * scale,
+      w: o.w * scale[0] * c + o.d * scale[2] * s,
+      d: o.d * scale[2] * c + o.w * scale[0] * s,
     });
   });
   group.pivot = [...placement.pos];

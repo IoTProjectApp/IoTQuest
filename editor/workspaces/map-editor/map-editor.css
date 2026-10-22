@@ -502,3 +502,6 @@ body {
 .shortcuts dd {
   margin: 0;
 }
+.axis.size b {
+  color: var(--muted);
+}

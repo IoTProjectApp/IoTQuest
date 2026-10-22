@@ -1,9 +1,10 @@
 // The Map Editor workspace: tools, catalogue, inspector, saving and switching cities.
 import { locations, locationById, continents } from '../../../public/locations.js';
 import { WorldSession } from './session.js';
-import { Viewport } from './viewport.js';
+import { Viewport, dimensions } from './viewport.js';
 import { catalogueItems, Thumbnails } from './catalogue.js';
 import { CATEGORIES } from './names.js';
+import { scaleOf } from '../../../public/world-layout.js';
 import { icon } from '../../ui/icons.js';
 
 const shell = window.editorShell;
@@ -24,7 +25,7 @@ const TOOLS = {
 const GIZMO = {
   translate: { label: 'Move', icon: 'move', key: 'G' },
   rotate: { label: 'Turn', icon: 'rotate', key: 'R' },
-  scale: { label: 'Size', icon: 'scale', key: 'S' },
+  scale: { label: 'Resize', icon: 'scale', key: 'S' },
 };
 
 const state = {
@@ -95,6 +96,13 @@ const viewport = new Viewport($('canvas'), {
       stopPlacing();
       select(state.session.groups.get(id));
     }
+  },
+  // While a resize handle is dragged, the inspector shows the size as it changes.
+  onResize(group, placement) {
+    dimensions(group, placement.scale).forEach((v, i) => {
+      const input = document.querySelector(`[data-size="${i}"]`);
+      if (input) input.value = v.toFixed(2);
+    });
   },
   onTransformEnd(id, placement) {
     state.session.move(id, placement, GIZMO[state.gizmo].label);
@@ -198,6 +206,7 @@ function setGizmo(mode) {
   state.gizmo = mode;
   viewport.setGizmoMode(mode);
   for (const b of $('gizmo-modes').children) b.classList.toggle('active', b.dataset.mode === mode);
+  hint();
 }
 function setSnap(on) {
   viewport.setSnap(on);
@@ -232,20 +241,27 @@ function hint() {
         ? keys(['Click', 'an object to remove it'], ['⌘Z', 'brings it back'])
         : state.tool === 'camera'
           ? keys(['Drag', 'to orbit'], ['Right-drag', 'to pan'], ['Scroll', 'to zoom'])
-          : viewport.selected
+          : viewport.selected && state.gizmo === 'scale'
             ? keys(
-                ['Drag the handles', 'to move'],
-                ['G R S', 'move, turn, size'],
-                ['F', 'focus'],
-                ['Delete', 'removes'],
+                ['Drag a square', 'to stretch that way'],
+                ['the round one or Shift', 'resizes evenly'],
+                ['G', 'back to moving'],
                 ['Esc', 'deselects'],
               )
-            : keys(
-                ['Click', 'an object to select it'],
-                ['Drag', 'to orbit'],
-                ['Right-drag', 'to pan'],
-                ['Scroll', 'to zoom'],
-              );
+            : viewport.selected
+              ? keys(
+                  ['Drag the handles', 'to move'],
+                  ['G R S', 'move, turn, size'],
+                  ['F', 'focus'],
+                  ['Delete', 'removes'],
+                  ['Esc', 'deselects'],
+                )
+              : keys(
+                  ['Click', 'an object to select it'],
+                  ['Drag', 'to orbit'],
+                  ['Right-drag', 'to pan'],
+                  ['Scroll', 'to zoom'],
+                );
   $('hint').innerHTML = text;
 }
 
@@ -377,7 +393,7 @@ function renderInspector() {
       <div class="id">${escape(group.id)}</div>
       <div class="chips">
         <span class="chip">${category}</span>
-        <span class="chip ${changed ? 'changed' : ''}">${added ? 'Added' : changed ? 'Moved' : 'As built'}</span>
+        <span class="chip ${changed ? 'changed' : ''}">${added ? 'Added' : changed ? 'Changed' : 'As built'}</span>
       </div>
       ${group.caution ? `<div class="caution">${icon('warning', 16)}<span>${escape(group.caution)}</span></div>` : ''}
     </section>
@@ -393,8 +409,19 @@ function renderInspector() {
       </div>
       <div class="grid2">
         <label class="field"><span>Turn (degrees)</span><input class="input" id="turn" type="number" step="15" value="${(((p.turn || 0) * DEGREES) % 360).toFixed(1)}" /></label>
-        <label class="field"><span>Size (×)</span><input class="input" id="scale" type="number" step="0.05" min="0.1" value="${(p.scale ?? 1).toFixed(2)}" /></label>
       </div>
+    </section>
+    <section>
+      <h3>Size (metres)</h3>
+      <div class="grid3">
+        ${dimensions(group)
+          .map(
+            (v, i) =>
+              `<label class="axis size"><b>${'WHD'[i]}</b><input class="input" data-size="${i}" type="number" step="0.05" min="0.05" value="${v.toFixed(2)}" aria-label="${['width', 'height', 'depth'][i]}" ${group.box.max[i] - group.box.min[i] > 1e-3 ? '' : 'disabled'} /></label>`,
+          )
+          .join('')}
+      </div>
+      <p class="muted" style="margin-top:8px;font-size:12px">Or press <kbd>S</kbd> and drag the handles.</p>
     </section>
     <section>
       <div class="actions">
@@ -410,11 +437,20 @@ function renderInspector() {
         return Number.isFinite(v) ? v : p.pos[i];
       }),
       turn = parseFloat($('turn').value),
-      scale = parseFloat($('scale').value);
+      // A typed size in metres becomes that side's factor, measured from the size as built.
+      { min, max } = group.box,
+      scale = [...el.querySelectorAll('[data-size]')].map((input, i) => {
+        const metres = parseFloat(input.value),
+          extent = max[i] - min[i],
+          before = scaleOf(p.scale)[i];
+        return Number.isFinite(metres) && metres >= 0.05 && extent > 1e-3
+          ? metres / extent
+          : before;
+      });
     s.move(group.id, {
       pos,
       turn: Number.isFinite(turn) ? turn / DEGREES : p.turn,
-      scale: Number.isFinite(scale) && scale >= 0.1 ? scale : p.scale,
+      scale,
     });
   };
   for (const input of el.querySelectorAll('input')) {

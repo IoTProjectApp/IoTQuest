@@ -52,6 +52,15 @@ const STORES = {
       typeof v.clips === 'object' &&
       !Array.isArray(v.clips),
   },
+  models: {
+    file: join(PUBLIC, 'data', 'models.js'),
+    about: 'Character models imported in the Character Editor',
+    valid: (v) =>
+      v?.version === 1 &&
+      v.models !== null &&
+      typeof v.models === 'object' &&
+      !Array.isArray(v.models),
+  },
   'street-layout': {
     file: join(PUBLIC, 'data', 'street-layout.js'),
     about: "The town's street layout, written by the Street Editor",
@@ -327,6 +336,40 @@ ipcMain.handle('clip:save', async (_, name, bytes) => {
 });
 ipcMain.handle('clip:remove', async (_, name) => {
   await unlink(clipFile(name)).catch((error) => {
+    if (error.code !== 'ENOENT') throw error;
+  });
+});
+// Character models (Character Editor): a rigged body picked to import, and the converted model
+// saved beside the others as public/models/people/model-<Name>.glb.
+ipcMain.handle('model:open', async () => {
+  const picked = await dialog.showOpenDialog(editor, {
+    title: 'Import a character model',
+    properties: ['openFile'],
+    filters: [{ name: 'Rigged character (glTF or FBX)', extensions: ['glb', 'gltf', 'fbx'] }],
+  });
+  if (picked.canceled || !picked.filePaths.length) return null;
+  const path = picked.filePaths[0],
+    ext = extname(path).slice(1).toLowerCase();
+  if (!['glb', 'gltf', 'fbx'].includes(ext)) throw Error('Pick a .glb, .gltf or .fbx file');
+  if ((await stat(path)).size > 128 * MB) throw Error('That file is over 128 MB');
+  return { name: basename(path), ext, bytes: new Uint8Array(await readFile(path)) };
+});
+const modelFile = (name) => {
+  if (typeof name !== 'string' || !CLIP_NAME.test(name)) throw Error('Not a model name: ' + name);
+  return join(CLIP_FOLDER, 'model-' + name + '.glb');
+};
+ipcMain.handle('model:save', async (_, name, bytes) => {
+  const file = modelFile(name),
+    data = Buffer.from(bytes);
+  if (data.length > 64 * MB) throw Error('The converted model is over 64 MB');
+  if (data.subarray(0, 4).toString('latin1') !== 'glTF') throw Error('Not a binary glTF model');
+  await mkdir(CLIP_FOLDER, { recursive: true });
+  await writeFile(file + '.tmp', data);
+  await rename(file + '.tmp', file);
+  return basename(file);
+});
+ipcMain.handle('model:remove', async (_, name) => {
+  await unlink(modelFile(name)).catch((error) => {
     if (error.code !== 'ENOENT') throw error;
   });
 });

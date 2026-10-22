@@ -3,6 +3,7 @@ import { instructorAt } from './judo-class.js';
 import { CLIPS, walkTime } from './character-clips.js';
 import { JUDO_GI } from './character-outfits.js';
 import { settingsFor, dressed } from './character-settings.js';
+import { knownModel } from './character-models.js';
 
 export { CLIPS };
 
@@ -114,7 +115,9 @@ export function judoCharacters(judo, t, reduced) {
       key: person.actor.id,
       // The Character Editor may change who plays them and what they wear, never their moves,
       // which the class's routine is timed to.
-      model: settingsFor(person.actor.id).model || CAST[person.actor.id],
+      model: knownModel(settingsFor(person.actor.id).model)
+        ? settingsFor(person.actor.id).model
+        : CAST[person.actor.id],
       x: person.origin.x + at[0],
       y: MAT,
       z: person.origin.z + at[1],

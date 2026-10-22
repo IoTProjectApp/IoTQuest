@@ -3,6 +3,7 @@ import { GLTFLoader } from './vendor/three-addons/GLTFLoader.js';
 import { clone } from './vendor/three-addons/SkeletonUtils.js';
 import { Outfits } from './three-outfits.js';
 import { IMPORTED_CLIPS } from './character-clips.js';
+import { modelFile, modelHeight } from './character-models.js';
 
 // Rigged, animated people for the three.js renderer. The game describes each person every frame
 // and this draws them, loading each character model (public/models/people, converted from Mixamo
@@ -96,8 +97,9 @@ export class ThreeCharacters {
       if (!o.isSkinnedMesh) return;
       o.frustumCulled = false;
       o.castShadow = this.shadows;
-      // The textures carry the colour; Mixamo's grey base colour would only darken them.
-      for (const m of [].concat(o.material)) m.color.set(0xffffff);
+      // The textures carry the colour; Mixamo's grey base colour would only darken them. (An
+      // imported model's untextured pieces keep their colour: character-models.js.)
+      for (const m of [].concat(o.material)) if (!m.userData.keepColour) m.color.set(0xffffff);
     });
     this.outfits.dress(root, state.file, state.outfit);
     const hips = root.getObjectByName('mixamorigHips');
@@ -158,9 +160,10 @@ export class ThreeCharacters {
     for (const state of states) {
       let person = this.people.get(state.key);
       const distance = Math.hypot(state.x - eye[0], state.y - eye[1], state.z - eye[2]),
-        wasLow = person?.file === state.model + '-low',
+        wasLow = person?.file === modelFile(state.model, true),
         low = this.lowDetail || distance > (wasLow ? NEAR : FAR),
-        file = state.model + (low ? '-low' : '');
+        // An imported model (character-models.js) has one file, near and far.
+        file = modelFile(state.model, low);
       this.load(file);
       const entry = this.models.get(file);
       // Until the wanted version has loaded, keep the one already shown, if any.
@@ -175,8 +178,9 @@ export class ThreeCharacters {
       seen.add(state.key);
       person.root.visible = person.shadow.visible = true;
       person.root.position.set(state.x, state.y, state.z);
-      person.root.scale.setScalar(state.scale || 1);
-      person.shadow.scale.setScalar(state.scale || 1);
+      const scale = (state.scale || 1) * modelHeight(state.model);
+      person.root.scale.setScalar(scale);
+      person.shadow.scale.setScalar(scale);
       if (person.carry && state.carry) person.carry.material.color.set(state.carry);
       // Models face +z; angle 0 faces +x.
       person.root.rotation.y = Math.PI / 2 - state.angle;

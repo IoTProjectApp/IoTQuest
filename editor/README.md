@@ -375,6 +375,32 @@ Waving: {
 
 `base` is the whole body as the clip it started from has it, and each pose turns joints from there. The game reads only the file and duration; `tests/pose-editor.test.mjs` checks the filling in, mirroring, the checks and the saved form.
 
+### Importing your own models
+
+**Import model…** (in the inspector's **Imported bodies** section) brings in a rigged character from a `.glb`, `.gltf` (with its data inside it) or `.fbx` file: a Mixamo character, a Ready Player Me avatar, or a Blender export of a Mixamo-rigged body.
+
+1. Pick the file. Its skinned pieces are fitted to the game's form (`editor/workspaces/character-editor/model-import.js`):
+   - **Bones** are renamed to Mixamo's (`mixamorig:Hips`, `mixamorig7Hips`, `mixamorig_Hips`, `Armature|Hips`, `Hips_01` and Ready Player Me's plain `Hips` all become `mixamorigHips`), so the game's clips play on it by name. It needs the main 19 bones (hips, spine, neck, head, both arms down to the hands, both legs down to the feet); a model without them is refused with the ones it lacks. Without `Spine2` or the toes it is accepted, and the panel says what sits less well.
+   - **Stood up** (head above hips), **turned** to face forward (its left hip on +x), with its **hips as high as the game's people's** (0.977 m) and its feet on the ground.
+   - **In centimetres under a 0.01 scale**, each bone keeping its rest turn, each piece rebound to the moved bones, its materials made the game's (an untextured piece keeps its colour). Pieces that are not rigged are left out, and counted.
+2. It shows on stage wearing the picked person's clothes and playing their clips: switch **Standing** and **Walking** to try it. Outfits are measured from the body, as on the game's own models; recolouring the top and bottom needs separate pieces named like Mixamo's (`Shirt`, `Pants`; a Ready Player Me `…Outfit_Top`/`…Outfit_Bottom` is renamed to match).
+3. Name it (letters and digits, starting with a capital, not taken), choose **A man** or **A woman** (how it is listed), set its **height** against the game's people (worked out from the file when its units are metres or centimetres), and click **Add to the game**.
+
+It is saved as `public/models/people/model-<Name>.glb` and listed in `public/data/models.js`. It can then be picked under **Played by** for anyone. The bin button removes it (its file too); anyone set to it goes back to as built.
+
+```js
+export default {
+  version: 1,
+  models: {
+    Robin: { file: 'model-Robin.glb', woman: true, height: 0.92 },
+  },
+};
+```
+
+- **The game** (`public/character-models.js`) draws an imported model from its one file near and far (the game's own have a light version for distance and software WebGL), scaled by its height. A setting that names a model the game does not have plays that person as built. With the file empty the game is exactly as before (`tests/character-models.test.mjs`).
+- **Publishing a model:** as with clips, commit `public/data/models.js` here and add the model's `.glb` to the private models repository, then update `COMMIT` in `scripts/fetch-models.mjs`. Until its file is there, anyone set to it is drawn as their jointed stand-in figure.
+- **Not imported:** a model's own animations (import them as clips), extra rigid parts parented to bones, and models whose skeleton is not Mixamo-style (rig them in Mixamo first).
+
 ## Quest Editor
 
 A quest is a request from someone in the game: wire some sensors and outputs, and program when each output turns on. The Quest Editor writes new quests and changes the built-in ones.

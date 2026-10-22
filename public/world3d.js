@@ -4,6 +4,7 @@ import { addCommunityWorld, updateCommunityWorld, STREET_LIGHT_LEVEL } from './c
 import { updateLandscape } from './landscape.js';
 import { isHousehold } from './section-residents.js';
 import { castFor, isWoman, TECHNICIAN } from './people-cast.js';
+import { knownModel } from './character-models.js';
 import { CLIPS, walkTime } from './character-clips.js';
 import { settingsFor, dressed, knownClip } from './character-settings.js';
 import { Reactions, conditionsFrom } from './character-reactions.js';
@@ -1013,7 +1014,7 @@ export class World3D {
     }
     return {
       key,
-      model: set.model || castFor(key, '', woman),
+      model: knownModel(set.model) ? set.model : castFor(key, '', woman),
       outfit: dressed(outfitFor(key), set.outfit),
       ...at,
       clips,
@@ -1056,7 +1057,7 @@ export class World3D {
     return {
       key: actor.id,
       model:
-        set.model ||
+        (knownModel(set.model) && set.model) ||
         (technician ? TECHNICIAN[state.appearance] || 'Adam' : castFor(actor.id, name)),
       x,
       y: floor,

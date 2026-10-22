@@ -304,6 +304,8 @@ A quest is a request from someone in the game: wire some sensors and outputs, an
   - **Tests:** readings to try and whether each output should be **ON** or **OFF**. A test the rules disagree with is shaded red.
     - **Results from the rules** sets every test's results from the rules.
     - **Suggest tests** adds a test either side of each threshold.
+    - **Make it timed** turns one of your quests into a timed quest (below): its tests become steps and its rules a worked program.
+  - **Sequences** and **Worked program**, for a timed quest, in place of rules and tests (see [Timed quests](#timed-quests)).
 - **The check** on the right, run again after every change. It shows whether the quest is **Ready to play**, or what to fix; how the worked solution does on each board and language; its code; and the Guide's steps.
 
 ### Changing built-in quests
@@ -311,21 +313,38 @@ A quest is a request from someone in the game: wire some sensors and outputs, an
 Pick a built-in quest to change it in place:
 
 - **Rule quests:** their story, devices, rules and tests.
-- **Timed quests,** which play out over time with sequences of their own: their story only.
+- **Timed quests:** their story, sequences and worked program (their devices stay as built).
+- **Repair and expedition quests** (Find the Wrong Pin, Repair the Missing Ground, Threshold Detective, the Final Expedition), which check the student's work with code of their own: their story only. They are marked "story only" in the list.
 
 Changed quests are marked in the list. **Reset to original** puts a quest back, and **Copy as a new quest** makes a separate quest of your own instead. A changed quest is checked exactly like a new one before it can be saved. If you change a threshold, the check also warns when the goal, hint or the resident's words still give the old number.
 
 What the game does on top of your changes:
 
 - **Local titles:** each city gives the first eight quests a local title of its own, so a new title for one of those shows only where none is set.
-- **Advanced versions:** some quests have an Advanced version with rules of its own. If you change a quest's devices, rules or tests, yours apply at both levels.
+- **Advanced versions:** some quests have an Advanced version with rules or sequences of its own. If you change a quest's devices, rules, tests, sequences or worked program, yours apply at both levels.
 - **Every city:** changes apply wherever the quest is played.
+
+### Timed quests
+
+Some behaviour can't be proved by single readings: a fan that waits for two thresholds before it changes (no flicker), a light that stays on for a minute after the last movement, a counter, a program that copes with a network outage or a restart. A **timed quest** proves it with **sequences**: each one plays its **steps** in order on one running program, which keeps its variables from step to step.
+
+- **A step** has a label; the readings it changes (a reading left at – carries on from before); how long it lasts in seconds; and, for each output, what it must be at the end of the step: **ON**, **OFF**, **either**, or a **brightness** from 0 to 255. Click an output to go round those.
+- **Events:** a step can also **restart** the controller (a power cut: variables are lost) or make the **network drop** or **come back**, and it can send an MQTT message (`topic = payload`) at its start.
+- **At the start:** the readings before the first step. **Tick** is how far the program's clock moves on each pass (200 ms unless set).
+- **The worked program** proves the quest can be passed. It is written once in a small C-like form (the one `public/catalogue-program.js` describes) and turned into Arduino C++ and MicroPython for the quest's wiring: its **variables** and their starting values, what runs **at start**, what runs **on every pass** (each sensor is read first into a variable named after its reading, such as `temp`; `write(fan, 1)` switches an output, `pwm(led, 128)` sets a brightness, `print(x)` prints a line), and how long it **waits each pass**.
+
+What stays as coded:
+
+- **Coded checks.** Some built-in steps also check what the program printed or published (a counter's total, an MQTT message), with code written into the quest. They are marked **coded check**: their readings, length and expected outputs can change, but the check itself stays as coded, and goes if you remove its step. A quest with coded checks cannot be copied.
+- **A timed quest's devices.** Its program and steps are written for them.
+
+A timed quest is checked like any other: the worked program must pass every sequence on both boards in both languages, and a program that does nothing must fail. If they disagree, **What fails** in the check says where, for example `At "30 °C" (3 s in) the cooling fan should be ON, but it is OFF.`
 
 ### The check
 
 Saving needs every one of your quests to pass, so a saved quest can always be played:
 
-- it builds: devices exist, there is one rule per output, the rules read only chosen sensors, and every test sets real readings and gives each output on or off;
+- it builds: devices exist, there is one rule per output, the rules read only chosen sensors, and every test sets real readings and gives each output on or off (for a timed quest: every step sets real readings, lasts some time and expects something of each output, and the worked program's variables are named and start as numbers or text);
 - its title is its own;
 - its wiring is valid on the ESP32 and the Raspberry Pi Pico;
 - the worked solution made from its rules passes every test, and the automatic tests at each threshold, on both boards in both Arduino C++ and MicroPython;
@@ -364,6 +383,8 @@ export default {
 };
 ```
 
+- **A timed quest** has `sequences` and `solution` instead of `conditions` and `scenarios`:
+  `"sequences": [{"name": "Two thresholds, no flicker", "steps": [{"label": "30 °C", "env": {"temp": 30}, "ms": 1000, "expect": [1]}]}], "solution": {"state": {"fanOn": 0}, "loop": "if (temp >= 30) {\n  fanOn = 1;\n}\nwrite(fan, fanOn);"}`. In a built-in quest's changes, a step with a coded check holds `"check": {"coded": [0, 3]}`, naming the sequence and step where that check sits in the quest as coded.
 - **Changes to built-in quests** go in `edits`, keyed by the quest's place in the game's list, with only the fields that differ, and `of` naming the quest's own title: `"edits": {"builtin:0": {"of": "Light the Path", "title": "Light the Garden Path", "conditions": ["light < 2000"], "scenarios": [...]}}`. If the code moves or renames that quest, the change is left out (with a warning) rather than landing on another quest. A change that would make the quest unplayable is left out too.
 - **Test readings** are stored as the game stores them, with light-type sensors as levels 0–100 that a program reads as level × 40.95. The editor shows and takes program readings.
 - **Your quests come after the built-in quests,** in the file's order. The game remembers progress by a quest's place in that list, so adding quests never disturbs saved games. Deleting one of your quests moves the ones after it up, and the editor warns you.

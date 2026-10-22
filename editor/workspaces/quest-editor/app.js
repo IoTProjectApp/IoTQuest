@@ -1,7 +1,8 @@
 // The Quest Editor workspace: your quests and the built-in ones, the quest form (story, devices,
-// rules, tests), the live check, and saving to public/data/quests.js.
+// rules and tests, or a timed quest's sequences and worked program), the live check, and saving to
+// public/data/quests.js.
 import { components, defaults, missions } from '../../../public/missions.js';
-import { isRuleQuest } from '../../../public/authored-quests.js';
+import { isRuleQuest, isTimedQuest } from '../../../public/authored-quests.js';
 import { HOME_AREAS } from '../../../public/home-areas.js';
 import { readingRange } from '../../../public/diagnostics.js';
 import { coachSteps } from '../../../public/code-coach.js';
@@ -10,6 +11,7 @@ import {
   checkQuest,
   builtInQuests,
   resultsFromRules,
+  canCopy,
   toReading,
   toLevel,
   device,
@@ -81,7 +83,7 @@ function renderList() {
   const mine = s.quests.filter(match),
     // Built-in quests as they now stand (with your changes), edited ones marked.
     theirs = builtIn
-      .map((_, i) => ({ m: s.builtInSpec(i), i, timed: !isRuleQuest(missions[i]) }))
+      .map((_, i) => ({ m: s.builtInSpec(i), i, kind: kindOf(i) }))
       .filter(({ m }) => match(m));
   const active = (kind, id) => state.pick?.kind === kind && state.pick.id === id;
   $('list').innerHTML =
@@ -98,12 +100,12 @@ function renderList() {
       : `<p class="empty">${search ? 'None match.' : 'None yet: start one with New quest, or copy a built-in quest.'}</p>`) +
     `<h3>Built-in quests</h3>` +
     theirs
-      .map(({ m, i, timed }) => {
+      .map(({ m, i, kind }) => {
         const edited = s.isEdited(i),
           ok = edited && !checkBuiltInOf(i).errors.length;
         return `<button class="entry ${active('builtin', i) ? 'active' : ''}" data-builtin="${i}" title="${escape(m.area)} · ${escape(m.resident)}${edited ? ' · changed' : ''}">
           ${edited ? `<span class="state ${ok ? 'ok' : 'bad'}" title="${ok ? 'Changed, ready' : 'Changed, has problems'}"></span>` : ''}
-          <span class="label">${escape(m.title)}</span><span class="meta">${timed ? 'timed' : ''}</span></button>`;
+          <span class="label">${escape(m.title)}</span><span class="meta">${kind === 'rules' ? '' : kind === 'timed' ? 'timed' : 'story only'}</span></button>`;
       })
       .join('');
   for (const b of $('list').querySelectorAll('[data-mine]'))
@@ -121,6 +123,11 @@ function pick(target) {
   $('form').scrollTop = 0;
 }
 
+// What can change on a built-in quest: rules (devices, rules, tests), timed (sequences and worked
+// program) or story only (repair and expedition quests, which play as coded).
+const kindOf = (index) =>
+  isRuleQuest(missions[index]) ? 'rules' : isTimedQuest(missions[index]) ? 'timed' : 'story';
+
 // ---- The form -------------------------------------------------------------------------------
 function render() {
   renderList();
@@ -131,7 +138,7 @@ function render() {
     renderMine(s.builtInSpec(pickNow.id), {
       kind: 'builtin',
       index: pickNow.id,
-      timed: !isRuleQuest(missions[pickNow.id]),
+      storyOnly: kindOf(pickNow.id) === 'story',
     });
   else {
     $('form').innerHTML = `<div class="blank"><h2>Write a quest</h2>
@@ -152,14 +159,15 @@ const options = (list, selected) =>
     )
     .join('');
 
-// One quest's form: one of yours, or a built-in one (target.kind 'builtin', with its index; a timed
-// one shows its story only).
+// One quest's form: one of yours, or a built-in one (target.kind 'builtin', with its index; one
+// that is neither a rule quest nor a timed one shows its story only).
 function renderMine(q, target = { kind: 'mine' }) {
   const s = state.session,
     builtInQuest = target.kind === 'builtin',
+    timed = Array.isArray(q.sequences),
     outputs = outputsOf(q),
     sensors = sensorsOf(q),
-    fromRules = resultsFromRules(q),
+    fromRules = timed ? [] : resultsFromRules(q),
     pins = (id) =>
       BOARDS.map((board) => {
         const d = defaults(q.ids, board).find((x) => x.id === id);
@@ -171,7 +179,7 @@ function renderMine(q, target = { kind: 'mine' }) {
       ${
         builtInQuest
           ? `<button class="button" id="reset-quest" ${s.isEdited(target.index) ? '' : 'disabled'}>${icon('reset', 16)}Reset to original</button>
-             <button class="button" id="copy" ${target.timed ? 'disabled' : ''}>${icon('copy', 16)}Copy as a new quest</button>`
+             <button class="button" id="copy" ${canCopy(missions[target.index]) ? '' : 'disabled title="Its checks of what the program prints or publishes are code, which a copy cannot keep."'}>${icon('copy', 16)}Copy as a new quest</button>`
           : `<button class="button" id="duplicate">${icon('copy', 16)}Duplicate</button>
              <button class="button danger" id="delete">${icon('erase', 16)}Delete</button>`
       }
@@ -201,10 +209,14 @@ function renderMine(q, target = { kind: 'mine' }) {
       <datalist id="residents">${RESIDENTS.map((r) => `<option value="${escape(r)}"></option>`).join('')}</datalist>
     </section>
     ${
-      target.timed
-        ? `<section class="card"><h2>Devices, rules and tests</h2><p class="sub">A timed quest plays out over time with sequences of its own, so only its story can change here. It plays as the game makes it.</p>
+      target.storyOnly
+        ? `<section class="card"><h2>Devices and checks</h2><p class="sub">A repair or expedition quest checks the student's work with code of its own, so only its story can change here. It plays as the game makes it.</p>
             <div class="devices">${q.ids.map((id) => `<span class="device ${device(id)?.output ? 'output' : ''}"><span class="kind">${device(id)?.output ? 'Output' : 'Sensor'}</span>${escape(device(id)?.name || id)}</span>`).join('')}</div></section>`
-        : `
+        : timed && builtInQuest
+          ? `<section class="card"><h2>Devices</h2><p class="sub">A timed quest's devices stay as built: its worked program and steps are written for them.</p>
+            <div class="devices">${q.ids.map((id) => `<span class="device ${device(id)?.output ? 'output' : ''}"><span class="kind">${device(id)?.output ? 'Output' : 'Sensor'}</span>${escape(device(id)?.name || id)}<span class="pins">${pins(id)}</span></span>`).join('')}</div></section>
+            ${timedCards(q)}`
+          : `
     <section class="card">
       <h2>Devices</h2>
       <p class="sub">What students install and wire. Pins are assigned the way the game assigns them.</p>
@@ -227,7 +239,10 @@ function renderMine(q, target = { kind: 'mine' }) {
         </select>
       </div>
     </section>
-    <section class="card">
+    ${
+      timed
+        ? timedCards(q)
+        : `<section class="card">
       <h2>Rules</h2>
       <p class="sub">When each output turns on. The worked solution and the automatic limit tests are made from these.</p>
       ${outputs.map((id, i) => ruleEditor(q, id, i, sensors)).join('') || '<p class="sub">Add an output first.</p>'}
@@ -258,12 +273,288 @@ function renderMine(q, target = { kind: 'mine' }) {
         <button class="button" id="add-test">${icon('plus', 16)}Add test</button>
         <button class="button" id="from-rules" title="Set every test's results to what the rules say">${icon('check', 16)}Results from the rules</button>
         <button class="button" id="suggest" title="Add a test either side of each threshold">${icon('reset', 16)}Suggest tests</button>
+        ${builtInQuest ? '' : `<button class="button" id="make-timed" title="For behaviour that depends on what happened before (timers, latches, counters): the tests become timed steps and the rules a worked program">${icon('play', 16)}Make it timed</button>`}
       </div>
     </section>`
+    }`
     }`;
   bindMine(q, target);
   renderCheck(q, builtInQuest ? checkBuiltInOf(target.index) : checkOf(q));
 }
+// ---- Timed quests: sequences of steps, and the worked program ---------------------------------
+// What a step expects of one output: either (null), on (1), off (0) or a brightness ({ level }).
+const EXPECT_NEXT = (v) =>
+  v === null || v === undefined ? 1 : v === 1 ? 0 : v === 0 ? { level: 255 } : null;
+const expectText = (v) =>
+  v === null || v === undefined ? 'either' : v === 1 ? 'ON' : v === 0 ? 'OFF' : 'level';
+// The readings a sequence can set: the quest's sensors, and any other reading its steps use.
+function sequenceSignals(q, sequence) {
+  const signals = sensorsOf(q).map((id) => device(id).signal);
+  for (const env of [sequence.env, ...sequence.steps.map((step) => step.env)])
+    for (const k of Object.keys(env || {})) if (!signals.includes(k)) signals.push(k);
+  return signals;
+}
+const signalName = (signal) => components.find((c) => c.signal === signal)?.name || signal;
+const readingInput = (attrs, env, signal) => {
+  const value = env && signal in env ? toReading(signal, env[signal]) : '';
+  return `<input class="input" type="number" ${attrs} data-signal="${signal}" value="${value === '' ? '' : Math.round(value * 100) / 100}" placeholder="–" />`;
+};
+const eventOf = (step) =>
+  step.restart ? 'restart' : step.network === false ? 'down' : step.network === true ? 'up' : '';
+function timedCards(q) {
+  const outputs = outputsOf(q),
+    solution = q.solution || {};
+  return `
+    <section class="card">
+      <h2>Sequences</h2>
+      <p class="sub">Each sequence plays its steps in order on one running program, which keeps its
+        variables from step to step. A reading set in a step carries on until another step changes it
+        (– leaves it as it was). At the end of each step, each output must be as expected: ON, OFF,
+        either, or a brightness (0–255).</p>
+      ${q.sequences
+        .map((sequence, si) => {
+          const signals = sequenceSignals(q, sequence);
+          return `<div class="rule sequence">
+            <div class="rule-head">
+              <input class="input seq-name" data-seq-name="${si}" value="${escape(sequence.name)}" />
+              <label class="tick" title="How far the program's clock moves on each pass">Tick
+                <input class="input" type="number" min="10" step="10" data-seq-tick="${si}" value="${sequence.tick ?? 200}" /> ms</label>
+              <button class="remove" data-seq-drop="${si}" title="Remove this sequence" ${q.sequences.length > 1 ? '' : 'disabled'}>${icon('close', 12)}</button>
+            </div>
+            <div class="tests"><table>
+              <thead><tr><th>Step</th>${signals.map((sig) => `<th>${escape(signalName(sig))}</th>`).join('')}
+                <th>Lasts (s)</th>${outputs.map((id) => `<th class="output">${escape(device(id).name)}</th>`).join('')}
+                <th>Event</th><th>Message sent</th><th></th></tr></thead>
+              <tbody>
+                <tr class="start"><td><span class="rule-text">At the start</span></td>
+                  ${signals.map((sig) => `<td>${readingInput(`data-seq-env="${si}"`, sequence.env, sig)}</td>`).join('')}
+                  <td colspan="${outputs.length + 4}"><span class="range">Readings before the first step (– as usual).</span></td></tr>
+                ${sequence.steps
+                  .map((step, i) => {
+                    const at = `${si}:${i}`;
+                    return `<tr>
+                    <td><input class="input" data-step-label="${at}" value="${escape(step.label)}" /></td>
+                    ${signals.map((sig) => `<td>${readingInput(`data-step-env="${at}"`, step.env, sig)}</td>`).join('')}
+                    <td><input class="input" type="number" min="0.01" step="0.1" data-step-ms="${at}" value="${step.ms / 1000}" /></td>
+                    ${outputs
+                      .map((id, o) => {
+                        const v = step.expect?.[o];
+                        return `<td class="expect">${
+                          v && typeof v === 'object'
+                            ? `<input class="input level" type="number" min="0" max="255" data-level="${at}:${o}" value="${v.level}" title="Brightness 0–255" />`
+                            : ''
+                        }<button class="onoff ${v === 1 ? 'on' : v === null || v === undefined ? 'either' : ''}" data-expect="${at}:${o}" title="Click to change: either, ON, OFF, brightness">${expectText(v)}</button></td>`;
+                      })
+                      .join('')}
+                    <td><select class="select" data-step-event="${at}">${options(
+                      [
+                        ['', '—'],
+                        ['restart', 'Restart'],
+                        ['down', 'Network drops'],
+                        ['up', 'Network back'],
+                      ],
+                      eventOf(step),
+                    )}</select></td>
+                    <td><input class="input" data-step-send="${at}" value="${escape(step.send ? step.send[0] + ' = ' + step.send[1] : '')}" placeholder="topic = payload" title="An MQTT message published at the start of the step" /></td>
+                    <td class="step-actions">${
+                      step.check
+                        ? `<span class="coded" title="This step also checks what the program printed or published, with code written into the quest. It stays as coded; removing the step removes it.">${icon('lock', 12)}coded check</span>`
+                        : ''
+                    }<button class="remove" data-step-copy="${at}" title="Add a step after this one">${icon('plus', 12)}</button><button class="remove" data-step-drop="${at}" title="Remove this step" ${sequence.steps.length > 1 ? '' : 'disabled'}>${icon('close', 12)}</button></td></tr>`;
+                  })
+                  .join('')}
+              </tbody></table></div>
+          </div>`;
+        })
+        .join('')}
+      <div class="row-actions">
+        <button class="button" id="add-sequence">${icon('plus', 16)}Add sequence</button>
+      </div>
+    </section>
+    <section class="card">
+      <h2>Worked program</h2>
+      <p class="sub">Proves the quest can be passed: it must pass every sequence on both boards in both
+        languages. Written once in a small C-like form and turned into Arduino C++ and MicroPython.
+        Each sensor is read into a variable named after its reading (temp, motion, light…); use
+        write(id, 1), pwm(id, level), print(value) and millis(), one statement per line, with braces
+        for blocks. Students still write their own.</p>
+      <div class="fields">
+        ${field(
+          'Variables',
+          `<textarea class="mono" data-solution="state" placeholder="fanOn = 0">${escape(
+            Object.entries(solution.state || {})
+              .map(([k, v]) => `${k} = ${v}`)
+              .join('\n'),
+          )}</textarea>`,
+          false,
+          'One per line: name = starting value (a number, or "text").',
+        )}
+        ${field('Wait each pass (ms)', `<input class="input" type="number" min="0" max="10000" data-solution="delay" value="${solution.delay ?? ''}" placeholder="200" />`)}
+        ${field('At start', `<textarea class="mono" data-solution="setup" placeholder="Runs once, e.g. mqttConnect(&quot;lamp&quot;);">${escape(solution.setup || '')}</textarea>`, true)}
+        ${field('On every pass', `<textarea class="mono code-input" data-solution="loop">${escape(solution.loop || '')}</textarea>`, true)}
+      </div>
+    </section>`;
+}
+// The variables as written: name = value per line.
+function parseState(text) {
+  const state = {};
+  for (const line of text
+    .split('\n')
+    .map((l) => l.trim())
+    .filter(Boolean)) {
+    const at = line.indexOf('=');
+    const name = (at < 0 ? line : line.slice(0, at)).trim(),
+      raw =
+        at < 0
+          ? '0'
+          : line
+              .slice(at + 1)
+              .trim()
+              .replace(/;$/, '');
+    state[name] = /^-?\d+$/.test(raw) ? Number(raw) : raw;
+  }
+  return state;
+}
+function bindTimed(q, edit) {
+  const form = $('form'),
+    step = (at, x) => {
+      const [si, i] = at.split(':').map(Number);
+      return x.sequences[si].steps[i];
+    };
+  for (const el of form.querySelectorAll('[data-seq-name]'))
+    el.addEventListener('change', () =>
+      edit('Rename sequence', (x) => (x.sequences[Number(el.dataset.seqName)].name = el.value)),
+    );
+  for (const el of form.querySelectorAll('[data-seq-tick]'))
+    el.addEventListener('change', () =>
+      edit('Change tick', (x) => {
+        const sequence = x.sequences[Number(el.dataset.seqTick)];
+        if (el.value === '' || Number(el.value) === 200) delete sequence.tick;
+        else sequence.tick = Number(el.value);
+      }),
+    );
+  for (const el of form.querySelectorAll('[data-seq-drop]'))
+    el.addEventListener('click', () =>
+      edit('Remove sequence', (x) => x.sequences.splice(Number(el.dataset.seqDrop), 1)),
+    );
+  const setReading = (env, signal, value) => {
+    if (value === '') delete env[signal];
+    else env[signal] = toLevel(signal, Number(value));
+  };
+  for (const el of form.querySelectorAll('[data-seq-env]'))
+    el.addEventListener('change', () =>
+      edit('Change starting reading', (x) => {
+        const sequence = x.sequences[Number(el.dataset.seqEnv)];
+        setReading((sequence.env ??= {}), el.dataset.signal, el.value);
+        if (!Object.keys(sequence.env).length) delete sequence.env;
+      }),
+    );
+  for (const el of form.querySelectorAll('[data-step-env]'))
+    el.addEventListener('change', () =>
+      edit('Change reading', (x) => {
+        const st = step(el.dataset.stepEnv, x);
+        setReading((st.env ??= {}), el.dataset.signal, el.value);
+        if (!Object.keys(st.env).length) delete st.env;
+      }),
+    );
+  for (const el of form.querySelectorAll('[data-step-label]'))
+    el.addEventListener('change', () =>
+      edit('Rename step', (x) => (step(el.dataset.stepLabel, x).label = el.value)),
+    );
+  for (const el of form.querySelectorAll('[data-step-ms]'))
+    el.addEventListener('change', () =>
+      edit(
+        'Change step length',
+        (x) => (step(el.dataset.stepMs, x).ms = Math.round(Number(el.value) * 1000)),
+      ),
+    );
+  const outputs = outputsOf(q).length;
+  for (const el of form.querySelectorAll('[data-expect]'))
+    el.addEventListener('click', () =>
+      edit('Change expected output', (x) => {
+        const [si, i, o] = el.dataset.expect.split(':').map(Number),
+          st = x.sequences[si].steps[i];
+        const expect = st.expect ?? Array(outputs).fill(null);
+        expect[o] = EXPECT_NEXT(expect[o]);
+        if (expect.every((v) => v === null)) delete st.expect;
+        else st.expect = expect;
+      }),
+    );
+  for (const el of form.querySelectorAll('[data-level]'))
+    el.addEventListener('change', () =>
+      edit('Change brightness', (x) => {
+        const [si, i, o] = el.dataset.level.split(':').map(Number);
+        x.sequences[si].steps[i].expect[o] = {
+          level: Math.max(0, Math.min(255, Math.round(Number(el.value)))),
+        };
+      }),
+    );
+  for (const el of form.querySelectorAll('[data-step-event]'))
+    el.addEventListener('change', () =>
+      edit('Change event', (x) => {
+        const st = step(el.dataset.stepEvent, x);
+        delete st.restart;
+        delete st.network;
+        if (el.value === 'restart') st.restart = true;
+        else if (el.value) st.network = el.value === 'up';
+      }),
+    );
+  for (const el of form.querySelectorAll('[data-step-send]'))
+    el.addEventListener('change', () =>
+      edit('Change message', (x) => {
+        const st = step(el.dataset.stepSend, x),
+          text = el.value.trim();
+        if (!text) return void delete st.send;
+        const at = text.indexOf('='),
+          topic = (at < 0 ? text : text.slice(0, at)).trim(),
+          payload = at < 0 ? '' : text.slice(at + 1).trim();
+        st.send = st.send?.[2] ? [topic, payload, st.send[2]] : [topic, payload];
+      }),
+    );
+  for (const el of form.querySelectorAll('[data-step-copy]'))
+    el.addEventListener('click', () =>
+      edit('Add step', (x) => {
+        const [si, i] = el.dataset.stepCopy.split(':').map(Number),
+          { check, send, restart, network, ...rest } = x.sequences[si].steps[i];
+        x.sequences[si].steps.splice(i + 1, 0, {
+          ...JSON.parse(JSON.stringify(rest)),
+          label: rest.label + ' (next)',
+        });
+      }),
+    );
+  for (const el of form.querySelectorAll('[data-step-drop]'))
+    el.addEventListener('click', () =>
+      edit('Remove step', (x) => {
+        const [si, i] = el.dataset.stepDrop.split(':').map(Number);
+        x.sequences[si].steps.splice(i, 1);
+      }),
+    );
+  $('add-sequence')?.addEventListener('click', () =>
+    edit('Add sequence', (x) =>
+      x.sequences.push({
+        name: `Sequence ${x.sequences.length + 1}`,
+        steps: [{ label: 'Start', ms: 1000, expect: Array(outputs).fill(0) }],
+      }),
+    ),
+  );
+  for (const el of form.querySelectorAll('[data-solution]'))
+    el.addEventListener('change', () =>
+      edit('Change worked program', (x) => {
+        const key = el.dataset.solution,
+          solution = (x.solution ??= { loop: '' });
+        if (key === 'state') {
+          const state = parseState(el.value);
+          if (Object.keys(state).length) solution.state = state;
+          else delete solution.state;
+        } else if (key === 'delay') {
+          if (el.value === '') delete solution.delay;
+          else solution.delay = Number(el.value);
+        } else if (key === 'setup' && !el.value.trim()) delete solution.setup;
+        else solution[key] = el.value;
+      }),
+    );
+}
+
 const rangeText = (d) => {
   const [lo, hi, unit] = readingRange(d) || [];
   return lo === 0 && hi === 1 ? '0 or 1' : `${lo}–${hi}${unit ? ' ' + unit : ''}`;
@@ -349,6 +640,9 @@ function bindMine(q, target = { kind: 'mine' }) {
             .filter(Boolean)),
       ),
     );
+  if (Array.isArray(q.sequences)) bindTimed(q, edit);
+  // A timed quest's steps expect one entry per output, and set readings rather than test them.
+  const steps = (x) => (x.sequences || []).flatMap((sequence) => sequence.steps);
   $('add-device')?.addEventListener('change', (e) => {
     const id = e.target.value;
     if (!id) return;
@@ -358,8 +652,11 @@ function bindMine(q, target = { kind: 'mine' }) {
       x.ids.splice(at < 0 ? x.ids.length : at, 0, id);
       if (device(id).output) {
         const k = outputsOf(x).indexOf(id);
-        x.conditions.splice(k, 0, 'false');
-        for (const t of x.scenarios) t[2].splice(k, 0, 0);
+        if (x.sequences) for (const st of steps(x)) st.expect?.splice(k, 0, null);
+        else {
+          x.conditions.splice(k, 0, 'false');
+          for (const t of x.scenarios) t[2].splice(k, 0, 0);
+        }
       }
     });
   });
@@ -369,9 +666,16 @@ function bindMine(q, target = { kind: 'mine' }) {
       edit('Remove ' + device(id).name, (x) => {
         if (device(id).output) {
           const k = outputsOf(x).indexOf(id);
-          x.conditions.splice(k, 1);
-          for (const t of x.scenarios) t[2].splice(k, 1);
-        } else for (const t of x.scenarios) delete t[1][device(id).signal];
+          if (x.sequences)
+            for (const st of steps(x)) {
+              st.expect?.splice(k, 1);
+              if (st.expect?.every((v) => v === null)) delete st.expect;
+            }
+          else {
+            x.conditions.splice(k, 1);
+            for (const t of x.scenarios) t[2].splice(k, 1);
+          }
+        } else if (!x.sequences) for (const t of x.scenarios) delete t[1][device(id).signal];
         x.ids = x.ids.filter((d) => d !== id);
       });
     });
@@ -508,6 +812,7 @@ function bindMine(q, target = { kind: 'mine' }) {
     state.pick = null;
   });
   $('reset-quest')?.addEventListener('click', () => s.resetBuiltIn(target.index));
+  $('make-timed')?.addEventListener('click', () => s.makeTimed(q.id));
   $('copy')?.addEventListener('click', () => {
     const id = s.create({ ...JSON.parse(JSON.stringify(q)), title: q.title + ' (copy)' });
     pick({ kind: 'mine', id });
@@ -515,7 +820,8 @@ function bindMine(q, target = { kind: 'mine' }) {
 }
 // What a built-in quest's changes mean in the game.
 function builtInNotes(target) {
-  const m = missions[target.index],
+  const s = state.session,
+    m = missions[target.index],
     notes = [
       `Built-in quest ${target.index + 1} of ${builtIn.length}. Your changes apply wherever it is played; Reset to original puts it back.`,
     ];
@@ -523,9 +829,17 @@ function builtInNotes(target) {
     notes.push(
       'Each city gives this quest a local title of its own, so a new title shows only where none is set.',
     );
-  if (m.advanced && !target.timed)
+  if (m.advanced && isRuleQuest(m))
     notes.push(
       'It has an Advanced version: if you change its devices, rules or tests, yours apply at both levels.',
+    );
+  if (m.advanced && isTimedQuest(m))
+    notes.push(
+      'It has an Advanced version with sequences of its own: if you change the sequences or the worked program, yours apply at both levels.',
+    );
+  if (isTimedQuest(m) && s.hasCodedChecks(target.index))
+    notes.push(
+      'Steps marked “coded check” also check what the program printed or published, with code written into the quest: those checks stay as coded, and go if you remove their step.',
     );
   return `<div class="heading"><span class="notice">${notes.map(escape).join('<br />')}</span></div>`;
 }
@@ -535,10 +849,10 @@ function renderCheck(q, result) {
   const { errors, warnings, runs, mission } = result,
     ok = !errors.length,
     run = runs.find((r) => r.board === 'ESP32' && r.language === state.language);
-  if (result.timed) {
+  if (result.storyOnly) {
     $('check').innerHTML =
       `<section><div class="verdict ${ok ? 'ok' : 'bad'}">${icon(ok ? 'check' : 'warning', 18)}<div>${ok ? 'Story changes only' : 'Fix before saving'}
-      <span>${ok ? 'A timed quest plays as the game makes it; its story is yours to change.' : errors.map(escape).join(' ')}</span></div></div></section>`;
+      <span>${ok ? 'This quest plays as the game makes it; its story is yours to change.' : errors.map(escape).join(' ')}</span></div></div></section>`;
     return;
   }
   let steps = [];
@@ -572,6 +886,21 @@ function renderCheck(q, result) {
               return `<span>${r.board === 'ESP32' ? 'ESP32' : 'Pico'} · ${r.name}</span><span class="${passed === r.results.length ? 'pass' : 'fail'}">${passed}/${r.results.length} tests</span>`;
             })
             .join('')}</div></section>`
+        : ''
+    }
+    ${
+      run?.results.some((r) => !r.pass)
+        ? `<section><h3>What fails (ESP32 · ${escape(run.name)})</h3><ul class="issues">${run.results
+            .filter((r) => !r.pass)
+            .slice(0, 6)
+            .map(
+              (r) =>
+                `<li class="error">${icon('warning', 14)}<span><b>${escape(r.name)}</b>: ${escape(
+                  r.detail ??
+                    `expected ${(r.expected || []).map((v) => (v ? 'ON' : 'OFF')).join(', ')}, the program gave ${(r.actual || []).map((v) => (v ? 'ON' : 'OFF')).join(', ')}`,
+                )}</span></li>`,
+            )
+            .join('')}</ul></section>`
         : ''
     }
     ${

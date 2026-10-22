@@ -20,7 +20,12 @@ import {
   ORIGINALS,
   STORY,
   RULES,
+  TIMED,
   isRuleQuest,
+  isTimedQuest,
+  sequencesData,
+  timedSequences,
+  timedSolution,
 } from '../../../public/authored-quests.js';
 
 export const BOARDS = ['ESP32', 'Raspberry Pi Pico'];
@@ -122,16 +127,22 @@ export class QuestSession {
         learn: [],
         hint: '',
         ...fields,
-        ...(fields.title ? {} : {}),
         id,
       }),
     );
+    // A timed quest has sequences and a worked program instead of rules and tests.
+    const made = this.quest(id);
+    if (Array.isArray(made.sequences)) {
+      delete made.conditions;
+      delete made.scenarios;
+    }
     return id;
   }
-  // A copy of a built-in quest to change. Only rule quests (one rule per output, with tests) can
-  // be copied; timed quests run sequences the editor does not write.
+  // A copy of a built-in quest to change: a rule quest, or a timed quest whose checks are all data
+  // (one that checks what the program printed or published keeps code the editor cannot copy).
   copy(mission) {
     if (!canCopy(mission)) return null;
+    const timed = isTimedQuest(mission);
     return this.create({
       title: mission.title + ' (copy)',
       area: mission.area,
@@ -140,12 +151,21 @@ export class QuestSession {
       quote: mission.quote || '',
       goal: mission.goal,
       ids: [...mission.ids],
-      conditions: [...mission.conditions],
-      scenarios: clone(mission.scenarios),
+      ...(timed
+        ? { sequences: sequencesData(mission.sequences), solution: clone(mission.solution) }
+        : { conditions: [...mission.conditions], scenarios: clone(mission.scenarios) }),
       xp: mission.xp || 100,
       badge: '',
       learn: [...(mission.learn || [])],
       hint: mission.hint || '',
+    });
+  }
+  // A quest of yours made timed: its tests become steps, its rules a worked program.
+  makeTimed(id) {
+    return this.commit('Make it timed', (quests) => {
+      const at = quests.findIndex((q) => q.id === id);
+      if (at < 0 || Array.isArray(quests[at].sequences)) return false;
+      quests[at] = timedFromRules(quests[at]);
     });
   }
   remove(id) {
@@ -169,12 +189,20 @@ export class QuestSession {
   }
   // ---- Built-in quests: changed in place, by their place in the game's list ----
   // The quest's fields as the code makes them.
+  // A timed quest's sequences come as data, a coded check named by where it sits.
   original(index) {
-    const m = missions[index];
-    return clone(
-      ORIGINALS.get(index) ??
-        Object.fromEntries([...STORY, ...RULES].map((k) => [k, m[k] ?? null])),
-    );
+    const m = ORIGINALS.get(index) ?? missions[index],
+      fields = Object.fromEntries([...STORY, ...RULES].map((k) => [k, clone(m[k] ?? null)]));
+    if (isTimedQuest(missions[index]))
+      Object.assign(fields, {
+        sequences: sequencesData(m.sequences),
+        solution: clone(m.solution),
+      });
+    return fields;
+  }
+  // The sequences as the code made them, coded checks and all.
+  codedSequences(index) {
+    return (ORIGINALS.get(index) ?? missions[index]).sequences || [];
   }
   // The quest as it now stands: as the code makes it, with your changes.
   builtInSpec(index) {
@@ -191,9 +219,12 @@ export class QuestSession {
       const spec = this.builtInSpec(index),
         original = this.original(index);
       change(spec);
-      const differs = [...STORY, ...(isRuleQuest(missions[index]) ? RULES : [])].filter(
-        (k) => !same(spec[k], original[k]),
-      );
+      const m = missions[index],
+        differs = [
+          ...STORY,
+          ...(isRuleQuest(m) ? RULES : []),
+          ...(isTimedQuest(m) ? TIMED : []),
+        ].filter((k) => !same(spec[k], original[k]));
       if (!differs.length) delete this.edits['builtin:' + index];
       else
         this.edits['builtin:' + index] = {
@@ -235,13 +266,38 @@ export class QuestSession {
               result.warnings.push(`The ${k} still says ${n}, which the rules no longer use.`);
       return result;
     }
-    // A timed quest: only its story can change; it plays as the code makes it.
+    // Any other quest: its story must still have a title, a goal, a place and someone asking.
     const errors = ['title', 'goal', 'area', 'resident']
       .filter((k) => !String(spec[k] ?? '').trim())
       .map((k) => `Its ${k} is empty.`);
     if (this.titlesBut(spec.id).includes(String(spec.title).toLowerCase()))
       errors.push(`Another quest is called "${spec.title}".`);
-    return { errors, warnings: [], runs: [], mission: null, timed: true };
+    if (!isTimedQuest(missions[index]))
+      return { errors, warnings: [], runs: [], mission: null, storyOnly: true };
+    // A timed quest: its sequences and worked program are checked as a new timed quest's are,
+    // keeping the coded checks the quest has.
+    const warnings = [],
+      runs = [];
+    let mission = null;
+    try {
+      mission = {
+        ...missions[index],
+        ...Object.fromEntries(STORY.map((k) => [k, spec[k]])),
+        conditions: [],
+        scenarios: [],
+        sequences: timedSequences(spec, components, this.codedSequences(index)),
+        solution: timedSolution(spec.solution),
+      };
+    } catch (error) {
+      if (!(error instanceof AuthoredQuestError)) throw error;
+      errors.push(error.message);
+    }
+    if (mission && !errors.length) prove(mission, spec, errors, warnings, runs);
+    return { errors, warnings, runs, mission, timed: true };
+  }
+  // Whether a quest's sequences keep checks only the code can make (so it cannot be copied).
+  hasCodedChecks(index) {
+    return this.builtInSpec(index).sequences?.some((s) => s.steps.some((step) => step.check));
   }
   isChanged() {
     return !same(this.snapshot(), { quests: this.saved.quests, edits: this.saved.edits });
@@ -256,12 +312,9 @@ export class QuestSession {
 }
 
 export const canCopy = (mission) =>
-  Array.isArray(mission.conditions) &&
-  mission.conditions.length > 0 &&
-  Array.isArray(mission.scenarios) &&
-  !mission.sequences &&
-  !mission.starter &&
-  !mission.prewired;
+  isRuleQuest(mission) ||
+  (isTimedQuest(mission) &&
+    !mission.sequences.some((s) => s.steps.some((step) => typeof step.check === 'function')));
 
 // What a correct program would do in each test, from the rules, every other reading as usual.
 export function resultsFromRules(spec) {
@@ -322,6 +375,22 @@ export function checkQuest(spec, { others = [], titles = null } = {}) {
     for (const problem of wiring) errors.push(`${board}: ${problem}`);
   }
   if (errors.length) return { errors, warnings, runs, mission };
+  prove(mission, spec, errors, warnings, runs);
+  return { errors, warnings, runs, mission, timed: Array.isArray(spec.sequences) };
+}
+
+// What each output is expected to do over a quest's tests or steps: the values given, per output.
+export function expectations(spec) {
+  const outputs = outputsOf(spec).length;
+  const rows = Array.isArray(spec.sequences)
+    ? spec.sequences.flatMap((s) => s.steps.map((step) => step.expect).filter(Array.isArray))
+    : spec.scenarios.map(([, , expected]) => expected);
+  return Array.from({ length: outputs }, (_, i) => new Set(rows.map((r) => r[i])));
+}
+
+// The worked solution on both boards in both languages, and a program that does nothing.
+function prove(mission, spec, errors, warnings, runs) {
+  const timed = Array.isArray(spec.sequences);
   for (const board of BOARDS)
     for (const [language, name] of LANGUAGES) {
       const devices = defaults(mission.ids, board),
@@ -336,21 +405,49 @@ export function checkQuest(spec, { others = [], titles = null } = {}) {
             .map((r) => `"${r.name}"`)
             .join(
               ', ',
-            )}${failed.length > 3 ? '…' : ''}): a test's results disagree with the rules.`,
+            )}${failed.length > 3 ? '…' : ''}): ${timed ? 'the program and the steps disagree' : "a test's results disagree with the rules"}.`,
         );
     }
   // A program that does nothing must not pass: some test has to need an output on.
   const idle = runTests(mission, IDLE.cpp, 'cpp', 'ESP32');
   if (idle.every((r) => r.pass))
     errors.push(
-      'A program that does nothing passes every test: add a test where an output turns on.',
+      `A program that does nothing passes every test: add a ${timed ? 'step' : 'test'} where an output turns on.`,
     );
   // Each output tested both on and off.
+  const values = expectations(spec);
   outputsOf(spec).forEach((id, i) => {
-    const values = new Set(spec.scenarios.map(([, , expected]) => expected[i]));
-    if (values.size < 2)
-      warnings.push(`No test turns ${device(id).name} ${values.has(1) ? 'off' : 'on'}: test both.`);
+    const on = values[i].has(1) || [...values[i]].some((v) => v?.level > 0),
+      off = values[i].has(0) || [...values[i]].some((v) => v?.level === 0);
+    if (!on || !off)
+      warnings.push(
+        `No ${timed ? 'step' : 'test'} expects ${device(id).name} ${on ? 'off' : 'on'}: test both.`,
+      );
   });
   if (!spec.quote) warnings.push(`${spec.resident} has no words of their own: the goal is used.`);
-  return { errors, warnings, runs, mission };
+}
+
+// A rule quest made timed: one sequence playing its tests in order, a second each, and a worked
+// program written from its rules. Its tests become steps; what each output does stays the same.
+export function timedFromRules(spec) {
+  const outputs = outputsOf(spec),
+    { conditions = [], scenarios = [], ...rest } = clone(spec);
+  return {
+    ...rest,
+    sequences: [
+      {
+        name: 'Tests in order',
+        steps: scenarios.map(([label, env, expect]) => ({ label, env, ms: 1000, expect })),
+      },
+    ],
+    solution: {
+      loop: outputs
+        .map((id, i) =>
+          !conditions[i] || conditions[i] === 'false'
+            ? `write(${id}, 0);`
+            : `if (${conditions[i]}) {\n  write(${id}, 1);\n} else {\n  write(${id}, 0);\n}`,
+        )
+        .join('\n'),
+    },
+  };
 }

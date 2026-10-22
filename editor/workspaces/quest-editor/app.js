@@ -651,18 +651,27 @@ function undo(redo = false) {
   const text = redo ? state.session.redo() : state.session.undo();
   if (text) toast(`${redo ? 'Redid' : 'Undid'}: ${text}`);
 }
-async function playtest() {
+// fromStart: the game from the beginning, rather than at what is being edited.
+async function playtest(fromStart = false) {
   if (state.session.isChanged()) {
     if (!confirm('The game plays saved quests only. Save now and open the game?')) return;
     if (!(await save())) return;
   }
-  shell.openGame();
+  // Started on the selected quest: yours join the game's list after the built-in ones.
+  const pick = state.pick,
+    quest =
+      pick?.kind === 'builtin'
+        ? pick.id
+        : pick?.kind === 'mine'
+          ? builtIn.length + state.session.quests.findIndex((q) => q.id === pick.id)
+          : null;
+  shell.openGame(fromStart ? null : { quest: quest >= 0 ? quest : null });
 }
 $('new').addEventListener('click', newQuest);
 $('undo').addEventListener('click', () => undo());
 $('redo').addEventListener('click', () => undo(true));
 $('save').addEventListener('click', save);
-$('playtest').addEventListener('click', playtest);
+$('playtest').addEventListener('click', (e) => playtest(e.shiftKey));
 $('home').addEventListener('click', (e) => {
   if (
     state.session?.isChanged() &&
@@ -692,7 +701,7 @@ document.addEventListener('keydown', (e) => {
 });
 shell?.onMenu((command) => {
   if (command === 'save') save();
-  else if (command === 'playtest') playtest();
+  else if (command === 'playtest' || command === 'playstart') playtest(command === 'playstart');
   else if (typing()) document.execCommand(command);
   else undo(command === 'redo');
 });

@@ -7,6 +7,7 @@ import http from 'node:http';
 import { readFile, writeFile, rename } from 'node:fs/promises';
 import { extname, join, normalize, sep } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { playTargetUrl } from '../public/editor-play.js';
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
 const PUBLIC = join(ROOT, 'public');
@@ -204,7 +205,9 @@ function createEditor() {
     if (choice === 0) event.preventDefault();
   });
 }
-function openGame() {
+// Opens the game at a play-test target (see public/editor-play.js): what the workspace is editing,
+// or the beginning with none. Either way it saves nothing.
+function openGame(target = null) {
   const game = new BrowserWindow({
     width: 1440,
     height: 900,
@@ -212,7 +215,7 @@ function openGame() {
     // A fresh, in-memory session each time: no offline copy or saved progress from earlier runs.
     webPreferences: { partition: 'playtest-' + Date.now(), contextIsolation: true },
   });
-  game.loadURL(base + '/public/game.html');
+  game.loadURL(playTargetUrl(base + '/public/game.html', target));
 }
 const send = (channel) => () => editor?.webContents.send(channel);
 function buildMenu() {
@@ -225,9 +228,14 @@ function buildMenu() {
         submenu: [
           { label: 'Save', accelerator: 'CmdOrCtrl+S', click: send('menu:save') },
           {
-            label: 'Open the game to play-test',
+            label: 'Play-test from here',
             accelerator: 'CmdOrCtrl+P',
             click: send('menu:playtest'),
+          },
+          {
+            label: 'Play-test from the beginning',
+            accelerator: 'Shift+CmdOrCtrl+P',
+            click: send('menu:playstart'),
           },
           { type: 'separator' },
           mac ? { role: 'close' } : { role: 'quit' },
@@ -265,7 +273,7 @@ function buildMenu() {
 
 ipcMain.handle('store:read', (_, name) => readStore(name));
 ipcMain.handle('store:write', (_, name, value) => writeStore(name, value));
-ipcMain.handle('game:open', () => openGame());
+ipcMain.handle('game:open', (_, target) => openGame(target));
 ipcMain.on('editor:unsaved', (_, value) => {
   unsaved = !!value;
   editor?.setDocumentEdited(unsaved);

@@ -495,17 +495,22 @@ async function save() {
     return false;
   }
 }
-async function playtest() {
+// fromStart: the game from the beginning, rather than at what is being edited.
+async function playtest(fromStart = false) {
   if (currentText() !== state.savedText) {
     if (!confirm('The game uses saved changes only. Save now and open the game?')) return;
     if (!(await save())) return;
   }
-  shell.openGame();
+  // The city, standing by the selected object.
+  const pos = viewport.selected?.placement?.pos;
+  shell.openGame(
+    fromStart ? null : { city: state.session.locationId, at: pos ? [pos[0], pos[2]] : null },
+  );
 }
 $('undo').addEventListener('click', () => undo());
 $('redo').addEventListener('click', () => undo(true));
 $('save').addEventListener('click', save);
-$('playtest').addEventListener('click', playtest);
+$('playtest').addEventListener('click', (e) => playtest(e.shiftKey));
 $('home').addEventListener('click', (e) => {
   if (
     currentText() !== state.savedText &&
@@ -558,7 +563,7 @@ document.addEventListener('keydown', (e) => {
 });
 shell?.onMenu((command) => {
   if (command === 'save') save();
-  else if (command === 'playtest') playtest();
+  else if (command === 'playtest' || command === 'playstart') playtest(command === 'playstart');
   else if (typing()) document.execCommand(command);
   else undo(command === 'redo');
 });

@@ -6,11 +6,13 @@ contextBridge.exposeInMainWorld('editorShell', {
   // 'characters' (Character Editor), 'quests' (Quest Editor).
   read: (store) => ipcRenderer.invoke('store:read', store),
   write: (store, value) => ipcRenderer.invoke('store:write', store, value),
-  openGame: () => ipcRenderer.invoke('game:open'),
+  // The game in a play-test window, at a target (see public/editor-play.js) or the beginning.
+  openGame: (target = null) => ipcRenderer.invoke('game:open', target),
   setUnsaved: (value) => ipcRenderer.send('editor:unsaved', value),
-  // Menu commands (save, undo, redo, play-test) arrive as named events.
+  // Menu commands (save, undo, redo, playtest from here, playstart from the beginning) arrive as
+  // named events.
   onMenu: (handler) => {
-    for (const name of ['save', 'undo', 'redo', 'playtest'])
+    for (const name of ['save', 'undo', 'redo', 'playtest', 'playstart'])
       ipcRenderer.on('menu:' + name, () => handler(name));
   },
 });

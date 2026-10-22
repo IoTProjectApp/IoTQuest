@@ -670,7 +670,13 @@ document.addEventListener('keyup', (e) => {
 });
 shell?.onMenu((command) => {
   if (command === 'save') save();
-  else if (command === 'playtest') shell.openGame();
+  // The town's streets in the city being edited (or previewed, for the shared town grid).
+  else if (command === 'playtest')
+    shell.openGame({
+      city: state.target === 'town' ? state.previewCity : state.target,
+      place: 'town',
+    });
+  else if (command === 'playstart') shell.openGame();
   else if (typing()) document.execCommand(command);
   else undo(command === 'redo');
 });

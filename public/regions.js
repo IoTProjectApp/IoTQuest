@@ -55,19 +55,23 @@ function createRegionalModelBase(id) {
       for (const z of [-10.9, -6, -1]) box(x, 0.96, z, 0.15, 1.65, 0.15, '#635546');
     for (const z of [-10.9, -6, -1]) box(-5.8, 1.82, z, 14.65, 0.15, 0.21, '#655345');
     for (const x of [-11.5, -6.7, -1.9]) {
+      tag('house/lattice-screen#');
       for (let j = 0; j < 6; j++)
         box(x - 0.62 + j * 0.25, 1.12, -10.7, 0.025, 0.8, 0.08, '#6b5946');
       for (const y of [0.87, 1.13, 1.38]) box(x, y, -10.7, 1.38, 0.025, 0.08, '#6b5946');
     }
+    tag();
     for (const [x, z] of [
       [-10.55, -3.5],
       [-10.55, -8.5],
     ])
       for (let i = 0; i < 2; i++)
         for (let j = 0; j < 2; j++) {
+          tag('house/tatami#');
           box(x - 0.85 + i * 1.7, 0.255, z - 0.95 + j * 1.8, 1.64, 0.028, 1.74, '#b7bf8f');
           box(x - 0.85 + i * 1.7, 0.275, z - 0.95 + j * 1.8, 0.035, 0.012, 1.75, '#617952');
         }
+    tag();
     // Tile roof edges remain low so the furnished interiors are visible.
     for (const z of [-11.1, -0.88])
       for (let i = 0; i < 30; i++)
@@ -177,6 +181,7 @@ function createRegionalModelBase(id) {
     box(-5.8, 0.68, -6, 14.8, 0.16, 10.35, '#9d8c6e');
     for (const x of [-12.5, -8, -3.7, 0.8])
       for (const z of [-10.5, -5.8, -1.1]) box(x, 0.34, z, 0.18, 0.68, 0.18, '#716b55');
+    tag('house/veranda');
     box(-5.8, 0.71, -0.23, 14.9, 0.17, 1.75, '#c1aa82');
     for (let i = 0; i < 32; i++) box(-13 + i * 0.46, 0.805, -0.23, 0.025, 0.02, 1.8, '#8f815f');
     for (const x of [-13, -9, -2, 1.4]) {
@@ -189,8 +194,11 @@ function createRegionalModelBase(id) {
     m.lamps.push(box(-5.8, 2.2, 0.28, 0.28, 0.36, 0.28, '#d5c28d'));
     for (let i = 0; i < 6; i++)
       box(-5.8, 0.07 + i * 0.12, 0.92 - i * 0.27, 1.7, 0.13, 0.29, '#bbaa86');
-    for (const x of [-11.5, -6.7, -1.9])
+    for (const x of [-11.5, -6.7, -1.9]) {
+      tag('house/louvres#');
       for (const y of [1.75, 1.95, 2.15]) box(x, y, -10.74, 1.34, 0.08, 0.06, '#e5e8d4');
+    }
+    tag();
     for (const [x, z] of [
       [-8, 4],
       [3.8, 7.9],

@@ -264,6 +264,6 @@ export function buildHouseObjects({ mesh, tag, colliders, dynamic, design }) {
   round(0.7, 1.26, -4.8, 0.96, 0.12, 2, '#b99b76');
   round(0.7, 1.43, -5.22, 0.46, 0.21, 0.55, '#6b817e');
   box(0.7, 1.56, -5.22, 0.25, 0.035, 0.06, '#b1bfbb', metal);
-  tag?.();
+  tag?.('house/garage-door');
   dynamic.garageDoor = box(-1.1, 0.38, -1, 3.1, 0.2, 0.16, '#a7b3ab');
 }

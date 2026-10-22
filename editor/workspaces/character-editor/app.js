@@ -1,11 +1,20 @@
 // The Character Editor workspace: everyone in the game, their looks and movement, a live preview,
 // undo and saving to public/data/characters.js.
-import { CLIPS } from '../../../public/character-clips.js';
+import { CLIPS, IMPORTED_CLIPS } from '../../../public/character-clips.js';
 import { WOMEN, MEN } from '../../../public/people-cast.js';
 import { dressed } from '../../../public/character-settings.js';
 import { findPeople, GROUPS, walksAlone, movesLocked } from './people.js';
 import { CharacterSession, DEFAULTS } from './session.js';
 import { Stage } from './stage.js';
+import {
+  ClipError,
+  readClipFile,
+  fitClip,
+  nameProblem,
+  nameFromFile,
+  clipToGlb,
+  clipEntry,
+} from './clip-import.js';
 import { icon } from '../../ui/icons.js';
 
 const shell = window.editorShell;
@@ -16,10 +25,23 @@ const escape = (s) =>
     (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c],
   );
 const label = (clip) => clip.replace(/([a-z])([A-Z])/g, '$1 $2');
-const WALKS = Object.keys(CLIPS).filter((name) => CLIPS[name].stride),
-  OTHERS = Object.keys(CLIPS).filter((name) => !CLIPS[name].stride);
+// The name a clip being imported plays under until it is added (no real clip has a space).
+const PREVIEW = ' importing';
+// The clips to choose from (imported ones join while the editor is open).
+const clipNames = () => Object.keys(CLIPS).filter((name) => name !== PREVIEW);
+const walks = () => clipNames().filter((name) => CLIPS[name].stride),
+  others = () => clipNames().filter((name) => !CLIPS[name].stride);
 
-const state = { people: [], session: null, target: null, search: '', lastPerson: null };
+const state = {
+  people: [],
+  session: null,
+  target: null,
+  search: '',
+  lastPerson: null,
+  // Imported clips as saved (public/data/clips.js), and the one being imported, if any.
+  clips: { version: 1, clips: {} },
+  importing: null,
+};
 const stage = new Stage($('stage'));
 
 // ---- Static chrome --------------------------------------------------------------------------
@@ -71,7 +93,7 @@ function select(target) {
   if (target !== DEFAULTS) state.lastPerson = target;
   renderPeople();
   renderInspector();
-  stage.show(lookOf(target));
+  showStage();
   hint();
 }
 
@@ -307,9 +329,9 @@ function renderInspector() {
     </section>
     <section>
       <div class="section-head"><h3>Movement</h3><button class="link" data-section="movement" ${locked || !['walk', 'idle', 'activity', 'speed', 'rate'].some((k) => k in own) ? 'disabled' : ''}>Reset movement</button></div>
-      ${clipRow('walk', 'Walk', [['', `As built${defaults ? '' : ` (${label(who.walk)})`}`], ...WALKS.map((c) => [c, label(c)]), ...OTHERS.map((c) => [c, label(c) + ' (on the spot)'])])}
-      ${clipRow('idle', 'Standing', [['', 'As built (Idle)'], ...Object.keys(CLIPS).map((c) => [c, label(c)])])}
-      ${clipRow('activity', 'Activity', [['', `As built${!defaults && who.activity ? ` (${label(who.activity)})` : ' (none)'}`], ['false', 'None: walks and stands'], ...OTHERS.map((c) => [c, label(c)])])}
+      ${clipRow('walk', 'Walk', [['', `As built${defaults ? '' : ` (${label(who.walk)})`}`], ...walks().map((c) => [c, label(c)]), ...others().map((c) => [c, label(c) + ' (on the spot)'])])}
+      ${clipRow('idle', 'Standing', [['', 'As built (Idle)'], ...clipNames().map((c) => [c, label(c)])])}
+      ${clipRow('activity', 'Activity', [['', `As built${!defaults && who.activity ? ` (${label(who.activity)})` : ' (none)'}`], ['false', 'None: walks and stands'], ...others().map((c) => [c, label(c)])])}
       ${slider('speed', 'Walking speed', 0.5, 2, look.speed, !locked && walking, walking ? '' : 'They are moved by what they are doing')}
       ${slider('rate', 'Clip speed', 0.25, 2, look.rate, !locked)}
       ${
@@ -321,6 +343,10 @@ function renderInspector() {
               ? '<p class="note">The technician walks as fast as you steer them in the game; clip speed still applies.</p>'
               : '<p class="note">Walking speed is set by what they are doing (a game, a swim, a queue); clip speed still applies.</p>'
       }
+    </section>
+    <section>
+      <div class="section-head"><h3>Imported clips</h3><button class="button" id="import-clip" title="Bring in an animation from a .glb, .gltf or .fbx file, such as a Mixamo download">${icon('plus', 16)}Import clip…</button></div>
+      ${importedList()}
     </section>
     <section>
       <div class="actions">
@@ -426,6 +452,213 @@ function bindInspector(el, target) {
   for (const b of el.querySelectorAll('[data-section]'))
     b.addEventListener('click', () => s.reset(target, b.dataset.section));
   $('reset-all').addEventListener('click', () => s.reset(target));
+  $('import-clip').addEventListener('click', importClip);
+  for (const b of el.querySelectorAll('[data-remove-clip]'))
+    b.addEventListener('click', () => removeClip(b.dataset.removeClip));
+}
+
+// ---- Imported clips -------------------------------------------------------------------------
+function importedList() {
+  const names = Object.keys(state.clips.clips);
+  if (!names.length)
+    return '<p class="note">None yet. Imported clips can be picked as anyone’s walk, standing or activity.</p>';
+  return `<ul class="imported">${names
+    .map((name) => {
+      const c = state.clips.clips[name];
+      return `<li><span>${escape(label(name))}</span><span class="note">${c.stride ? `walk, ${c.stride} m a step cycle` : 'on the spot'} · ${c.duration} s</span>
+        <button class="reset-one" data-remove-clip="${escape(name)}" title="Remove ${escape(name)} from the game">${icon('erase', 14)}</button></li>`;
+    })
+    .join('')}</ul>`;
+}
+// The game's bone names, from its own clips' skeleton.
+function gameBones() {
+  const gltf = stage.characters.models.get('animations')?.gltf,
+    bones = new Set();
+  gltf?.scene.traverse((o) => o.isBone && bones.add(o.name));
+  for (const clip of gltf?.animations || [])
+    for (const t of clip.tracks) bones.add(t.name.slice(0, t.name.lastIndexOf('.')));
+  return bones;
+}
+let loaders;
+async function clipLoaders() {
+  loaders ??= Promise.all([
+    import('../../../public/vendor/three-addons/GLTFLoader.js'),
+    import('/editor/three/loaders/FBXLoader.js'),
+    import('/editor/three/exporters/GLTFExporter.js'),
+  ]).then(([gltf, fbx, exporter]) => ({ ...gltf, ...fbx, ...exporter }));
+  return loaders;
+}
+async function importClip() {
+  if (!shell?.openClip)
+    return toast('Importing a clip needs the editor (scripts/world-editor.sh).', true);
+  let picked;
+  try {
+    picked = await shell.openClip();
+  } catch (error) {
+    return toast(error.message, true);
+  }
+  if (picked) await startImport(picked);
+}
+// A picked file ({ name, ext, bytes }): read its clip and show it on whoever is picked.
+async function startImport(picked) {
+  if (!stage.ready) return toast('Wait for the person to appear, then import.', true);
+  try {
+    const { clip, count } = await readClipFile(picked, await clipLoaders());
+    state.importing = {
+      file: picked.name,
+      source: clip,
+      count,
+      name: nameFromFile(picked.name),
+      kind: /walk|run|jog|stroll|march/i.test(picked.name + clip.name) ? 'walk' : 'spot',
+    };
+  } catch (error) {
+    if (!(error instanceof ClipError)) console.error(error);
+    return toast(error.message, true);
+  }
+  refit();
+}
+// Fits the clip being imported again (after a change of kind) and shows it playing.
+function refit() {
+  const imp = state.importing;
+  forgetClip(PREVIEW);
+  try {
+    imp.fit = fitClip(imp.source, gameBones(), { name: PREVIEW, kind: imp.kind });
+    imp.error = null;
+    CLIPS[PREVIEW] = {
+      duration: imp.fit.duration,
+      ...(imp.fit.stride ? { stride: imp.fit.stride } : {}),
+    };
+    stage.characters.clips.set(PREVIEW, imp.fit.clip);
+    setMode(imp.kind === 'walk' ? 'walk' : 'stand');
+  } catch (error) {
+    if (!(error instanceof ClipError)) throw error;
+    imp.fit = null;
+    imp.error = error.message;
+  }
+  showStage();
+  renderClipPanel();
+}
+// The person on stage, playing the clip being imported if there is one.
+function showStage() {
+  const look = lookOf(state.target);
+  if (!state.importing?.fit) return stage.show(look);
+  stage.show(
+    state.importing.kind === 'walk'
+      ? { ...look, walk: PREVIEW, activity: null, speed: 1 }
+      : { ...look, activity: PREVIEW, rate: 1 },
+  );
+}
+function renderClipPanel() {
+  const imp = state.importing,
+    el = $('clip-panel');
+  el.hidden = !imp;
+  if (!imp) return (el.innerHTML = '');
+  const fit = imp.fit,
+    problem = nameProblem(imp.name);
+  el.innerHTML = `<div class="panel-head"><strong>Import a clip</strong><span class="note">${escape(imp.file)}${imp.count > 1 ? ` · the first of its ${imp.count} animations` : ''}</span></div>
+    <label class="field"><span>Name</span><input class="input" id="clip-name" value="${escape(imp.name)}" maxlength="40" spellcheck="false" />
+      <small class="${problem ? 'bad' : ''}">${escape(problem || 'How it is listed: ' + label(imp.name))}</small></label>
+    <div class="segmented" id="clip-kind" role="group" aria-label="How it moves">
+      <button data-kind="spot" class="${imp.kind === 'spot' ? 'active' : ''}">On the spot</button>
+      <button data-kind="walk" class="${imp.kind === 'walk' ? 'active' : ''}">A walk</button>
+    </div>
+    ${
+      fit
+        ? `<p class="note">${fit.duration} s${fit.stride ? `, ${fit.stride} m a cycle` : ''}. ${fit.matched.length} of the game's ${fit.matched.length + fit.missing.length} bones move${fit.missing.length ? ` (the rest hold their pose: ${escape(fit.missing.slice(0, 4).join(', '))}${fit.missing.length > 4 ? '…' : ''})` : ''}.${fit.unmatched.length ? ` ${fit.unmatched.length} of its bones are not in the game's skeleton and are left out.` : ''}</p>`
+        : `<p class="note bad">${escape(imp.error)}</p>`
+    }
+    <div class="actions"><button class="button" id="clip-cancel">Cancel</button>
+      <button class="button primary" id="clip-add" ${fit && !problem ? '' : 'disabled'}>${icon('plus', 16)}Add to the game</button></div>`;
+  $('clip-name').addEventListener('input', (e) => {
+    imp.name = e.target.value.trim();
+    const p = nameProblem(imp.name),
+      small = el.querySelector('.field small');
+    small.textContent = p || 'How it is listed: ' + label(imp.name);
+    small.classList.toggle('bad', !!p);
+    $('clip-add').disabled = !imp.fit || !!p;
+  });
+  for (const b of el.querySelectorAll('[data-kind]'))
+    b.addEventListener('click', () => {
+      imp.kind = b.dataset.kind;
+      refit();
+    });
+  $('clip-cancel').addEventListener('click', closeImport);
+  $('clip-add').addEventListener('click', addClip);
+}
+// Takes a clip off the stage: its listing, and the action anyone on stage plays it with.
+function forgetClip(name) {
+  delete CLIPS[name];
+  stage.characters.clips?.delete(name);
+  for (const person of stage.characters.people.values()) {
+    const action = person.actions.get(name);
+    if (!action) continue;
+    action.stop();
+    person.mixer.uncacheAction(action.getClip());
+    person.actions.delete(name);
+  }
+}
+function closeImport() {
+  state.importing = null;
+  forgetClip(PREVIEW);
+  renderClipPanel();
+  showStage();
+}
+// Saves the clip beside the models and lists it in public/data/clips.js.
+async function addClip() {
+  const imp = state.importing,
+    name = imp.name,
+    problem = nameProblem(name);
+  if (problem) return toast(problem, true);
+  try {
+    const fit = fitClip(imp.source, gameBones(), { name, kind: imp.kind }),
+      { GLTFExporter } = await clipLoaders(),
+      glb = await clipToGlb(fit.clip, GLTFExporter),
+      entry = clipEntry(name, fit);
+    await shell.saveClip(name, new Uint8Array(glb));
+    const saved = await shell.read('clips');
+    saved.clips[name] = entry;
+    await shell.write('clips', saved);
+    state.clips = saved;
+    IMPORTED_CLIPS[name] = entry;
+    CLIPS[name] = { duration: entry.duration, ...(entry.stride ? { stride: entry.stride } : {}) };
+    stage.characters.clips.set(name, fit.clip);
+    closeImport();
+    renderInspector();
+    toast(`Added ${label(name)}: pick it as a walk, standing or activity.`);
+  } catch (error) {
+    toast('Could not add the clip: ' + error.message, true);
+  }
+}
+async function removeClip(name) {
+  const users = Object.entries({
+    defaults: state.session.settings.defaults,
+    ...state.session.settings.people,
+  })
+    .filter(([, own]) => ['walk', 'idle', 'activity'].some((k) => own?.[k] === name))
+    .map(([id]) => id);
+  if (
+    !confirm(
+      `Remove ${label(name)} from the game? Its file is deleted.` +
+        (users.length
+          ? ` ${users.length} setting(s) use it; they fall back to as built until changed.`
+          : ''),
+    )
+  )
+    return;
+  try {
+    await shell.removeClip(name);
+    const saved = await shell.read('clips');
+    delete saved.clips[name];
+    await shell.write('clips', saved);
+    state.clips = saved;
+    delete IMPORTED_CLIPS[name];
+    forgetClip(name);
+    renderInspector();
+    showStage();
+    toast(`Removed ${label(name)}.`);
+  } catch (error) {
+    toast('Could not remove the clip: ' + error.message, true);
+  }
 }
 // A piece of clothing with a new colour: a plain colour, or an object's `color`.
 const withColour = (current, colour) =>
@@ -460,7 +693,7 @@ function changed() {
     : 'Nothing to redo';
   renderPeople();
   renderInspector();
-  if (state.target) stage.show(lookOf(state.target));
+  if (state.target) showStage();
 }
 async function save() {
   try {
@@ -535,12 +768,15 @@ shell?.onMenu((command) => {
 });
 
 // For test scripts and the developer console.
-window.characterEditor = { state, stage };
+window.characterEditor = { state, stage, startImport };
 
 async function start() {
   const saved = shell
     ? await shell.read('characters')
     : (await import('../../../public/data/characters.js')).default;
+  state.clips = shell
+    ? await shell.read('clips')
+    : (await import('../../../public/data/clips.js')).default;
   state.session = new CharacterSession(saved);
   state.session.on(changed);
   // Building the town to find everyone takes a moment: let the message show first.

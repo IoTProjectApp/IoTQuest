@@ -4,8 +4,8 @@
 // and reads and writes the hand-placed layout, public/data/world-layout.js.
 import { app, BrowserWindow, Menu, dialog, ipcMain, shell } from 'electron';
 import http from 'node:http';
-import { readFile, writeFile, rename } from 'node:fs/promises';
-import { extname, join, normalize, sep } from 'node:path';
+import { readFile, writeFile, rename, stat, mkdir, unlink } from 'node:fs/promises';
+import { basename, extname, join, normalize, sep } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
@@ -41,6 +41,15 @@ const STORES = {
     about: "What the game's people say, written by the Conversation Editor",
     valid: (v) =>
       v?.version === 1 && typeof v.people === 'object' && typeof v.defaults === 'object',
+  },
+  clips: {
+    file: join(PUBLIC, 'data', 'clips.js'),
+    about: 'Animation clips imported in the Character Editor',
+    valid: (v) =>
+      v?.version === 1 &&
+      v.clips !== null &&
+      typeof v.clips === 'object' &&
+      !Array.isArray(v.clips),
   },
   'street-layout': {
     file: join(PUBLIC, 'data', 'street-layout.js'),
@@ -84,10 +93,14 @@ async function serve(req, res) {
   const { pathname } = new URL(req.url, 'http://localhost');
   let body, file;
   try {
-    const addon = ADDONS[pathname.slice('/editor/three/'.length)];
-    if (pathname.startsWith('/editor/three/') && addon) {
-      file = pathname;
-      body = (await readFile(join(ROOT, 'node_modules/three/examples/jsm', addon), 'utf8')).replace(
+    if (pathname.startsWith('/editor/three/')) {
+      // An add-on by its short name, or any file by its path in three's examples (the loaders
+      // import their neighbours by relative paths).
+      const path = pathname.slice('/editor/three/'.length);
+      file = inside(join(ROOT, 'node_modules/three/examples/jsm'), ADDONS[path] || path);
+      if (!file || extname(file) !== '.js')
+        throw Object.assign(Error('Not a three.js add-on'), { code: 'ENOENT' });
+      body = (await readFile(file, 'utf8')).replace(
         /from 'three';/g,
         "from '/public/vendor/three.module.min.js';",
       );
@@ -271,6 +284,44 @@ function buildMenu() {
 ipcMain.handle('store:read', (_, name) => readStore(name));
 ipcMain.handle('store:write', (_, name, value) => writeStore(name, value));
 ipcMain.handle('game:open', () => openGame());
+
+// Animation clips (Character Editor): a file picked to import, and the converted clip saved beside
+// the character models as public/models/people/clip-<Name>.glb.
+const CLIP_FOLDER = join(PUBLIC, 'models', 'people');
+const CLIP_NAME = /^[A-Z][A-Za-z0-9]{0,39}$/;
+const MB = 1024 * 1024;
+ipcMain.handle('clip:open', async () => {
+  const picked = await dialog.showOpenDialog(editor, {
+    title: 'Import an animation clip',
+    properties: ['openFile'],
+    filters: [{ name: 'Animation (glTF or FBX)', extensions: ['glb', 'gltf', 'fbx'] }],
+  });
+  if (picked.canceled || !picked.filePaths.length) return null;
+  const path = picked.filePaths[0],
+    ext = extname(path).slice(1).toLowerCase();
+  if (!['glb', 'gltf', 'fbx'].includes(ext)) throw Error('Pick a .glb, .gltf or .fbx file');
+  if ((await stat(path)).size > 64 * MB) throw Error('That file is over 64 MB');
+  return { name: basename(path), ext, bytes: new Uint8Array(await readFile(path)) };
+});
+const clipFile = (name) => {
+  if (typeof name !== 'string' || !CLIP_NAME.test(name)) throw Error('Not a clip name: ' + name);
+  return join(CLIP_FOLDER, 'clip-' + name + '.glb');
+};
+ipcMain.handle('clip:save', async (_, name, bytes) => {
+  const file = clipFile(name),
+    data = Buffer.from(bytes);
+  if (data.length > 32 * MB) throw Error('The converted clip is over 32 MB');
+  if (data.subarray(0, 4).toString('latin1') !== 'glTF') throw Error('Not a binary glTF clip');
+  await mkdir(CLIP_FOLDER, { recursive: true });
+  await writeFile(file + '.tmp', data);
+  await rename(file + '.tmp', file);
+  return basename(file);
+});
+ipcMain.handle('clip:remove', async (_, name) => {
+  await unlink(clipFile(name)).catch((error) => {
+    if (error.code !== 'ENOENT') throw error;
+  });
+});
 ipcMain.on('editor:unsaved', (_, value) => {
   unsaved = !!value;
   editor?.setDocumentEdited(unsaved);

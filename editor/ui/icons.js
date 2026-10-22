@@ -33,6 +33,9 @@ const PATHS = {
   plan: '<rect x="3.5" y="3.5" width="17" height="17" rx="2"/><path d="M3.5 12h17M12 3.5v17"/>',
   cube: '<path d="M12 3 4 7v10l8 4 8-4V7l-8-4Z"/><path d="m4 7 8 4 8-4M12 11v10"/>',
   person: '<circle cx="12" cy="6.5" r="3"/><path d="M12 10v6M8 21l4-5 4 5M7 12.5l5-2 5 2"/>',
+  quest: '<path d="M5 21V4"/><path d="M5 4h11l-2 4 2 4H5"/>',
+  check: '<path d="m5 12 5 5 9-10"/>',
+  plus: '<path d="M12 5v14M5 12h14"/>',
   lock: '<rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7.5a4 4 0 0 1 8 0V11"/>',
 };
 

@@ -26,6 +26,14 @@ export const WORKSPACES = [
     icon: 'person',
     writes: 'public/data/characters.js',
   },
+  {
+    id: 'quest-editor',
+    name: 'Quest Editor',
+    summary:
+      'Write new quests: who asks and where, the devices to wire, the rules, and the tests. Each is checked against a worked solution on both boards before it can be saved.',
+    icon: 'quest',
+    writes: 'public/data/quests.js',
+  },
 ];
 
 export const workspaceUrl = (workspace) => `../workspaces/${workspace.id}/`;

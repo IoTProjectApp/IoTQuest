@@ -20,6 +20,11 @@ const STORES = {
     about: 'Hand-placed changes to the generated world, written by the world editor',
     valid: (v) => v?.version === 1 && typeof v.locations === 'object',
   },
+  quests: {
+    file: join(PUBLIC, 'data', 'quests.js'),
+    about: 'Quests written in the Quest Editor',
+    valid: (v) => v?.version === 1 && Array.isArray(v.quests),
+  },
   characters: {
     file: join(PUBLIC, 'data', 'characters.js'),
     about: "Hand-set looks and movement for the game's people, written by the Character Editor",

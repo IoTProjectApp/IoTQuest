@@ -12,11 +12,12 @@ The script checks for Node.js 20 or newer, installs the game's development packa
 
 The editor is a set of **workspaces**. A workspace is a screen for one job, such as placing objects in the 3D world. The editor opens on a home page with a card for each workspace. Click a card to open that workspace, and use the back arrow at the top left to return.
 
-| Workspace        | What it does                                                                                                                 | Writes                         |
-| ---------------- | ---------------------------------------------------------------------------------------------------------------------------- | ------------------------------ |
-| Map Editor       | Move, add and remove furniture, garden features and town buildings in the 3D world, city by city.                            | `public/data/world-layout.js`  |
-| Street Editor    | Lay out the town's roads: junctions, roads, traffic lights, stop signs and crossings, then watch the traffic run.            | `public/data/street-layout.js` |
-| Character Editor | Dress the game's people and set how they move: who plays them, their clothes, their walk, stance and activity, and how fast. | `public/data/characters.js`    |
+| Workspace        | What it does                                                                                                                               | Writes                         |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------ |
+| Map Editor       | Move, add and remove furniture, garden features and town buildings in the 3D world, city by city.                                          | `public/data/world-layout.js`  |
+| Street Editor    | Lay out the town's roads: junctions, roads, traffic lights, stop signs and crossings, then watch the traffic run.                          | `public/data/street-layout.js` |
+| Character Editor | Dress the game's people and set how they move: who plays them, their clothes, their walk, stance and activity, and how fast.               | `public/data/characters.js`    |
+| Quest Editor     | Write new quests: who asks and where, the devices to wire, the rules and the tests, each checked against a worked solution on both boards. | `public/data/quests.js`        |
 
 Each workspace:
 
@@ -246,3 +247,69 @@ export default {
 - **Order:** a person's own settings come before `defaults`, and both before what the code picks.
 - **Ids** are the game's own: `player` is the technician, and others look like `Maya`, `worker:shop-floor:0` or `bus:0:1>1:1:2`.
 - **An empty file** leaves everyone as the code makes them, which `tests/character-settings.test.mjs` checks. `public/character-settings.js` applies the settings.
+
+## Quest Editor
+
+A quest is a request from someone in the game: wire some sensors and outputs, and program when each output turns on. The Quest Editor writes new quests. It also shows the built-in quests, so you can read them and copy one to start from.
+
+### Layout
+
+- **The list** on the left: **Your quests**, each with a dot (green when ready, red with problems), then the built-in quests. Search filters both.
+- **The quest:**
+  - **Story:** title, who asks and their role, where it happens, what they say, the goal, XP, badge, what students learn, and a hint.
+  - **Devices:** sensors and outputs to install, with the pins the game gives them on the ESP32 and the Pico.
+  - **Rules:** for each output, when it turns on. These are conditions on the sensors' readings (in the program's units, for example a light sensor reads 0–4095), joined by **and** or **or**. An output with no condition stays off.
+  - **Tests:** readings to try and whether each output should be **ON** or **OFF**. A test the rules disagree with is shaded red.
+    - **Results from the rules** sets every test's results from the rules.
+    - **Suggest tests** adds a test either side of each threshold.
+- **The check** on the right, run again after every change. It shows whether the quest is **Ready to play**, or what to fix; how the worked solution does on each board and language; its code; and the Guide's steps.
+
+A built-in quest is read-only. **Copy as a new quest** makes it your own. Timed quests, which play out over time, can't be copied: the editor writes rule quests only.
+
+### The check
+
+Saving needs every one of your quests to pass, so a saved quest can always be played:
+
+- it builds: devices exist, there is one rule per output, the rules read only chosen sensors, and every test sets real readings and gives each output on or off;
+- its title is its own;
+- its wiring is valid on the ESP32 and the Raspberry Pi Pico;
+- the worked solution made from its rules passes every test, and the automatic tests at each threshold, on both boards in both Arduino C++ and MicroPython;
+- a program that does nothing fails (some test needs an output on).
+
+Warnings, which don't stop saving, point out an output never tested both on and off, or a resident with no words of their own.
+
+### The saved quests
+
+`public/data/quests.js` holds the author's choices; `public/authored-quests.js` describes the format, rebuilds each quest and checks it again when the game loads.
+
+```js
+export default {
+  version: 1,
+  quests: [
+    {
+      id: 'night-light',
+      title: 'Night light',
+      area: 'Bedroom',
+      resident: 'Nina',
+      role: 'Resident',
+      quote: "It's so dark when I get up at night.",
+      goal: 'Turn the lamp on when it is dark.',
+      ids: ['ldr', 'led'],
+      conditions: ['light < 1800'],
+      scenarios: [
+        ['Day', { light: 73.26 }, [0]],
+        ['Night', { light: 9.77 }, [1]],
+      ],
+      xp: 100,
+      badge: '',
+      learn: ['thresholds'],
+      hint: '',
+    },
+  ],
+};
+```
+
+- **Test readings** are stored as the game stores them, with light-type sensors as levels 0–100 that a program reads as level × 40.95. The editor shows and takes program readings.
+- **Your quests come after the built-in quests,** in the file's order. The game remembers progress by a quest's place in that list, so adding quests never disturbs saved games. Deleting one of your quests moves the ones after it up, and the editor warns you.
+- **A quest that fails to build in the game** is left out with a warning, rather than stopping the game.
+- **CI checks your quests too:** they join the game's list, so the existing tests (`tests/simulation.test.mjs` and others) run their worked solutions on every board and language, along with `tests/quest-editor.test.mjs`.

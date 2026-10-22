@@ -432,18 +432,30 @@ function undo(redo = false) {
     toast(`${redo ? 'Redid' : 'Undid'}: ${text}`);
   }
 }
-async function playtest() {
+// fromStart: the game from the beginning, rather than at what is being edited.
+async function playtest(fromStart = false) {
   flush();
   if (state.session.isChanged()) {
     if (!confirm('The game plays saved lines only. Save now and open the game?')) return;
     if (!(await save())) return;
   }
-  shell.openGame();
+  // In a chat with the selected person, in the selected city.
+  const person = state.person === EVERYONE ? null : state.person;
+  shell.openGame(
+    fromStart
+      ? null
+      : {
+          city: state.city ?? 'legacy',
+          person,
+          name: person && state.session.nameIn(person, state.city),
+          chat: !!person,
+        },
+  );
 }
 $('undo').addEventListener('click', () => undo());
 $('redo').addEventListener('click', () => undo(true));
 $('save').addEventListener('click', save);
-$('playtest').addEventListener('click', playtest);
+$('playtest').addEventListener('click', (e) => playtest(e.shiftKey));
 $('home').addEventListener('click', (e) => {
   flush();
   if (
@@ -472,7 +484,7 @@ document.addEventListener('keydown', (e) => {
 });
 shell?.onMenu((command) => {
   if (command === 'save') save();
-  else if (command === 'playtest') playtest();
+  else if (command === 'playtest' || command === 'playstart') playtest(command === 'playstart');
   else if (typing()) document.execCommand(command);
   else undo(command === 'redo');
 });

@@ -7,16 +7,18 @@ contextBridge.exposeInMainWorld('editorShell', {
   // (Conversation Editor).
   read: (store) => ipcRenderer.invoke('store:read', store),
   write: (store, value) => ipcRenderer.invoke('store:write', store, value),
-  openGame: () => ipcRenderer.invoke('game:open'),
+  // The game in a play-test window, at a target (see public/editor-play.js) or the beginning.
+  openGame: (target = null) => ipcRenderer.invoke('game:open', target),
   // Animation clips: pick a file to import ({ name, ext, bytes } or null), save a converted clip
   // (binary glTF) as public/models/people/clip-<name>.glb, or remove one.
   openClip: () => ipcRenderer.invoke('clip:open'),
   saveClip: (name, bytes) => ipcRenderer.invoke('clip:save', name, bytes),
   removeClip: (name) => ipcRenderer.invoke('clip:remove', name),
   setUnsaved: (value) => ipcRenderer.send('editor:unsaved', value),
-  // Menu commands (save, undo, redo, play-test) arrive as named events.
+  // Menu commands (save, undo, redo, playtest from here, playstart from the beginning) arrive as
+  // named events.
   onMenu: (handler) => {
-    for (const name of ['save', 'undo', 'redo', 'playtest'])
+    for (const name of ['save', 'undo', 'redo', 'playtest', 'playstart'])
       ipcRenderer.on('menu:' + name, () => handler(name));
   },
 });

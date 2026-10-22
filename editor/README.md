@@ -47,6 +47,22 @@ Each workspace:
 
 So a workspace imports the game's code with ordinary relative paths (`../../../public/regions.js`), and the same imports work in Node tests. Nothing is cached, so a reload always shows the files as they are on disk. Editor pages may run only their own scripts (a Content Security Policy is set).
 
+### Play from here
+
+**Play-test** (`⌘P`) in any workspace saves first if it needs to, then opens the game in a new window straight at what you are editing:
+
+| Workspace           | The game opens                                                                   |
+| ------------------- | -------------------------------------------------------------------------------- |
+| Map Editor          | in the city being edited, standing by the selected object (if one is selected)   |
+| Street Editor       | in the city being edited (or the one previewed for the shared town), in the town |
+| Character Editor    | at the original home, standing beside the selected person                        |
+| Quest Editor        | with the selected quest started (built-in or yours)                              |
+| Conversation Editor | in the chosen city, in a chat with the selected person                           |
+
+**Play-test from the beginning** (`⇧⌘P`, or Shift-click **Play-test**) opens the game on its globe, as a new player sees it. Locked destinations open anyway.
+
+The shell adds the target to the game's address (`game.html?editor-play={…}`, read by `public/editor-play.js`, which drops anything the game cannot use). With that parameter present, the game starts fresh: it neither reads nor saves progress, and its header says "Editor play-test · progress is not saved". The play-test window also uses a fresh, in-memory browser session each time, so nothing from it outlives the window. Someone out of sight cannot be walked up to; Maya, Alex and Sam still chat, as they do when they call the technician over.
+
 ## Map Editor
 
 The game builds its world in code (`public/world-model.js`, `public/regions.js`, `public/community-world.js` and others), so each city's house, garden and town come from rules, not from a hand-made map. The Map Editor lets you correct that world by hand. Your changes are saved per city, and the game applies them every time it builds that city.
@@ -64,7 +80,7 @@ The game builds its world in code (`public/world-model.js`, `public/regions.js`,
   - When nothing is selected, it lists every change in the city. Click a change to go to that object, or use its arrow to undo just that change.
 - **Camera:** drag to orbit, right-drag to pan, scroll to zoom, and press `F` to focus on the selection.
 
-Undo and redo (`⌘Z`, `⇧⌘Z`) cover every change, and each city keeps its own history while the editor is open. **Save** (`⌘S`) writes all cities at once. **Play-test** (`⌘P`) opens the game in a fresh window (no saved progress or offline copy), where you can travel to the city and see the result. The game reads saved changes only, so Play-test offers to save first.
+Undo and redo (`⌘Z`, `⇧⌘Z`) cover every change, and each city keeps its own history while the editor is open. **Save** (`⌘S`) writes all cities at once. **Play-test** (`⌘P`) opens the game in a fresh window (no saved progress or offline copy) in the city, by the selected object (see [Play from here](#play-from-here)). The game reads saved changes only, so Play-test offers to save first.
 
 Some objects carry a caution in the inspector:
 

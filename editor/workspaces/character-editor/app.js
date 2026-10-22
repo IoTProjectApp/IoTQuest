@@ -710,17 +710,20 @@ function undo(redo = false) {
   const text = redo ? state.session.redo() : state.session.undo();
   if (text) toast(`${redo ? 'Redid' : 'Undid'}: ${text}`);
 }
-async function playtest() {
+// fromStart: the game from the beginning, rather than at what is being edited.
+async function playtest(fromStart = false) {
   if (state.session.isChanged()) {
     if (!confirm('The game uses saved settings only. Save now and open the game?')) return;
     if (!(await save())) return;
   }
-  shell.openGame();
+  // Walking up to the selected person, at the original home where this editor shows them.
+  const person = state.target && ![DEFAULTS, 'player'].includes(state.target) ? state.target : null;
+  shell.openGame(fromStart ? null : { city: 'legacy', person });
 }
 $('undo').addEventListener('click', () => undo());
 $('redo').addEventListener('click', () => undo(true));
 $('save').addEventListener('click', save);
-$('playtest').addEventListener('click', playtest);
+$('playtest').addEventListener('click', (e) => playtest(e.shiftKey));
 $('home').addEventListener('click', (e) => {
   if (
     state.session?.isChanged() &&
@@ -762,7 +765,7 @@ document.addEventListener('keydown', (e) => {
 });
 shell?.onMenu((command) => {
   if (command === 'save') save();
-  else if (command === 'playtest') playtest();
+  else if (command === 'playtest' || command === 'playstart') playtest(command === 'playstart');
   else if (typing()) document.execCommand(command);
   else undo(command === 'redo');
 });

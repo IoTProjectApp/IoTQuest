@@ -1,3 +1,4 @@
+import { settingsFor } from './character-settings.js';
 import { recreationLots } from './community-recreation.js';
 import { migrateNeighbourAreas } from './neighbour-profiles.js';
 import { civicLots } from './community-civic.js';
@@ -4159,7 +4160,11 @@ function leaveVisit() {
 // Moves a walking visitor on by dt seconds; called every frame.
 function updateVisit(dt) {
   const actor = visitor();
-  if (!actor?.walkTo || !stepToward(actor, actor.walkTo, VISIT_SPEED, dt)) return;
+  if (
+    !actor?.walkTo ||
+    !stepToward(actor, actor.walkTo, VISIT_SPEED * settingsFor(actor.id).speed, dt)
+  )
+    return;
   actor.walkTo = null;
   if (visit.phase === 'leaving') return endVisit();
   visit.phase = 'here';

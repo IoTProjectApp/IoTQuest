@@ -2,6 +2,7 @@ import { JUDO_PAIRS } from './judo-dojo.js';
 import { instructorAt } from './judo-class.js';
 import { CLIPS, walkTime } from './character-clips.js';
 import { JUDO_GI } from './character-outfits.js';
+import { settingsFor, dressed } from './character-settings.js';
 
 export { CLIPS };
 
@@ -111,7 +112,9 @@ export function judoCharacters(judo, t, reduced) {
   const add = (person, at, angle, clips) =>
     out.push({
       key: person.actor.id,
-      model: CAST[person.actor.id],
+      // The Character Editor may change who plays them and what they wear, never their moves,
+      // which the class's routine is timed to.
+      model: settingsFor(person.actor.id).model || CAST[person.actor.id],
       x: person.origin.x + at[0],
       y: MAT,
       z: person.origin.z + at[1],
@@ -119,7 +122,7 @@ export function judoCharacters(judo, t, reduced) {
       clips,
       standIn: [...person.meshes, person.belt, person.hair],
       belt: person.actor.belt,
-      outfit: JUDO_GI,
+      outfit: dressed(JUDO_GI, settingsFor(person.actor.id).outfit),
     });
   // Someone in conversation stands and faces the technician (as world3d turns their actor).
   const talking = (person) => {

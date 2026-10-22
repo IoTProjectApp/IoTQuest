@@ -5,6 +5,7 @@ import { updateLandscape } from './landscape.js';
 import { isHousehold } from './section-residents.js';
 import { castFor, isWoman, TECHNICIAN } from './people-cast.js';
 import { CLIPS, walkTime } from './character-clips.js';
+import { settingsFor, dressed, knownClip } from './character-settings.js';
 import { outfitFor, TECHNICIAN_OUTFIT } from './character-outfits.js';
 import { addDeviceDetails } from './device-objects.js';
 import { catalogueLamps } from './catalogue-devices.js';
@@ -57,6 +58,11 @@ export function buildWorldModel(id) {
   const model = createRegionalModel(id || 'legacy');
   addCommunityWorld(model, locationById(id));
   return applyWorldLayout(model, id || 'legacy');
+}
+// A walk clip stepped by the distance walked, so feet keep pace with the ground; a clip that is
+// not a walk (set in the Character Editor) plays as a loop instead.
+function stepped(name, distance, loop) {
+  return CLIPS[name]?.stride ? { name, time: walkTime(name, distance) } : loop(name);
 }
 // Most simulated seconds one frame advances the community; 360× at 60 fps is about 6 s.
 const MAX_SIM_STEP = 10;
@@ -655,18 +661,24 @@ export class World3D {
           phase = reduced ? 0 : t * 8;
         } else angle = Math.atan2(p[0] - ax, p[2] - az);
       } else if (state.routine?.actors?.[actor.id]) {
-        const target = state.routine.actors[actor.id];
+        const target = state.routine.actors[actor.id],
+          // How briskly they walk over: the Character Editor's speed for them, if set.
+          pace = settingsFor(actor.id).speed;
         actor.x +=
-          (target[0] - actor.x) * (reduced ? 1 : Math.min(1, dt * Math.max(1, state.speed) * 0.8));
+          (target[0] - actor.x) *
+          (reduced ? 1 : Math.min(1, dt * Math.max(1, state.speed) * 0.8 * pace));
         actor.z +=
-          (target[1] - actor.z) * (reduced ? 1 : Math.min(1, dt * Math.max(1, state.speed) * 0.8));
+          (target[1] - actor.z) *
+          (reduced ? 1 : Math.min(1, dt * Math.max(1, state.speed) * 0.8 * pace));
         ax = actor.x;
         az = actor.z;
         phase = reduced ? 0 : t * 8;
       } else if (actor.id === 'Maya' && motion) {
-        ax = -4.3 + Math.sin(t * 0.8) * 1.1;
-        az = 0.5 + Math.cos(t * 0.8) * 0.6;
-        angle = Math.atan2(Math.cos(t * 0.8), -Math.sin(t * 0.8));
+        // Maya strolls round the garden, as briskly as her set speed.
+        const w = t * 0.8 * settingsFor('Maya').speed;
+        ax = -4.3 + Math.sin(w) * 1.1;
+        az = 0.5 + Math.cos(w) * 0.6;
+        angle = Math.atan2(Math.cos(w), -Math.sin(w));
         phase = t * 9;
       }
       if (state.talkingNpc !== actor.id) delete actor.talkPosition;
@@ -972,30 +984,34 @@ export class World3D {
     const speed = dt > 0 && moved < 1 ? moved / dt : 0;
     entry.pace =
       (entry.pace || 0) + (Math.min(1, speed / 1.5) - (entry.pace || 0)) * Math.min(1, dt * 6);
-    const loop = (name, rate = 1) => ({
-      name,
-      time: reduced ? 0 : (t * rate + key.length) % CLIPS[name].duration,
-    });
-    const still = typeof entry.still === 'function' ? entry.still() : entry.still || 'Idle',
-      walk = woman ? 'FemaleWalk' : 'Walking';
+    // Hand-set clips, clip speed, model and clothes from the Character Editor (character-settings.js).
+    const set = settingsFor(key);
+    const loop = (name) => {
+      name = knownClip(name);
+      return { name, time: reduced ? 0 : (t * set.rate + key.length) % CLIPS[name].duration };
+    };
+    const still =
+        set.idle ?? (typeof entry.still === 'function' ? entry.still() : entry.still || 'Idle'),
+      activity = set.activity ?? entry.clip,
+      walk = set.walk ? knownClip(set.walk) : woman ? 'FemaleWalk' : 'Walking';
     let clips;
-    if (reduced) clips = [{ ...loop(entry.clip && !entry.place ? 'Idle' : still), weight: 1 }];
-    else if (entry.clip) clips = [{ ...loop(entry.clip), weight: 1 }];
-    else if (entry.onTheSpot) clips = [{ name: walk, time: walkTime(walk, t * 0.9), weight: 1 }];
+    if (reduced) clips = [{ ...loop(activity && !entry.place ? 'Idle' : still), weight: 1 }];
+    else if (activity) clips = [{ ...loop(activity), weight: 1 }];
+    else if (entry.onTheSpot) clips = [{ ...stepped(walk, t * 0.9, loop), weight: 1 }];
     else {
-      const moving = entry.moving || walk,
+      const moving = set.walk ? walk : entry.moving || walk,
         pace = entry.pace < 0.05 ? 0 : entry.pace;
       clips = pace
         ? [
-            { name: moving, time: walkTime(moving, entry.walked), weight: pace },
+            { ...stepped(moving, entry.walked, loop), weight: pace },
             { ...loop(still), weight: 1 - pace },
           ]
         : [{ ...loop(still), weight: 1 }];
     }
     return {
       key,
-      model: castFor(key, '', woman),
-      outfit: outfitFor(key),
+      model: set.model || castFor(key, '', woman),
+      outfit: dressed(outfitFor(key), set.outfit),
       ...at,
       clips,
       standIn,
@@ -1007,23 +1023,38 @@ export class World3D {
   residentCharacter(actor, x, z, heading, floor, t, dt, names, state) {
     const moved = actor.lastAt ? Math.hypot(x - actor.lastAt[0], z - actor.lastAt[1]) : 0;
     actor.lastAt = [x, z];
-    const technician = actor.id === 'player';
-    // Feet keep pace with the ground: residents up to a brisk walk, the technician (who moves at a
-    // jog and jogs) up to a run.
-    actor.walked = (actor.walked || 0) + Math.min(moved, (technician ? 3.5 : 1.6) * dt);
+    const technician = actor.id === 'player',
+      set = settingsFor(actor.id);
+    // Feet keep pace with the ground: residents up to a brisk walk (or as fast as their set speed),
+    // the technician (who moves at a jog and jogs) up to a run.
+    actor.walked = (actor.walked || 0) + Math.min(moved, (technician ? 3.5 : 1.6 * set.speed) * dt);
     // A jump (a visit, a new routine spot) is not walking.
     const speed = dt > 0 && moved < 1 ? moved / dt : 0;
     actor.pace = (actor.pace || 0) + (Math.min(1, speed) - (actor.pace || 0)) * Math.min(1, dt * 6);
     const name = actor.name || names[actor.id] || actor.id,
       woman = technician ? state.appearance === '👩🏽‍🔧' : isWoman(actor.id, name),
-      walk = technician ? 'Jogging' : woman ? 'FemaleWalk' : 'Walking',
-      // Someone in conversation talks with their hands; reduced motion holds everyone still.
-      gesture = state.talkingNpc === actor.id ? 'Talking' : 'Idle',
-      idle = { name: gesture, time: state.reduced ? 0 : t % CLIPS[gesture].duration },
-      pace = actor.pace < 0.05 || state.reduced ? 0 : actor.pace;
+      walk = set.walk
+        ? knownClip(set.walk)
+        : technician
+          ? 'Jogging'
+          : woman
+            ? 'FemaleWalk'
+            : 'Walking',
+      // Someone in conversation talks with their hands; reduced motion holds everyone still. A
+      // hand-set activity replaces standing and walking alike.
+      gesture =
+        state.talkingNpc === actor.id ? 'Talking' : knownClip(set.activity || set.idle || 'Idle'),
+      loop = (name) => ({
+        name,
+        time: state.reduced ? 0 : (t * set.rate) % CLIPS[name].duration,
+      }),
+      idle = loop(gesture),
+      pace = actor.pace < 0.05 || state.reduced || set.activity ? 0 : actor.pace;
     return {
       key: actor.id,
-      model: technician ? TECHNICIAN[state.appearance] || 'Adam' : castFor(actor.id, name),
+      model:
+        set.model ||
+        (technician ? TECHNICIAN[state.appearance] || 'Adam' : castFor(actor.id, name)),
       x,
       y: floor,
       // The technician carries their toolbox, in the colour chosen in the settings, and is drawn a
@@ -1032,13 +1063,13 @@ export class World3D {
       scale: technician ? 1.15 : 1,
       // Work wear for the technician (a hi-vis vest and a hard hat); everyone else dressed as their
       // own.
-      outfit: technician ? TECHNICIAN_OUTFIT : outfitFor(actor.id),
+      outfit: dressed(technician ? TECHNICIAN_OUTFIT : outfitFor(actor.id), set.outfit),
       z,
       // Actors face (sin, cos) of their heading; characters face (cos, sin) of their angle.
       angle: Math.atan2(Math.cos(heading), Math.sin(heading)),
       clips: pace
         ? [
-            { name: walk, time: walkTime(walk, actor.walked), weight: pace },
+            { ...stepped(walk, actor.walked, loop), weight: pace },
             { ...idle, weight: 1 - pace },
           ]
         : [{ ...idle, weight: 1 }],

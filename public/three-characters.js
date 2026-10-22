@@ -2,6 +2,8 @@ import * as THREE from './vendor/three.module.min.js';
 import { GLTFLoader } from './vendor/three-addons/GLTFLoader.js';
 import { clone } from './vendor/three-addons/SkeletonUtils.js';
 import { Outfits } from './three-outfits.js';
+import { Appearance } from './three-appearance.js';
+import { appearanceScale } from './character-appearance.js';
 import { IMPORTED_CLIPS } from './character-clips.js';
 
 // Rigged, animated people for the three.js renderer. The game describes each person every frame
@@ -13,7 +15,8 @@ import { IMPORTED_CLIPS } from './character-clips.js';
 // radians, 0 = +x, as figures.js), clips: [{ name, time, weight }] (blended by weight), standIn
 // (the meshes drawn while it loads), belt (optional colour), carry (optional colour: a toolbox in
 // the right hand), scale (optional; the technician is drawn a little larger to stand out), outfit
-// (optional: recoloured clothes, work wear and badges, see character-outfits.js) }.
+// (optional: recoloured clothes, work wear and badges, see character-outfits.js), appearance
+// (optional: height, build, skin, hair, beard and brows, see character-appearance.js) }.
 //
 // Each model comes in full detail and a light version (-low, about 15% of the triangles): people
 // far from the camera use the light one, and on software WebGL everyone does, because skinning
@@ -50,6 +53,7 @@ export class ThreeCharacters {
       this.sunShadowMaterial = new THREE.ShadowMaterial({ opacity: 0.45, depthWrite: false });
     }
     this.outfits = new Outfits({ shadows });
+    this.appearance = new Appearance({ shadows });
     this.clips = null;
   }
   // The animations, shared by everyone, load with the first person seen.
@@ -100,9 +104,12 @@ export class ThreeCharacters {
       for (const m of [].concat(o.material)) m.color.set(0xffffff);
     });
     this.outfits.dress(root, state.file, state.outfit);
+    this.appearance.apply(root, state.file, state.appearance);
     const hips = root.getObjectByName('mixamorigHips');
     const person = {
       model: state.model,
+      // Height and build: their size on each axis, or null for as modelled.
+      size: appearanceScale(state.appearance),
       root,
       hips,
       mixer: new THREE.AnimationMixer(root),
@@ -176,7 +183,8 @@ export class ThreeCharacters {
       person.root.visible = person.shadow.visible = true;
       person.root.position.set(state.x, state.y, state.z);
       person.root.scale.setScalar(state.scale || 1);
-      person.shadow.scale.setScalar(state.scale || 1);
+      if (person.size) person.root.scale.multiply(new THREE.Vector3(...person.size));
+      person.shadow.scale.setScalar((state.scale || 1) * (person.size?.[1] || 1));
       if (person.carry && state.carry) person.carry.material.color.set(state.carry);
       // Models face +z; angle 0 faces +x.
       person.root.rotation.y = Math.PI / 2 - state.angle;
@@ -225,6 +233,7 @@ export class ThreeCharacters {
     this.sunShadowGeometry?.dispose();
     this.sunShadowMaterial?.dispose();
     this.outfits.dispose();
+    this.appearance.dispose();
     for (const { gltf } of this.models.values())
       gltf?.scene.traverse((o) => {
         if (!o.isMesh) return;

@@ -71,7 +71,18 @@ export class CharacterSession {
       else own.outfit[piece] = value;
     });
   }
-  // Puts a whole section back as built: 'model', 'outfit' or 'movement'; or everything.
+  // Sets one part of how they look ('height', 'hair'...; see character-appearance.js), or with
+  // undefined puts it back as modelled.
+  appear(target, part, value, label = 'Change ' + part) {
+    return this.commit(label, (settings) => {
+      const own = ownFor(settings, target);
+      own.appearance ||= {};
+      if (value === undefined) delete own.appearance[part];
+      else own.appearance[part] = value;
+    });
+  }
+  // Puts a whole section back as built: 'model', 'outfit', 'appearance' or 'movement'; or
+  // everything.
   reset(target, section = null) {
     return this.commit('Reset ' + (section || 'all'), (settings) => {
       const own = ownFor(settings, target);
@@ -97,10 +108,12 @@ function ownFor(settings, target) {
   if (target === DEFAULTS) return (settings.defaults ||= {});
   return (settings.people[target] ||= {});
 }
-// Drops empty outfits and people with nothing set, so the saved file stays as small as it can.
+// Drops empty outfits and appearances and people with nothing set, so the saved file stays as
+// small as it can.
 function tidy(settings) {
   for (const own of [settings.defaults, ...Object.values(settings.people)])
-    if (own.outfit && !Object.keys(own.outfit).length) delete own.outfit;
+    for (const key of ['outfit', 'appearance'])
+      if (own[key] && !Object.keys(own[key]).length) delete own[key];
   for (const [id, own] of Object.entries(settings.people))
     if (!Object.keys(own).length) delete settings.people[id];
 }

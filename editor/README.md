@@ -265,6 +265,7 @@ The game's people are rigged, motion-captured characters (Mixamo models in `publ
   - `Space` pauses. Drag to turn round them, and scroll to zoom.
 - **Inspector** on the right:
   - **Model:** which of the characters plays them.
+  - **Look:** how they look beyond their clothes (see [Designing a look](#designing-a-look)): height, build, skin, hair, beard and brows. **Start from a look…** applies a ready-made one; **Randomise** makes one up.
   - **Clothes:** top and bottom colours, stripes, a hi-vis vest and its lettering, a cap or hard hat, a backpack and a badge. Each piece can be as built, none (taken off) or your choice.
   - **Movement:** their walk, their standing clip, an activity played on the spot instead of both (or **None** to take away one the code gives them), walking speed, and clip speed.
   - **Imported clips:** animations brought in from files (see [Importing clips](#importing-clips)).
@@ -295,10 +296,33 @@ export default {
 };
 ```
 
-- **The keys:** `model`, `outfit` (pieces as in `public/character-outfits.js`, with `null` taking a piece off), `walk`, `idle`, `activity` (`false` for none), `speed` and `rate`.
+- **The keys:** `model`, `outfit` (pieces as in `public/character-outfits.js`, with `null` taking a piece off), `appearance` (as in `public/character-appearance.js`; a person's parts are laid over the defaults' one by one), `walk`, `idle`, `activity` (`false` for none), `speed` and `rate`.
 - **Order:** a person's own settings come before `defaults`, and both before what the code picks.
 - **Ids** are the game's own: `player` is the technician, and others look like `Maya`, `worker:shop-floor:0` or `bus:0:1>1:1:2`.
 - **An empty file** leaves everyone as the code makes them, which `tests/character-settings.test.mjs` checks. `public/character-settings.js` applies the settings.
+
+### Designing a look
+
+The **Look** section changes the person themselves, on whichever model plays them:
+
+| Part   | What it does                                                                                                                                                                                               |
+| ------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Height | 85–115% of the model's size, feet kept on the ground. Taller people take longer strides, so their feet keep pace with the ground.                                                                          |
+| Build  | Slim to broad: wider across and deeper in the body; the head keeps its own shape.                                                                                                                          |
+| Skin   | A tone from fair to deep (or any colour). Only the skin painted on the model changes; eyes, lips and brows keep theirs. On the two models made in one piece (Alex, James), skin-coloured clothes tint too. |
+| Hair   | The model's own (recoloured if you pick a colour), or bald, a buzz cut, short, a curly crop, a bob, long, a ponytail or a bun, in any colour.                                                              |
+| Beard  | The model's own (recoloured), clean-shaven, stubble, a short or full beard, a goatee or a moustache. It takes the hair's colour unless given its own.                                                      |
+| Brows  | The model's own, or bold: thicker brows a shade darker than the hair.                                                                                                                                      |
+
+How the hair and beards are made (`public/three-appearance.js`):
+
+- **Fitted to each head.** The skull is measured from the model, so every style sits on any head. The hair runs from a crown (at the top, or further back for hair drawn back into a ponytail or bun) to a hairline round the forehead, temples, ears and nape, thinning towards its edge. Strands are painted along it, and the tips feather.
+- **Long hair** hangs from the widest part of the head and rests on the neck and back rather than going through them. The bob stops above the shoulders.
+- **Beards** are the face's own surface on the jaw, chin or upper lip, pushed out a little and fading at their edges. They are skinned like the face, so they move with the jaw. The lips stay clear: the mouth is found from the face's profile.
+- **The judo class** gets the skin, hair and face you set, but not height or build: its throws are fitted to its sizes.
+- **Hats** are fitted to the model's own hair, so they can sit a little high on a bald or buzz-cut head.
+
+With no look set, a person is drawn exactly as before (`tests/character-appearance.test.mjs` checks this, along with the format and the editor's changes).
 
 ### Importing clips
 

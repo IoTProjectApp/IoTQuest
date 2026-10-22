@@ -417,3 +417,70 @@ body > .toast {
   color: var(--faint);
   cursor: default;
 }
+
+/* Timed quests: sequences of steps, and the worked program */
+.sequence .rule-head {
+  gap: 10px;
+}
+.sequence .seq-name {
+  flex: 1;
+  font-weight: 600;
+}
+.sequence .tick {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 12px;
+  white-space: nowrap;
+}
+.sequence .tick .input {
+  width: 80px;
+}
+.sequence tr.start td {
+  background: var(--panel);
+}
+.sequence td .select {
+  width: 100%;
+  min-width: 120px;
+  height: 28px;
+}
+.expect {
+  white-space: nowrap;
+}
+.expect .level {
+  width: 64px;
+  min-width: 0;
+  margin-right: 4px;
+}
+.onoff.either {
+  border-style: dashed;
+  font-weight: 400;
+}
+.step-actions {
+  white-space: nowrap;
+}
+.step-actions .remove {
+  display: inline-grid;
+}
+.coded {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-right: 4px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--warn-soft);
+  color: var(--warn);
+  font-size: 11px;
+}
+.field textarea.mono {
+  font: 12px/1.5 var(--mono);
+}
+.field textarea.code-input {
+  min-height: 180px;
+  white-space: pre;
+}
+.sequence td [data-step-label] {
+  min-width: 180px;
+}

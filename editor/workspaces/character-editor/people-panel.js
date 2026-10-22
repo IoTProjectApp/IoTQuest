@@ -1,5 +1,5 @@
 // The Character Editor's new people and routines: a "New person" button over the list, a "Who they
-// are" and a "Routine" section at the top of the inspector, and the routine map, drawn over the
+// are" and a "Routine" section under the name at the top of the inspector, and the routine map, drawn over the
 // preview: the city from above, with the stops to click, drag and time, played back as they walk.
 import { CLIPS } from '../../../public/character-clips.js';
 import { locations } from '../../../public/locations.js';
@@ -76,7 +76,10 @@ export function mountPeople(app) {
       top = document.createElement('div');
     top.className = 'people-sections';
     top.innerHTML = (own ? whoSection(own) : '') + routineSection(target, own);
-    el.prepend(top);
+    // Under the person's name and badges, above the rest.
+    const head = el.querySelector('section');
+    if (head) head.after(top);
+    else el.prepend(top);
     bind(top, target, own);
   }
   function whoSection(p) {

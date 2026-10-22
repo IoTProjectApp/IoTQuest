@@ -9,6 +9,7 @@ import {
 import { Runtime } from '../public/runtime.js';
 import { communityDevices, communityStarter } from '../public/community-missions.js';
 import { locations } from '../public/locations.js';
+import { streetLayoutFor } from '../public/street-network.js';
 const empty = () => {
   const s = new CommunitySimulation({ iso: 'AUS' });
   s.density = 0;
@@ -139,9 +140,13 @@ test('acceleration retains identical movement and separation in rain', () => {
 });
 test('all playable towns and suburbs have connected community districts and correct driving lanes', () => {
   for (const location of locations) {
-    const m = createCommunity(location);
+    const m = createCommunity(location),
+      // Four crossings round each junction of the town's layout (the grid, unless the Street
+      // Editor changed it), less any it closed, and the loading yard's.
+      layout = streetLayoutFor(location.id),
+      closed = layout.junctions.reduce((n, j) => n + (j.closedCrossings?.length || 0), 0);
     assert.equal(m.buildings.length, 25);
-    assert.equal(m.crossings.length, 121);
+    assert.equal(m.crossings.length, 4 * layout.junctions.length - closed + 1);
     for (const a of m.buildings)
       for (const b of m.buildings)
         if (a.node !== b.node) assert.ok(m.walks.route(a.node, b.node).length, location.id);

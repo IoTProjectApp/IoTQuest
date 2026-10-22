@@ -49,12 +49,25 @@ export class Appearance {
     // A model in one piece has its skin in that piece; otherwise the body and face pieces.
     const named = meshes.filter((m) => SKIN.test(m.name) && !EYES.test(m.name)),
       skins = named.length ? named : meshes.filter((m) => !isHairlike(m));
-    // Measured before anything changes, once per model.
-    const measured = this.once('head|' + file, () => measureHead(root, meshes));
-    if (appearance.skin)
+    // Measured before anything changes, once per model: the head, and the colour of its own hair
+    // (what new hair, a beard and brows match unless given a colour).
+    const measured = this.once('head|' + file, () => measureHead(root, meshes)),
+      ownColour = this.once('hair-colour|' + file, () => meanColour(hairs)),
+      color = hairColor || ownColour || '#3a2416',
+      beardColour = beardColor || color,
+      // Beards grow from the skin: painted into it, fading out at their edges.
+      painted = !['own', 'none'].includes(kind) && measured ? kind : null;
+    // (The hairline the model has painted under its own hair is left as it is: where new hair
+    // thins out at its edge, it shows as roots, as a real hairline does.)
+    if (appearance.skin || painted)
       for (const piece of skins)
-        piece.material = this.once(`skin|${file}|${piece.name}|${appearance.skin}`, () =>
-          skinMaterial(piece, appearance.skin),
+        piece.material = this.once(
+          `skin|${file}|${piece.name}|${appearance.skin || ''}|${painted || ''}|${beardColour}`,
+          () =>
+            skinMaterial(piece, {
+              tone: appearance.skin,
+              beard: painted && { kind: painted, color: beardColour, head: measured },
+            }),
         );
     if (style === 'own') {
       if (hairColor)
@@ -64,10 +77,10 @@ export class Appearance {
           );
     } else for (const piece of hairs) piece.visible = false;
     if (kind === 'own') {
-      if (beardColor)
+      if (beardColor || hairColor)
         for (const piece of beards)
-          piece.material = this.once(`recolour|${file}|${piece.name}|${beardColor}|`, () =>
-            recolour(piece, beardColor, null),
+          piece.material = this.once(`recolour|${file}|${piece.name}|${beardColour}|`, () =>
+            recolour(piece, beardColour, null),
           );
     } else for (const piece of beards) piece.visible = false;
     const head = root.getObjectByName('mixamorigHead'),
@@ -75,27 +88,11 @@ export class Appearance {
     const correction = headCorrection(appearance);
     if (correction && neck) neck.scale.set(...correction);
     if (!head || !measured) return;
-    const color = hairColor || '#3a2416';
     if (style !== 'own' && style !== 'bald')
       this.wear(head, this.hair(file, style, color, measured), root);
-    if (!['own', 'none'].includes(kind)) {
-      const body = skins.reduce((a, b) =>
-        b.geometry.attributes.position.count > a.geometry.attributes.position.count ? b : a,
-      );
-      const geometry = this.once(`beard|${file}|${body.name}|${kind}`, () =>
-        beardGeometry(body, kind, measured),
-      );
-      if (geometry) {
-        const mesh = new THREE.SkinnedMesh(geometry, this.beardMaterial(kind, beardColor || color));
-        mesh.frustumCulled = false;
-        mesh.castShadow = this.shadows;
-        body.add(mesh);
-        mesh.bind(body.skeleton, body.bindMatrix);
-      }
-    }
     if (appearance.brows === 'bold')
       // Brows a shade darker than the hair, as they usually are.
-      this.wear(head, this.brows(file, darker(hairColor || '#3a2416'), measured), root);
+      this.wear(head, this.brows(file, darker(color), measured), root);
   }
   // Puts something placed for the rest pose, in the model's own space, on a bone.
   wear(bone, object, root) {
@@ -144,34 +141,28 @@ export class Appearance {
             : 'strands';
     return this.once(`hair|${pattern}|${style === 'buzz'}|${color}`, () => {
       const { map, alphaMap } = this.once('texture|' + pattern, () => hairTexture(pattern));
-      // A buzz cut: a close felt of short hair.
+      // A buzz cut: a close felt of short hair, fading out at its edge like the rest.
       return style === 'buzz'
-        ? new THREE.MeshStandardMaterial({ color, map, roughness: 0.95 })
-        : new THREE.MeshStandardMaterial({
+        ? new THREE.MeshStandardMaterial({
             color,
             map,
             alphaMap,
-            alphaTest: 0.5,
-            side: THREE.DoubleSide,
-            roughness: pattern === 'curls' ? 0.92 : 0.58,
-          });
-    });
-  }
-  beardMaterial(kind, color) {
-    return this.once(`beard|${kind === 'stubble'}|${color}`, () => {
-      const { map, alphaMap } = this.once('texture|bristle', () => hairTexture('bristle'));
-      return new THREE.MeshStandardMaterial({
-        color,
-        map,
-        alphaMap,
-        vertexColors: true,
-        roughness: 0.95,
-        ...(kind === 'stubble'
-          ? { transparent: true, opacity: 0.55, depthWrite: false }
-          : { alphaTest: 0.5 }),
-        polygonOffset: true,
-        polygonOffsetFactor: -2,
-      });
+            transparent: true,
+            alphaTest: 0.03,
+            roughness: 0.95,
+          })
+        : litOutside(
+            new THREE.MeshStandardMaterial({
+              color,
+              map,
+              alphaMap,
+              // Blended where the hair thins out, so its edges fade softly into the skin.
+              transparent: true,
+              alphaTest: 0.03,
+              side: THREE.DoubleSide,
+              roughness: pattern === 'curls' ? 0.92 : 0.58,
+            }),
+          );
     });
   }
   plain(color, roughness) {
@@ -201,6 +192,19 @@ export class Appearance {
         part?.dispose?.();
     this.cache.clear();
   }
+}
+
+// Hair is seen from both sides (inside a fall, under a fringe) but lit as from outside, as hair
+// cards are: three.js turns a back face's normal round, which would shade the underside dark.
+function litOutside(material) {
+  material.onBeforeCompile = (shader) => {
+    shader.fragmentShader = shader.fragmentShader.replace(
+      '#include <normal_fragment_begin>',
+      '#include <normal_fragment_begin>\n#ifdef DOUBLE_SIDED\nnormal *= faceDirection;\n#endif',
+    );
+  };
+  material.customProgramCacheKey = () => 'hair';
+  return material;
 }
 
 // ---- Measuring the head ------------------------------------------------------------------------
@@ -369,7 +373,8 @@ export function measureHead(root, meshes) {
 // Each style: how thick the hair stands off the skull (metres, at the crown, and at its edge), how
 // it thins towards the edge (a power: higher keeps it full further down), how much of it is left
 // over the ears (sides), how far back its crown is (radians from the top of the head: hair drawn
-// back spreads from its knot), its hairline (heights
+// back spreads from its knot), how far a parted style's front strands sweep aside (radians), its
+// hairline (heights
 // above the eyes: the forehead, the sideburns in front of the ears, over the ears and the nape;
 // negative is below), and how far long hair falls below the line behind and at the sides.
 const STYLES = {
@@ -394,14 +399,16 @@ const STYLES = {
     thick: 0.016,
     edge: 0.008,
     taper: 3,
-    line: [0.055, -0.015, -0.005, -0.08],
+    part: 0.45,
+    line: [0.06, -0.015, -0.005, -0.08],
     fall: { back: 0.04, side: 0.07, flare: 0.012 },
   },
   long: {
     thick: 0.016,
     edge: 0.008,
     taper: 3,
-    line: [0.055, -0.015, -0.005, -0.08],
+    part: 0.45,
+    line: [0.06, -0.015, -0.005, -0.08],
     fall: { back: 0.2, side: 0.085, flare: 0.016 },
   },
   // Pulled back: no sideburns, the hair drawn up from the nape.
@@ -424,8 +431,9 @@ function hairline(head, style, a) {
   const [forehead, sideburn, over, nape] = style.line,
     ear = head.ear,
     keys = [
-      [0, forehead],
-      [0.16, forehead + 0.006],
+      [0, forehead - 0.006],
+      [0.08, forehead - 0.003],
+      [0.16, forehead - 0.001],
       [Math.max(0.24, ear - 0.2), forehead - 0.012],
       [ear - 0.1, sideburn],
       [ear - 0.06, sideburn],
@@ -480,7 +488,16 @@ function capGeometry(head, style) {
       new THREE.Vector3(1, 0, 0),
       -(style.crown || 0),
     ),
-    toward = (phi, theta) => direction(phi, theta).applyQuaternion(turn),
+    // A parted style's front strands sweep aside as they come down, off the middle of the forehead.
+    toward = (phi, theta) =>
+      direction(
+        phi +
+          (style.part || 0) *
+            Math.tanh(phi * 6) *
+            (1 - smooth(Math.abs(phi) / Math.PI, 0.12, 0.4)) *
+            Math.min(1, theta / (Math.PI / 2)) ** 1.5,
+        theta,
+      ).applyQuaternion(turn),
     // The skull's surface (and how far round the head it is) in a direction.
     skull = (d) => {
       const round = Math.atan2(d.x, d.z),
@@ -511,7 +528,7 @@ function capGeometry(head, style) {
       // Where this way round a point at height y and that reach is.
       at = (y, reach) => new THREE.Vector3(centre.x + out.x * reach, y, centre.z + out.z * reach),
       // Fine hair ends thin at the hairline; long hair keeps its body where it falls.
-      edgeLift = 0.0018 + (style.edge - 0.0018) * share;
+      edgeLift = 0.0008 + (style.edge - 0.0008) * share;
     let widest = 0;
     for (let j = 0; j <= rows; j++) {
       const v = j / rows,
@@ -542,24 +559,42 @@ function capGeometry(head, style) {
       const start = column[rows],
         length = share * fallLength(a),
         // Over the shoulders only behind them: the side fall stops above the shoulders.
-        floor = a < 0.75 ? neckY + 0.005 : -Infinity,
+        floor = neckY + 0.005 - smooth(a, 0.6, 0.86) * 0.6,
         drop = Math.max(0, Math.min(length, start.y - floor)),
         behind = -Math.cos(phi);
-      let reach = reachOf(start);
+      // Behind, the hair rests on whatever is there (the neck, the collar, the back): how far out
+      // each row must be, eased in from the sides, then worked back up the column so the hair
+      // starts to lean out a little above where it must, never in a step, and never folds back in.
+      const first = reachOf(start),
+        lean = smooth(behind, 0.2, 0.8),
+        ys = [],
+        need = [];
       for (let k = 1; k <= tail; k++) {
         const t = k / tail,
-          y = start.y - drop * t;
-        reach = Math.max(reach, reachOf(start) + style.fall.flare * Math.sqrt(t) * share);
-        // Behind, the hair rests on whatever is there (the neck, the collar, the back), and once
-        // pushed out it stays out: it never folds back in.
-        const back = y < neckY ? head.backAt(y) : null;
-        if (back !== null && behind > 0.6)
-          reach = Math.min(
-            reachOf(start) + 0.05,
-            Math.max(reach, (centre.z - (back - 0.01)) / behind),
-          );
-        column.push(at(y, reach));
+          y = start.y - drop * t,
+          back = y < neckY + 0.02 ? head.backAt(y) : null;
+        ys.push(y);
+        need.push(
+          Math.max(
+            first + style.fall.flare * t ** 1.5 * share,
+            back === null || behind <= 0.05
+              ? 0
+              : first +
+                  lean * Math.min(0.05, Math.max(0, (centre.z - (back - 0.012)) / behind - first)),
+          ),
+        );
       }
+      for (let k = need.length - 2; k >= 0; k--) need[k] = Math.max(need[k], need[k + 1] - 0.004);
+      for (let k = 1; k < need.length; k++) need[k] = Math.max(need[k], need[k - 1]);
+      // Whatever the first row must stand out is eased in over the cap's last rows: no kink.
+      const extra = need[0] - first,
+        ease = Math.min(10, rows);
+      if (extra > 0)
+        for (let j = rows - ease + 1; j <= rows; j++) {
+          const p = column[j];
+          column[j] = at(p.y, reachOf(p) + extra * smooth((j - (rows - ease)) / ease, 0, 1));
+        }
+      need.forEach((reach, k) => column.push(at(ys[k], reach)));
     }
     // Texture down the hair by distance, so strands run evenly; the tips (the texture's last
     // quarter, where strands stop at their own lengths) are the last centimetre or so at a
@@ -568,7 +603,7 @@ function capGeometry(head, style) {
     const along = [0];
     for (let k = 1; k < column.length; k++)
       along.push((length += column[k].distanceTo(column[k - 1])));
-    const tips = Math.min(length * 0.5, 0.006 + 0.034 * share);
+    const tips = Math.min(length * 0.5, 0.02 + 0.022 * share);
     column.forEach((p, k) => {
       const fromTip = length - along[k],
         v =
@@ -592,11 +627,23 @@ function capGeometry(head, style) {
   g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
   g.setIndex(index);
   g.computeVertexNormals();
-  // The crown is one point every column shares, and the first and last columns meet at the back:
-  // one normal at each, so neither shows a seam.
+  // The cap is lit as the head it covers: facing straight out from the head's middle, so its
+  // shading runs smoothly to the hairline instead of darkening where the hair turns in to the
+  // skin; long hair turns from that to its own surface's facing as it falls.
   const normal = g.attributes.normal,
-    up = new THREE.Vector3(0, 1, 0).applyQuaternion(turn);
-  for (let i = 0; i <= columns; i++) normal.setXYZ(i * per, up.x, up.y, up.z);
+    p = new THREE.Vector3(),
+    n = new THREE.Vector3(),
+    out = new THREE.Vector3();
+  for (let i = 0; i <= columns; i++)
+    for (let k = 0; k < per; k++) {
+      const at = i * per + k,
+        cap = k <= rows ? 1 : 1 - smooth(k - rows, 0, 4);
+      p.fromBufferAttribute(g.attributes.position, at);
+      out.copy(p).sub(centre).normalize();
+      n.fromBufferAttribute(normal, at).lerp(out, cap).normalize();
+      normal.setXYZ(at, n.x, n.y, n.z);
+    }
+  // The first and last columns meet at the back: one normal for both, so they show no seam.
   for (let k = 0; k < per; k++) {
     const a = new THREE.Vector3().fromBufferAttribute(normal, k),
       b = new THREE.Vector3().fromBufferAttribute(normal, columns * per + k),
@@ -651,7 +698,7 @@ function bunGeometry({ tieAt }) {
 }
 
 // Hair painted as strands (along v, the hair's length; feathered at the tips), tight curls, a
-// swirl (a bun's coil), short fuzz (a buzz cut) or bristles (a beard). Grey: the material's colour
+// swirl (a bun's coil) or short fuzz (a buzz cut). Grey: the material's colour
 // tints it.
 function hairTexture(pattern) {
   const size = 512,
@@ -661,7 +708,7 @@ function hairTexture(pattern) {
   let seed = 11;
   const random = () => ((seed = (seed * 16807) % 2147483647) - 1) / 2147483646;
   const grey = (shade, alpha = 1) => `rgba(${shade},${shade},${shade},${alpha})`;
-  c.fillStyle = grey(pattern === 'bristle' ? 120 : 140);
+  c.fillStyle = grey(140);
   c.fillRect(0, 0, size, size);
   if (pattern === 'strands' || pattern === 'swirl') {
     for (let k = 0; k < 3400; k++) {
@@ -688,15 +735,14 @@ function hairTexture(pattern) {
       c.stroke();
     }
   } else {
-    // Fuzz and bristles: short flecks; bristles leave gaps, so a beard's edge breaks up.
+    // Fuzz: short flecks.
     for (let k = 0; k < 26000; k++) {
       c.fillStyle = grey(50 + random() * 200, 0.85);
       c.fillRect(random() * size, random() * size, 1 + random() * 1.2, 1.5 + random() * 3);
     }
   }
   // Transparency, in its own texture (white shows), so the colour keeps its shades where the hair
-  // ends: the tips of strands and curls stop at their own lengths, leaving a soft, uneven edge;
-  // bristles are speckled all over, and the beard's own fading picks out how many show.
+  // ends.
   const alphaCanvas = document.createElement('canvas');
   alphaCanvas.width = alphaCanvas.height = size;
   const a = alphaCanvas.getContext('2d');
@@ -704,30 +750,22 @@ function hairTexture(pattern) {
   a.fillRect(0, 0, size, size);
   const image = a.getImageData(0, 0, size, size),
     d = image.data;
-  if (pattern === 'strands' || pattern === 'curls') {
-    // Strands end in locks a few millimetres wide (a smooth wave of lengths across the texture,
-    // with finer locks on it), each strand a little different again.
-    const wave = (step) => {
-        const knots = Array.from({ length: size / step + 2 }, random);
-        return (x) => {
-          const k = Math.floor(x / step),
-            f = smooth(x / step - k, 0, 1);
-          return knots[k] + (knots[k + 1] - knots[k]) * f;
-        };
-      },
-      locks = wave(64),
-      fine = wave(16),
-      [base, range] = pattern === 'curls' ? [0.88, 0.1] : [TIPS, 1 - TIPS - 0.02];
+  if (pattern !== 'swirl') {
+    // The hair thins smoothly over its tips: each strand (a texel column, a little over a tenth of a
+    // millimetre on the head) fades out at its own pace, so the edge is soft and fine, never torn.
+    const [from, to] = pattern === 'curls' ? [0.9, 1] : pattern === 'fuzz' ? [0.86, 1] : [TIPS, 1],
+      start = from * size;
     for (let x = 0; x < size; x++) {
-      const stop = size * (base + range * (0.8 * locks(x) + 0.2 * fine(x)) + 0.006 * random());
-      for (let y = Math.floor(stop - 24); y < size; y++) {
-        const at = (y * size + x) * 4,
-          shade = y >= stop ? 0 : 255 * ((stop - y) / 24);
+      const reach = 0.75 + 0.25 * random(),
+        softness = 0.9 + random() * 0.6;
+      for (let y = Math.floor(start); y < size; y++) {
+        const t = (y - start) / ((to - from) * size * reach),
+          at = (y * size + x) * 4,
+          shade = 255 * Math.max(0, 1 - t) ** softness;
         d[at] = d[at + 1] = d[at + 2] = shade;
       }
     }
-  } else if (pattern === 'bristle')
-    for (let k = 0; k < d.length; k += 4) d[k] = d[k + 1] = d[k + 2] = 128 + random() * 127;
+  }
   a.putImageData(image, 0, 0);
   const texture = (source, colour) => {
     const t = new THREE.CanvasTexture(source);
@@ -735,9 +773,7 @@ function hairTexture(pattern) {
     // v runs down the canvas, as the hair does: from its roots to its tips.
     t.flipY = false;
     t.wrapS = THREE.RepeatWrapping;
-    t.wrapT = ['fuzz', 'bristle', 'swirl'].includes(pattern)
-      ? THREE.RepeatWrapping
-      : THREE.ClampToEdgeWrapping;
+    t.wrapT = pattern === 'swirl' ? THREE.RepeatWrapping : THREE.ClampToEdgeWrapping;
     t.anisotropy = 4;
     return t;
   };
@@ -745,83 +781,44 @@ function hairTexture(pattern) {
 }
 
 // ---- Beards and brows ------------------------------------------------------------------------
-// How much beard grows at a point of the face (0 to 1), by kind: the cheeks below a line from the
-// cheekbones to the upper lip, the chin and (for a full beard) under the jaw, never on the lips.
-function beardDensity(kind, p, head) {
-  const { centre, mouthY, noseY, chinY, neckY, halfX } = head,
-    x = Math.abs(p.x - centre.x),
-    side = Math.min(1, x / halfX),
-    // The lips: an oval round the mouth.
-    lips = smooth(((x / 0.025) ** 2 + ((p.y - mouthY) / 0.0085) ** 2) ** 0.5, 0.85, 1.15),
-    // Above the upper lip, up to just under the nose.
-    lip =
-      (1 - smooth(x, 0.026, 0.034)) *
-      smooth(p.y, mouthY + 0.004, mouthY + 0.008) *
-      (1 - smooth(p.y, noseY - 0.024, noseY - 0.016)),
-    // The cheeks and jaw: below a line from the cheekbones down to the corners of the mouth.
-    cheekLine = mouthY + 0.008 + side * 0.026,
-    cheeks =
-      (1 - smooth(p.y, cheekLine - 0.006, cheekLine + 0.004)) *
-      smooth(p.z, centre.z - 0.022, centre.z - 0.004),
-    chin = (1 - smooth(x, 0.02, 0.03)) * (1 - smooth(p.y, mouthY - 0.004, mouthY + 0.002));
-  switch (kind) {
-    case 'moustache':
-      return lip * lips;
-    case 'goatee':
-      return Math.max(lip, chin * smooth(p.y, chinY - 0.012, chinY - 0.004)) * lips;
-    case 'full':
-      return Math.max(lip, cheeks * smooth(p.y, neckY + 0.005, neckY + 0.02)) * lips;
-    default:
-      // Short beards and stubble: the jaw to just under it.
-      return Math.max(lip, cheeks * smooth(p.y, chinY - 0.022, chinY - 0.008)) * lips;
-  }
+// How much beard grows at a point of the face (0 to 1), by kind, in GLSL: the cheeks below a line
+// from the cheekbones to the corners of the mouth, the chin, under the jaw for a full beard and the
+// upper lip (up to just under the nose), never on the lips. Every edge is a soft gradient, so the
+// beard thins out into the skin as a real one does. `p` is a point of the face in the model's own
+// space; the head's measurements are uniforms.
+const BEARD_GLSL = `
+uniform vec3 beardCentre;
+uniform vec4 beardFace; // mouth, chin, neck, half the head's width
+uniform int beardKind; // 1 stubble, 2 short, 3 full, 4 goatee, 5 moustache
+float beardDensity(vec3 p) {
+  float mouth = beardFace.x, chin = beardFace.y, neck = beardFace.z, wide = beardFace.w;
+  float x = abs(p.x - beardCentre.x), side = min(1.0, x / wide);
+  // The lips: an oval round the mouth, a little taller below it.
+  float lipY = (p.y - mouth) / (p.y > mouth ? 0.0115 : 0.013);
+  float lips = smoothstep(0.9, 1.25, length(vec2(x / 0.028, lipY)));
+  // Above the upper lip, up to just under the nose.
+  float lip = (1.0 - smoothstep(0.024, 0.036, x)) * smoothstep(mouth + 0.006, mouth + 0.011, p.y) *
+    (1.0 - smoothstep(mouth + 0.017, mouth + 0.022, p.y));
+  // The cheeks and jaw: below a line from the cheekbones to the corners of the mouth, in front of
+  // the ears.
+  float cheekLine = mouth + 0.006 + side * 0.03;
+  float cheeks = (1.0 - smoothstep(cheekLine - 0.012, cheekLine + 0.004, p.y)) *
+    smoothstep(beardCentre.z - 0.03, beardCentre.z - 0.006, p.z) *
+    (1.0 - smoothstep(wide * 1.0, wide * 1.15, x));
+  float chinPatch = (1.0 - smoothstep(0.016, 0.03, x)) * (1.0 - smoothstep(mouth - 0.012, mouth - 0.004, p.y)) *
+    smoothstep(chin - 0.014, chin - 0.002, p.y);
+  float d;
+  if (beardKind == 5) d = lip;
+  else if (beardKind == 4) d = max(lip, chinPatch);
+  else if (beardKind == 3) d = max(lip, cheeks * smoothstep(neck + 0.004, neck + 0.03, p.y));
+  else d = max(lip, cheeks * smoothstep(chin - 0.026, chin - 0.006, p.y));
+  return d * lips * step(neck - 0.01, p.y) * (1.0 - smoothstep(0.08, 0.1, x));
 }
-// A beard: the body's own surface where the beard grows, pushed out from the skin by how thick it
-// is there (thinner at its edges), fading out with it, keeping the skinning so it moves with the
-// jaw. Its colour attribute's alpha is the density, which the bristle texture breaks up.
-function beardGeometry(body, kind, head) {
-  const g = body.geometry,
-    { position, normal, skinIndex, skinWeight, uv } = g.attributes,
-    index = g.index,
-    scale = body.matrixWorld.getMaxScaleOnAxis(),
-    thick = { stubble: 0.0012, short: 0.0035, full: 0.009, goatee: 0.0045, moustache: 0.004 }[kind],
-    density = new Float32Array(position.count),
-    p = new THREE.Vector3();
-  eachVertex(body, (i, bone) => {
-    if (!/Head|Neck/.test(bone)) return;
-    p.fromBufferAttribute(position, i).applyMatrix4(body.matrixWorld);
-    if (p.y > head.noseY) return;
-    density[i] = clamp(beardDensity(kind, p, head), 0, 1);
-  });
-  const out = { position: [], normal: [], color: [], skinIndex: [], skinWeight: [], uv: [] },
-    count = index ? index.count : position.count;
-  for (let f = 0; f < count; f += 3) {
-    const v = [0, 1, 2].map((k) => (index ? index.getX(f + k) : f + k));
-    if (Math.max(...v.map((i) => density[i])) < 0.05) continue;
-    for (const i of v) {
-      const d = density[i],
-        lift = (thick * (0.35 + 0.65 * d)) / scale;
-      for (const axis of ['X', 'Y', 'Z'])
-        out.position.push(position['get' + axis](i) + normal['get' + axis](i) * lift);
-      out.normal.push(normal.getX(i), normal.getY(i), normal.getZ(i));
-      out.color.push(1, 1, 1, d);
-      if (uv) out.uv.push(uv.getX(i) * 6, uv.getY(i) * 6);
-      for (let j = 0; j < 4; j++) {
-        out.skinIndex.push(skinIndex.getComponent(i, j));
-        out.skinWeight.push(skinWeight.getComponent(i, j));
-      }
-    }
-  }
-  if (out.position.length < 30 * 3) return null;
-  const beard = new THREE.BufferGeometry();
-  beard.setAttribute('position', new THREE.Float32BufferAttribute(out.position, 3));
-  beard.setAttribute('normal', new THREE.Float32BufferAttribute(out.normal, 3));
-  beard.setAttribute('color', new THREE.Float32BufferAttribute(out.color, 4));
-  beard.setAttribute('skinIndex', new THREE.Uint16BufferAttribute(out.skinIndex, 4));
-  beard.setAttribute('skinWeight', new THREE.Float32BufferAttribute(out.skinWeight, 4));
-  if (out.uv.length) beard.setAttribute('uv', new THREE.Float32BufferAttribute(out.uv, 2));
-  return beard;
+// Hairs: a fine hash of where on the face, so each patch of skin has its own few bristles.
+float beardHash(vec3 p) {
+  return fract(sin(dot(floor(p), vec3(12.9898, 78.233, 37.719))) * 43758.5453);
 }
+`;
 
 // A brow: a slim arched strand along the brow ridge, just off the skin.
 function browGeometry({ centre, eyeY, halfX, frontAt }, side) {
@@ -853,32 +850,100 @@ function browGeometry({ centre, eyeY, halfX, frontAt }, side) {
 }
 
 // ---- Skin ------------------------------------------------------------------------------------------
-// The piece's material with its skin (warm, moderately saturated texels) turned to the new tone,
-// keeping its light and shade; eyes, lips, brows and clothes painted on it stay as they are.
-function skinMaterial(piece, tone) {
+// The piece's material with its skin (warm, moderately saturated texels) turned to a new tone,
+// keeping its light and shade (eyes, lips, brows and clothes painted on it stay as they are), and a
+// beard grown into it: the skin darkened and tinted towards the beard's colour, densest in the
+// middle of the beard and thinning at its edges, with fine bristles (and, for longer beards,
+// clumps) so it reads as hair growing from the skin.
+const BEARDS = { stubble: 1, short: 2, full: 3, goatee: 4, moustache: 5 };
+function skinMaterial(piece, { tone, beard }) {
   const material = piece.material.clone(),
-    mean = meanSkin(piece);
+    mean = meanSkin(piece),
+    LUM = `vec3(${LUMA.join(', ')})`;
   material.onBeforeCompile = (shader) => {
-    shader.uniforms.skinTone = { value: new THREE.Color(tone) };
+    shader.uniforms.skinTone = { value: new THREE.Color(tone || '#ffffff') };
     shader.uniforms.skinMean = { value: mean };
-    shader.fragmentShader =
-      'uniform vec3 skinTone;\nuniform float skinMean;\n' +
-      shader.fragmentShader.replace(
-        '#include <map_fragment>',
-        `#include <map_fragment>
-        {
-          vec3 c = diffuseColor.rgb;
-          float high = max(c.r, max(c.g, c.b)), low = min(c.r, min(c.g, c.b));
-          float saturation = (high - low) / max(high, 0.001);
-          float warm = smoothstep(-0.01, 0.02, c.r - c.g) * smoothstep(-0.01, 0.02, c.g - c.b);
-          float skin = warm * smoothstep(0.1, 0.22, saturation) * (1.0 - smoothstep(0.78, 0.92, saturation));
-          float shade = clamp(dot(c, vec3(${LUMA.join(', ')})) / skinMean, 0.4, 1.5);
-          diffuseColor.rgb = mix(c, skinTone * shade, skin);
-        }`,
-      );
+    let vertex = shader.vertexShader,
+      fragment = 'uniform vec3 skinTone;\nuniform float skinMean;\n' + shader.fragmentShader,
+      paint = '';
+    if (tone)
+      paint += `{
+        vec3 c = diffuseColor.rgb;
+        float high = max(c.r, max(c.g, c.b)), low = min(c.r, min(c.g, c.b));
+        float saturation = (high - low) / max(high, 0.001);
+        float warm = smoothstep(-0.01, 0.02, c.r - c.g) * smoothstep(-0.01, 0.02, c.g - c.b);
+        float skin = warm * smoothstep(0.1, 0.22, saturation) * (1.0 - smoothstep(0.78, 0.92, saturation));
+        float shade = clamp(dot(c, ${LUM}) / skinMean, 0.4, 1.5);
+        diffuseColor.rgb = mix(c, skinTone * shade, skin);
+      }`;
+    if (beard) {
+      const { centre, mouthY, chinY, neckY, halfX } = beard.head;
+      Object.assign(shader.uniforms, {
+        beardColour: { value: new THREE.Color(beard.color) },
+        beardCentre: { value: centre.clone() },
+        beardFace: { value: new THREE.Vector4(mouthY, chinY, neckY, halfX) },
+        beardKind: { value: BEARDS[beard.kind] },
+        beardSpace: { value: piece.matrixWorld.clone() },
+      });
+      // Where on the face, in the model's own space, as it stands at rest (before skinning).
+      vertex =
+        'uniform mat4 beardSpace;\nvarying vec3 vBeardAt;\n' +
+        vertex.replace(
+          '#include <begin_vertex>',
+          '#include <begin_vertex>\nvBeardAt = (beardSpace * vec4(transformed, 1.0)).xyz;',
+        );
+      fragment = 'uniform vec3 beardColour;\nvarying vec3 vBeardAt;\n' + BEARD_GLSL + fragment;
+      paint += `{
+        float d = beardDensity(vBeardAt);
+        if (d > 0.0) {
+          // Bristles 0.5 mm across; longer beards also grow in clumps a few millimetres across.
+          float bristle = beardHash(vBeardAt * 2000.0), clump = beardHash(vBeardAt * 450.0);
+          float shade = clamp(dot(diffuseColor.rgb, ${LUM}) / skinMean, 0.55, 1.3);
+          vec3 hair = beardColour * shade * (0.75 + 0.5 * bristle);
+          float cover = beardKind == 1
+            ? d * (0.25 + 0.45 * step(0.45, bristle))
+            : beardKind == 3
+              ? d * mix(0.7 + 0.3 * step(0.2, bristle), 0.95 + 0.05 * clump, d)
+              : d * mix(0.55 + 0.45 * step(0.3, bristle), 0.85 + 0.15 * clump, d);
+          diffuseColor.rgb = mix(diffuseColor.rgb, hair * (beardKind == 3 ? 0.85 : 1.0), clamp(cover, 0.0, 1.0));
+        }
+      }`;
+    }
+    shader.vertexShader = vertex;
+    shader.fragmentShader = fragment.replace(
+      '#include <map_fragment>',
+      '#include <map_fragment>\n' + paint,
+    );
   };
-  material.customProgramCacheKey = () => 'skin';
+  material.customProgramCacheKey = () => `skin|${!!tone}|${!!beard}`;
   return material;
+}
+// The average colour of a model's own hair (as painted on its hair pieces), or null.
+function meanColour(pieces) {
+  const piece = pieces.find((p) => p.material?.map?.image && p.geometry.attributes.uv);
+  if (!piece) return null;
+  const size = 64,
+    canvas = document.createElement('canvas');
+  canvas.width = canvas.height = size;
+  const context = canvas.getContext('2d', { willReadFrequently: true });
+  context.drawImage(piece.material.map.image, 0, 0, size, size);
+  const data = context.getImageData(0, 0, size, size).data,
+    uv = piece.geometry.attributes.uv,
+    step = Math.max(1, Math.floor(uv.count / 3000)),
+    wrap = (x) => Math.min(size - 1, Math.floor((x - Math.floor(x)) * size)),
+    sum = [0, 0, 0];
+  let n = 0;
+  for (let i = 0; i < uv.count; i += step) {
+    const at = (wrap(uv.getY(i)) * size + wrap(uv.getX(i))) * 4;
+    if (data[at + 3] < 128) continue;
+    for (let k = 0; k < 3; k++) sum[k] += linear(data[at + k] / 255);
+    n++;
+  }
+  if (!n) return null;
+  return (
+    '#' +
+    new THREE.Color().setRGB(...sum.map((v) => v / n), THREE.LinearSRGBColorSpace).getHexString()
+  );
 }
 // The average brightness (linear) of the skin painted on this piece.
 function meanSkin(piece) {

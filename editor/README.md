@@ -316,9 +316,9 @@ The **Look** section changes the person themselves, on whichever model plays the
 
 How the hair and beards are made (`public/three-appearance.js`):
 
-- **Fitted to each head.** The skull is measured from the model, so every style sits on any head. The hair runs from a crown (at the top, or further back for hair drawn back into a ponytail or bun) to a hairline round the forehead, temples, ears and nape, thinning towards its edge. Strands are painted along it, and the tips feather.
-- **Long hair** hangs from the widest part of the head and rests on the neck and back rather than going through them. The bob stops above the shoulders.
-- **Beards** are the face's own surface on the jaw, chin or upper lip, pushed out a little and fading at their edges. They are skinned like the face, so they move with the jaw. The lips stay clear: the mouth is found from the face's profile.
+- **Fitted to each head.** The skull is measured from the model, so every style sits on any head. The hair runs from a crown (at the top, or further back for hair drawn back into a ponytail or bun) to a hairline round the forehead, temples, ears and nape, thinning towards its edge. Strands are painted along it, and the hair fades out smoothly over its last centimetre or two (blended, lit as from outside on both sides), so the hairline is soft rather than cut. Long hair and the bob part over the forehead.
+- **Long hair** hangs from the widest part of the head and eases out over the neck and back rather than going through them, with no step where it leaves the skull. The bob stops above the shoulders.
+- **Beards grow from the skin:** they are painted into the face's own skin, densest in the middle and thinning to nothing at their edges, with fine bristles (and clumps, for longer beards). Being skin, they move with the jaw as it does. The lips stay clear: the mouth is found from the face's profile. They take the hair's colour (the model's own hair colour when the hair is not changed), not black.
 - **The judo class** gets the skin, hair and face you set, but not height or build: its throws are fitted to its sizes.
 - **Hats** are fitted to the model's own hair, so they can sit a little high on a bald or buzz-cut head.
 

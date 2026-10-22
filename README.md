@@ -50,7 +50,7 @@ To add or change characters or animations:
 
 - **Map Editor** moves, adds and removes furniture, garden features and town buildings per city. It saves to `public/data/world-layout.js`.
 - **Street Editor** lays out the town's roads, junction controls and crossings, and the traffic follows. It saves to `public/data/street-layout.js`.
-- **Character Editor** sets who plays each of the game's people, what they wear and how they move. It saves to `public/data/characters.js`.
+- **Character Editor** sets who plays each of the game's people, what they wear and how they move, adds people of your own, and draws routines for them to walk. It saves to `public/data/characters.js` and `public/data/people.js`.
 - **Quest Editor** writes new quests (story, devices, rules and tests), each checked against a worked solution on both boards before it can be saved. It saves to `public/data/quests.js`.
 - **Conversation Editor** writes what the game's people say in chats, for everyone or one person in one city, and how each resident asks for their quests. It saves to `public/data/conversations.js`.
 - **City Editor** words each city: what it calls the household, how residents open their requests, and the home quests' titles and requests. It saves to `public/data/cities.js`.

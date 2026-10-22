@@ -4,6 +4,7 @@
 import { components, defaults, missions } from '../../../public/missions.js';
 import { isRuleQuest, isTimedQuest } from '../../../public/authored-quests.js';
 import { HOME_AREAS } from '../../../public/home-areas.js';
+import { PEOPLE_SETTINGS } from '../../../public/people-settings.js';
 import { readingRange } from '../../../public/diagnostics.js';
 import { coachSteps } from '../../../public/code-coach.js';
 import {
@@ -34,7 +35,10 @@ const builtIn = builtInQuests();
 const AREAS = [
   ...new Set([...HOME_AREAS.map(([name]) => name), ...builtIn.map((m) => m.area)]),
 ].sort();
-const RESIDENTS = [...new Set(builtIn.map((m) => m.resident))].sort();
+// Everyone who asks for quests, and the people added in the Character Editor.
+const RESIDENTS = [
+  ...new Set([...builtIn.map((m) => m.resident), ...PEOPLE_SETTINGS.people.map((p) => p.name)]),
+].sort();
 const SENSORS = components.filter((c) => !c.output && c.signal && readingRange(c)),
   OUTPUTS = components.filter((c) => c.output);
 const OPS = ['<', '<=', '>', '>=', '==', '!='];

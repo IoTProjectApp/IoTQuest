@@ -17,6 +17,20 @@ export class CharacterSession {
     this.undoStack = [];
     this.redoStack = [];
     this.listeners = new Set();
+    // Other saved files edited here (people and routines): each { snapshot(), restore(state),
+    // isChanged(), markSaved() }, so one undo history covers them all.
+    this.attached = [];
+  }
+  attach(part) {
+    this.attached.push(part);
+    return part;
+  }
+  snapshot() {
+    return { settings: clone(this.settings), attached: this.attached.map((a) => a.snapshot()) };
+  }
+  restore({ settings, attached }) {
+    this.settings = settings;
+    this.attached.forEach((a, i) => a.restore(attached[i]));
   }
   on(listener) {
     this.listeners.add(listener);
@@ -30,11 +44,14 @@ export class CharacterSession {
     return (target === DEFAULTS ? this.settings.defaults : this.settings.people[target]) || {};
   }
   commit(label, change) {
-    const before = clone(this.settings);
-    change(this.settings);
+    const before = this.snapshot();
+    if (change(this.settings) === false) {
+      this.restore(before);
+      return false;
+    }
     tidy(this.settings);
-    if (same(before, this.settings)) return false;
-    this.undoStack.push({ label, settings: before });
+    if (same(before, this.snapshot())) return false;
+    this.undoStack.push({ label, state: before });
     this.redoStack = [];
     this.emit();
     return true;
@@ -48,8 +65,8 @@ export class CharacterSession {
   step(from, to) {
     const entry = from.pop();
     if (!entry) return null;
-    to.push({ label: entry.label, settings: clone(this.settings) });
-    this.settings = entry.settings;
+    to.push({ label: entry.label, state: this.snapshot() });
+    this.restore(entry.state);
     this.emit();
     return entry.label;
   }
@@ -81,8 +98,12 @@ export class CharacterSession {
   }
   isChanged(target) {
     return target === undefined
-      ? !same(this.settings, normalised(this.saved))
+      ? this.settingsChanged() || this.attached.some((a) => a.isChanged())
       : Object.keys(this.own(target)).length > 0;
+  }
+  // Whether data/characters.js itself needs saving.
+  settingsChanged() {
+    return !same(this.settings, normalised(this.saved));
   }
   // Everyone with settings of their own, for the list's markers.
   changedPeople() {
@@ -90,6 +111,7 @@ export class CharacterSession {
   }
   markSaved() {
     this.saved = clone(this.settings);
+    for (const a of this.attached) a.markSaved();
     this.emit();
   }
 }

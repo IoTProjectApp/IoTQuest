@@ -43,6 +43,15 @@ const STORES = {
     valid: (v) =>
       v?.version === 1 && typeof v.people === 'object' && typeof v.defaults === 'object',
   },
+  people: {
+    file: join(PUBLIC, 'data', 'people.js'),
+    about: 'People added, and routines drawn, in the Character Editor',
+    valid: (v) =>
+      v?.version === 1 &&
+      Array.isArray(v.people) &&
+      v.routines !== null &&
+      typeof v.routines === 'object',
+  },
   clips: {
     file: join(PUBLIC, 'data', 'clips.js'),
     about: 'Animation clips imported in the Character Editor',

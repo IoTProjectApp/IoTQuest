@@ -6,6 +6,7 @@ import { dressed } from '../../../public/character-settings.js';
 import { findPeople, GROUPS, walksAlone, movesLocked } from './people.js';
 import { CharacterSession, DEFAULTS } from './session.js';
 import { Stage } from './stage.js';
+import { mountPeople } from './people-panel.js';
 import {
   ClipError,
   readClipFile,
@@ -43,6 +44,8 @@ const state = {
   importing: null,
 };
 const stage = new Stage($('stage'));
+// New people and routines (people-panel.js), once the settings are read.
+let peopleTool = null;
 
 // ---- Static chrome --------------------------------------------------------------------------
 $('home').innerHTML = icon('back');
@@ -354,6 +357,7 @@ function renderInspector() {
       </div>
     </section>`;
   bindInspector(el, target);
+  peopleTool?.inspector(el, target);
 }
 function bindInspector(el, target) {
   const s = state.session,
@@ -677,6 +681,7 @@ function hint() {
 
 // ---- Saving and undo ------------------------------------------------------------------------
 function changed() {
+  peopleTool?.sync();
   const s = state.session,
     dirty = s.isChanged();
   $('save-state').textContent = dirty ? 'Unsaved changes' : 'All changes saved';
@@ -694,16 +699,31 @@ function changed() {
   renderPeople();
   renderInspector();
   if (state.target) showStage();
+  peopleTool?.changed();
 }
 async function save() {
+  const problem = peopleTool?.problem();
+  if (problem) {
+    select(problem.id);
+    toast(problem.text, true);
+    return false;
+  }
+  const wrote = [];
   try {
-    await shell.write('characters', state.session.settings);
+    if (state.session.settingsChanged() || !peopleTool?.isChanged()) {
+      await shell.write('characters', state.session.settings);
+      wrote.push('public/data/characters.js');
+    }
+    if (peopleTool?.isChanged()) {
+      await shell.write('people', peopleTool.savedFile());
+      wrote.push('public/data/people.js');
+    }
   } catch (error) {
     toast('Could not save: ' + error.message, true);
     return false;
   }
   state.session.markSaved();
-  toast('Saved to public/data/characters.js');
+  toast('Saved to ' + wrote.join(' and '));
   return true;
 }
 function undo(redo = false) {
@@ -716,9 +736,9 @@ async function playtest(fromStart = false) {
     if (!confirm('The game uses saved settings only. Save now and open the game?')) return;
     if (!(await save())) return;
   }
-  // Walking up to the selected person, at the original home where this editor shows them.
+  // Walking up to the selected person: at home, or in the city where someone added here lives.
   const person = state.target && ![DEFAULTS, 'player'].includes(state.target) ? state.target : null;
-  shell.openGame(fromStart ? null : { city: 'legacy', person });
+  shell.openGame(fromStart ? null : { city: peopleTool?.cityFor(person) ?? 'legacy', person });
 }
 $('undo').addEventListener('click', () => undo());
 $('redo').addEventListener('click', () => undo(true));
@@ -781,10 +801,21 @@ async function start() {
     ? await shell.read('clips')
     : (await import('../../../public/data/clips.js')).default;
   state.session = new CharacterSession(saved);
+  peopleTool = mountPeople({
+    state,
+    session: state.session,
+    saved: shell
+      ? await shell.read('people')
+      : (await import('../../../public/data/people.js')).default,
+    select,
+    toast,
+    speedOf: (id) => lookOf(id).speed,
+  });
   state.session.on(changed);
   // Building the town to find everyone takes a moment: let the message show first.
   await new Promise((resolve) => setTimeout(resolve, 30));
   state.people = findPeople();
+  peopleTool.sync();
   setPlaying(true);
   setMode('stand');
   hint();

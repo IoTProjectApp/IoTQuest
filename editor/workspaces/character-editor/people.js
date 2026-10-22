@@ -5,13 +5,16 @@
 import { World3D } from '../../../public/world3d.js';
 import { CHARACTER_SETTINGS } from '../../../public/character-settings.js';
 import { isHousehold } from '../../../public/section-residents.js';
-import { WOMEN } from '../../../public/people-cast.js';
+import { WOMEN, castFor } from '../../../public/people-cast.js';
+import { outfitFor } from '../../../public/character-outfits.js';
+import { isOwn } from '../../../public/people-settings.js';
 
 // Clips that are walking or standing rather than an activity of their own.
 const EVERYDAY = new Set(['Idle', 'Talking', 'Walking', 'FemaleWalk', 'Jogging']);
 
 export const GROUPS = [
   { id: 'technician', label: 'Technician' },
+  { id: 'own', label: 'Your people' },
   { id: 'household', label: 'Household' },
   { id: 'residents', label: 'Town residents' },
   { id: 'workers', label: 'Workers' },
@@ -22,6 +25,7 @@ export const GROUPS = [
 
 export function groupOf(id) {
   if (id === 'player') return 'technician';
+  if (isOwn(id)) return 'own';
   if (id.startsWith('dojo:') || id === 'recreation:dojo') return 'judo';
   if (isHousehold(id)) return 'household';
   if (id.startsWith('worker:')) return 'workers';
@@ -31,7 +35,8 @@ export function groupOf(id) {
 }
 // Who walks about by themselves (their walking speed is theirs to set); everyone else is moved by
 // what they are doing (a game, a swim, a queue) and only their clip speed changes.
-export const walksAlone = (id) => ['household', 'residents', 'workers'].includes(groupOf(id));
+export const walksAlone = (id) =>
+  ['own', 'household', 'residents', 'workers'].includes(groupOf(id));
 // The judo class's moves are timed to the clips it plays: only its looks can change.
 export const movesLocked = (id) => groupOf(id) === 'judo';
 
@@ -101,7 +106,8 @@ export function findPeople(locationId = 'legacy') {
     seen = new Set();
   const people = [];
   for (const c of frames.at(-1)?.characters || []) {
-    if (seen.has(c.key)) continue;
+    // People added here are listed from the people being edited (ownEntry), not as saved.
+    if (seen.has(c.key) || isOwn(c.key)) continue;
     seen.add(c.key);
     const playing = c.clips.map((clip) => clip.name);
     people.push({
@@ -125,4 +131,19 @@ export function findPeople(locationId = 'legacy') {
   }
   const order = Object.fromEntries(GROUPS.map((g, i) => [g.id, i]));
   return people.sort((a, b) => order[a.group] - order[b.group] || a.name.localeCompare(b.name));
+}
+// Someone added in the Character Editor (see public/people-settings.js), as the list shows them:
+// played and dressed as the game would cast a person of that id and name.
+export function ownEntry(person) {
+  const model = castFor(person.id, person.name);
+  return {
+    id: person.id,
+    name: person.name || 'New person',
+    group: 'own',
+    model,
+    outfit: outfitFor(person.id),
+    scale: 1,
+    activity: null,
+    walk: WOMEN.includes(model) ? 'FemaleWalk' : 'Walking',
+  };
 }

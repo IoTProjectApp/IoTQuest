@@ -3,6 +3,13 @@ import { extraLocations } from './destination-catalog.js';
 import { melbourneSuburbs } from './melbourne.js';
 import { victorianFarms } from './farms.js';
 import { applyFarmQuest } from './farm-missions.js';
+import {
+  CITY_SETTINGS,
+  HOME_QUESTS,
+  applyCityNames,
+  cityFor,
+  openRequest,
+} from './city-settings.js';
 const initialLocations = [
   {
     id: 'kyoto',
@@ -139,6 +146,8 @@ export const locations = [
   ...melbourneSuburbs,
   ...victorianFarms,
 ];
+// Names set in the City Editor (data/cities.js) replace the code's.
+applyCityNames(locations);
 export function isLocationUnlocked(state, location) {
   return !!(
     state.freeExploration ||
@@ -169,12 +178,6 @@ export const continents = [
   'Antarctica',
 ];
 export const locationById = (id) => locations.find((l) => l.id === id);
-// A resident's request, opened with where they live. The text follows a comma, so its first
-// letter is lowercased (except "I").
-function residentSays(location, text) {
-  const body = /^I\b|^I’/.test(text) ? text : text.charAt(0).toLowerCase() + text.slice(1);
-  return '“Here in ' + location.city + ', ' + body + '”';
-}
 // A deep copy of a quest. Timeline checks and repair starters are functions, which
 // structuredClone cannot copy; they are shared, since quests never change them.
 function copyQuest(value) {
@@ -183,11 +186,15 @@ function copyQuest(value) {
     return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, copyQuest(v)]));
   return value;
 }
-function regionalBaseMissions(base, location) {
+// A resident's request, opened with where they live (see openRequest in city-settings.js).
+function regionalBaseMissions(base, location, settings) {
   if (!location) return base;
+  const residentSays = (l, text) => openRequest(l, text, settings);
   return base.map((mission, index) => {
     const m = copyQuest(mission);
     m.resident = location.names[m.resident] || m.resident;
+    // Quests written in the Quest Editor keep their own words in every city.
+    if (m.authored) return m;
     if (m.weatherQuest || m.sectionQuest || m.communityQuest) {
       m.title = location.city + ' · ' + m.title;
       return m;
@@ -294,9 +301,19 @@ export function progressForLocation(state, id) {
   };
 }
 
-export function adaptMissions(base, location, difficulty = 'advanced') {
-  const list = regionalBaseMissions(base, location);
+// `settings` is the City Editor's wording (data/cities.js unless given).
+export function adaptMissions(base, location, difficulty = 'advanced', settings = CITY_SETTINGS) {
+  const list = regionalBaseMissions(base, location, settings);
   if (!location) return list;
+  const residentSays = (l, text) => openRequest(l, text, settings),
+    city = cityFor(location.id, settings);
+  // A home quest's title and request as written for this city.
+  const worded = (m, index) => {
+    if (index >= HOME_QUESTS || m.authored) return m;
+    if (city.titles?.[index]) m.title = city.titles[index];
+    if (city.quotes?.[index]) m.quote = residentSays(location, city.quotes[index]);
+    return m;
+  };
   return list.map((m, index) => {
     m.difficulty = difficulty;
     if (m.weatherQuest) {
@@ -508,6 +525,6 @@ export function adaptMissions(base, location, difficulty = 'advanced') {
       m.hint = 'Use light < 1800 AND armed == 1.';
       m.scenarios.push(['Lighting manually disabled', { light: 10, armed: 0 }, [0]]);
     }
-    return applyFarmQuest(m, index, location, difficulty);
+    return worded(applyFarmQuest(m, index, location, difficulty), index);
   });
 }

@@ -1,0 +1,159 @@
+/* Shared by the home page and every workspace: colours, type, buttons, fields and the top bar. */
+:root {
+  --bg: #121519;
+  --panel: #1a1e24;
+  --panel-raised: #222730;
+  --hover: #2a303a;
+  --line: #2e3540;
+  --line-strong: #3b4350;
+  --text: #e8ebef;
+  --muted: #9aa3b0;
+  --faint: #6e7785;
+  --accent: #4f9cf9;
+  --accent-soft: rgb(79 156 249 / 16%);
+  --accent-ink: #ffffff;
+  --warn: #f2b84b;
+  --warn-soft: rgb(242 184 75 / 12%);
+  --danger: #ef6b6b;
+  --danger-soft: rgb(239 107 107 / 14%);
+  --ok: #5fd38a;
+  --radius: 8px;
+  --font: system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --mono: ui-monospace, 'SF Mono', Menlo, monospace;
+  color-scheme: dark;
+}
+* {
+  box-sizing: border-box;
+}
+html,
+body {
+  margin: 0;
+  height: 100%;
+  background: var(--bg);
+  color: var(--text);
+  font: 13px/1.45 var(--font);
+  -webkit-font-smoothing: antialiased;
+}
+button,
+input,
+select {
+  font: inherit;
+  color: inherit;
+}
+.icon {
+  flex: none;
+  display: block;
+}
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+kbd {
+  font: 11px var(--mono);
+  padding: 1px 5px;
+  border: 1px solid var(--line-strong);
+  border-bottom-width: 2px;
+  border-radius: 4px;
+  color: var(--muted);
+  background: var(--panel-raised);
+}
+
+/* Buttons: quiet by default, `primary` for the one main action on screen. */
+.button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 12px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  background: var(--panel-raised);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.button:hover:not(:disabled) {
+  background: var(--hover);
+}
+.button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.button.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-ink);
+  font-weight: 600;
+}
+.button.primary:hover:not(:disabled) {
+  background: #3d8cf0;
+}
+.button.danger {
+  color: var(--danger);
+}
+.button.danger:hover:not(:disabled) {
+  background: var(--danger-soft);
+}
+.button.icon-only {
+  width: 32px;
+  padding: 0;
+  justify-content: center;
+}
+
+/* Top bar shared by workspaces: back to home, title, then workspace controls. */
+.topbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 52px;
+  padding: 0 12px;
+  border-bottom: 1px solid var(--line);
+  background: var(--panel);
+}
+.topbar .title {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.15;
+  margin-right: 8px;
+}
+.topbar .title strong {
+  font-size: 14px;
+}
+.topbar .title span {
+  color: var(--faint);
+  font-size: 11px;
+}
+.topbar .spacer {
+  flex: 1;
+}
+.divider {
+  width: 1px;
+  height: 24px;
+  background: var(--line);
+}
+
+/* Fields */
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.field > span {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+.input,
+.select {
+  height: 30px;
+  padding: 0 8px;
+  border: 1px solid var(--line-strong);
+  border-radius: 6px;
+  background: var(--bg);
+  min-width: 0;
+}
+.input:focus,
+.select:focus {
+  border-color: var(--accent);
+  outline: none;
+}

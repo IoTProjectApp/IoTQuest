@@ -1,0 +1,11 @@
+{
+  "name": "iot-quest-world-editor",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Development-only desktop tool for hand-placing objects in the IoT Quest world. Never built or deployed; launch with scripts/world-editor.sh.",
+  "type": "module",
+  "main": "main.mjs",
+  "devDependencies": {
+    "electron": "44.7.0"
+  }
+}

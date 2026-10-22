@@ -1,5 +1,5 @@
 import { esc } from './html.js';
-import { conversationQuestions, selectedRequest } from './conversations.js';
+import { questionsFor, selectedRequest } from './conversations.js';
 // Markup for a resident chat: messages, suggested questions, a free-text question and the
 // resident's other requests. Event wiring stays with the caller.
 export function conversationHTML(chat, playerName = 'You') {
@@ -32,7 +32,7 @@ export function conversationHTML(chat, playerName = 'You') {
       .join('') +
     '</div>' +
     '<div class="chat-questions" aria-label="Suggested questions">' +
-    conversationQuestions
+    questionsFor(chat)
       .map(
         (q) =>
           '<button class="text-btn" data-chat-question="' + esc(q) + '">' + esc(q) + '</button>',

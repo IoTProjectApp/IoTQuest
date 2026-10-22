@@ -55,7 +55,8 @@ function testResults(m, code, language, board) {
 test('catalogue quests come last, after the community quests, in catalogue order', () => {
   const first = missions.indexOf(catalogueQuests[0]);
   assert.equal(first, missions.indexOf(communityQuests.at(-1)) + 1);
-  assert.deepEqual(missions.slice(first), catalogueQuests);
+  // (Quests written in the Quest Editor may follow them.)
+  assert.deepEqual(missions.slice(first, first + catalogueQuests.length), catalogueQuests);
   // Everything in the catalogue except the quests the game already had.
   const existing = [21, 22, 23, 24, 25, 26, 56, 57, 58];
   assert.deepEqual(

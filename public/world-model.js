@@ -216,10 +216,13 @@ export function createWorldModel(variant = {}) {
   wallH(-13.1, -8.2, -1, -10.5, 0.55);
   wallH(-8.2, -3.4, -1, -5.8, 0.55);
   wallH(-3.4, 1.4, -1, -1.1, 0.55, 3.2);
+  // Fittings (windows, doors, blinds) are edit groups of their own, apart from the walls.
   for (const x of [-11.5, -6.7, -1.9]) {
+    tag('house/window#');
     windows.push(box(x, 1.1, -10.88, 1.35, 0.78, 0.065, '#8abec5', { opacity: 0.68 }));
     box(x, 1.1, -10.81, 0.06, 0.85, 0.1, '#fbf1dc');
   }
+  tag();
   buildHouseObjects({ mesh, tag, colliders, dynamic, design: variant.design });
   tag('garden/greenhouse');
   // Greenhouse: a framed glasshouse (default), a polytunnel or a lean-to against a brick wall.

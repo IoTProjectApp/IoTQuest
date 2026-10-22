@@ -49,9 +49,14 @@ test('every destination tags its furniture, garden and town as edit groups', () 
     for (const expected of [
       'garden/tank',
       'town/shop',
+      'house/garage-door',
       ...(id === 'legacy' ? ['furniture/sofa#1', 'furniture/bed#1'] : []),
     ])
       assert.ok(groups.has(expected), `${id} has ${expected}`);
+    // Fittings are their own objects, never part of the walls (which are not edit groups).
+    for (const [groupId, group] of groups)
+      if (groupId.startsWith('house/'))
+        assert.ok(group.parts.length < 120, `${id} ${groupId} is a fitting, not the house`);
     // The house's furniture stays inside the house.
     for (const [groupId, group] of groups)
       if (groupId.startsWith('furniture/'))
@@ -61,6 +66,22 @@ test('every destination tags its furniture, garden and town as edit groups', () 
             `${id} ${groupId}`,
           );
   }
+});
+
+test('windows, the blinds and the garage door move on their own, apart from the house', () => {
+  const kyoto = editGroups(build('kyoto'));
+  for (const id of ['house/window#1', 'house/window#3', 'furniture/blinds#1', 'house/garage-door'])
+    assert.ok(kyoto.has(id), id);
+  assert.equal([...kyoto.keys()].filter((k) => k.startsWith('house/lattice-screen#')).length, 3);
+  assert.equal([...kyoto.keys()].filter((k) => k.startsWith('house/tatami#')).length, 8);
+  // A window is its glass and its frame, and the glass still glows at night after a move.
+  const model = build('legacy'),
+    window = editGroups(model).get('house/window#2');
+  assert.equal(window.parts.length, 2);
+  assert.ok(model.windows.includes(window.parts[0]));
+  const snapshot = snapshotGroup(window);
+  transformGroup(window, snapshot, { pos: [window.pivot[0] + 1, ...window.pivot.slice(1)] });
+  assert.ok(model.windows.includes(window.parts[0]), 'still the same pane');
 });
 
 test('turning a part about the vertical axis composes with its own rotation', () => {

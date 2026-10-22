@@ -370,12 +370,7 @@ function renderInspector() {
   const p = group.placement,
     changed = s.isChanged(group.id),
     added = group.id.startsWith('added/'),
-    category = {
-      furniture: 'Furniture',
-      garden: 'Garden',
-      buildings: 'Building',
-      street: 'Street',
-    }[group.category];
+    category = CATEGORIES.find((c) => c.id === group.category)?.label;
   el.innerHTML = `
     <section>
       <h2>${escape(group.name)}</h2>

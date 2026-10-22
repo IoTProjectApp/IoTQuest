@@ -2,7 +2,8 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('editorShell', {
-  // Saved files by name: 'world-layout' (Map Editor), 'street-layout' (Street Editor).
+  // Saved files by name: 'world-layout' (Map Editor), 'street-layout' (Street Editor),
+  // 'characters' (Character Editor).
   read: (store) => ipcRenderer.invoke('store:read', store),
   write: (store, value) => ipcRenderer.invoke('store:write', store, value),
   openGame: () => ipcRenderer.invoke('game:open'),

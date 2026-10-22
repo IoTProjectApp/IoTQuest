@@ -12,10 +12,11 @@ The script checks for Node.js 20 or newer, installs the game's development packa
 
 The editor is a set of **workspaces**. A workspace is a screen for one job, such as placing objects in the 3D world. The editor opens on a home page with a card for each workspace. Click a card to open that workspace, and use the back arrow at the top left to return.
 
-| Workspace     | What it does                                                                                                      | Writes                         |
-| ------------- | ----------------------------------------------------------------------------------------------------------------- | ------------------------------ |
-| Map Editor    | Move, add and remove furniture, garden features and town buildings in the 3D world, city by city.                 | `public/data/world-layout.js`  |
-| Street Editor | Lay out the town's roads: junctions, roads, traffic lights, stop signs and crossings, then watch the traffic run. | `public/data/street-layout.js` |
+| Workspace        | What it does                                                                                                                 | Writes                         |
+| ---------------- | ---------------------------------------------------------------------------------------------------------------------------- | ------------------------------ |
+| Map Editor       | Move, add and remove furniture, garden features and town buildings in the 3D world, city by city.                            | `public/data/world-layout.js`  |
+| Street Editor    | Lay out the town's roads: junctions, roads, traffic lights, stop signs and crossings, then watch the traffic run.            | `public/data/street-layout.js` |
+| Character Editor | Dress the game's people and set how they move: who plays them, their clothes, their walk, stance and activity, and how fast. | `public/data/characters.js`    |
 
 Each workspace:
 
@@ -198,3 +199,50 @@ export default {
 - **Cities without a layout of their own** use `town`. A layout the same as what it would inherit is not saved, so the file stays empty until something really changes.
 
 With the file empty, the town is built exactly as before: same lanes, crossings, signals and drawing (`tests/street-network.test.mjs`). Signals pair each junction's arms by which are most nearly opposite. On the grid that is east–west against north–south, so students' `trafficEW` and `trafficNS` programs keep working.
+
+## Character Editor
+
+The game's people are rigged, motion-captured characters (Mixamo models in `public/models/people`). Code decides who plays each person, what they wear and which clips they play. The Character Editor lets you change any of that, for one person or for everyone at once.
+
+### Layout
+
+- **People** on the left: everyone the game draws, grouped as Technician, Household, Town residents, Workers, Passengers & parents, Sport & leisure, and Judo class, with the model that plays each. A dot marks people with settings of their own. **Everyone (defaults)** at the top applies to all people without a setting of their own. Search filters the list, and `↑`/`↓` step through it.
+- **Stage** in the middle: the chosen person drawn by the game's own character renderer, so they look exactly as in the game.
+  - **Standing** (`1`) plays their idle or activity.
+  - **Walking** (`2`) walks them round a circle at their speed.
+  - `Space` pauses. Drag to turn round them, and scroll to zoom.
+- **Inspector** on the right:
+  - **Model:** which of the characters plays them.
+  - **Clothes:** top and bottom colours, stripes, a hi-vis vest and its lettering, a cap or hard hat, a backpack and a badge. Each piece can be as built, none (taken off) or your choice.
+  - **Movement:** their walk, their standing clip, an activity played on the spot instead of both (or **None** to take away one the code gives them), walking speed, and clip speed.
+  - Every row has its own reset arrow, and each section and the whole person can be reset too.
+
+Changes show on the stage at once. Undo and redo (`⌘Z`, `⇧⌘Z`) cover every change. **Save** (`⌘S`) writes them all, and **Play-test** opens the game.
+
+### What stays as built
+
+- **The judo class's moves:** its routine is timed to its clips. You can recast and dress the class, but not change its clips.
+- **Walking speed:** it applies to the household, town residents and workers, who walk about on their own. Players, swimmers, passengers and gym-goers are moved by what they are doing, so only their clip speed changes. The technician walks as fast as you steer them.
+- **Unconverted clips:** a clip the settings name but this machine has not converted leaves its person standing (Idle) rather than stopping the game.
+
+### The saved settings
+
+`public/data/characters.js`:
+
+```js
+export default {
+  version: 1,
+  defaults: { rate: 0.9 },
+  people: {
+    player: { outfit: { hat: null, top: '#2a5bd7' } },
+    'recreation:pool': { model: 'Kate' },
+    Maya: { walk: 'Walking', speed: 1.2 },
+    'bus:0:1>1:1:0': { activity: 'AirSquat' },
+  },
+};
+```
+
+- **The keys:** `model`, `outfit` (pieces as in `public/character-outfits.js`, with `null` taking a piece off), `walk`, `idle`, `activity` (`false` for none), `speed` and `rate`.
+- **Order:** a person's own settings come before `defaults`, and both before what the code picks.
+- **Ids** are the game's own: `player` is the technician, and others look like `Maya`, `worker:shop-floor:0` or `bus:0:1>1:1:2`.
+- **An empty file** leaves everyone as the code makes them, which `tests/character-settings.test.mjs` checks. `public/character-settings.js` applies the settings.

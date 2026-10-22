@@ -20,6 +20,12 @@ const STORES = {
     about: 'Hand-placed changes to the generated world, written by the world editor',
     valid: (v) => v?.version === 1 && typeof v.locations === 'object',
   },
+  characters: {
+    file: join(PUBLIC, 'data', 'characters.js'),
+    about: "Hand-set looks and movement for the game's people, written by the Character Editor",
+    valid: (v) =>
+      v?.version === 1 && typeof v.people === 'object' && typeof v.defaults === 'object',
+  },
   'street-layout': {
     file: join(PUBLIC, 'data', 'street-layout.js'),
     about: "The town's street layout, written by the Street Editor",
@@ -50,7 +56,7 @@ const TYPES = {
 };
 
 const EDITOR_CSP =
-  "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'";
+  "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' blob: data:";
 // Resolves a request path inside a folder, or null if it would leave it.
 // A path ending in / is that folder's index.html.
 function inside(folder, path) {

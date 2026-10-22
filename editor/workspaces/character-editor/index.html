@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Character Editor · IoT Quest Editor</title>
+    <link rel="stylesheet" href="/editor/ui/shell.css" />
+    <link rel="stylesheet" href="/editor/ui/workspace.css" />
+    <link rel="stylesheet" href="character-editor.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <a class="button icon-only" id="home" href="/editor/ui/" title="Back to workspaces"></a>
+      <div class="title">
+        <strong>Character Editor</strong>
+        <span>IoT Quest Editor</span>
+      </div>
+      <div class="divider"></div>
+      <div class="segmented" id="modes" role="group" aria-label="Preview">
+        <button data-mode="stand" title="Standing: their idle or activity (1)"></button>
+        <button data-mode="walk" title="Walking a circle at their speed (2)"></button>
+      </div>
+      <button class="button icon-only" id="play" title="Pause or play (Space)"></button>
+      <div class="spacer"></div>
+      <button class="button icon-only" id="undo" title="Undo (⌘Z)"></button>
+      <button class="button icon-only" id="redo" title="Redo (⇧⌘Z)"></button>
+      <span class="save-state" id="save-state"></span>
+      <button class="button" id="playtest" title="Open the game in a new window (⌘P)"></button>
+      <button class="button primary" id="save" title="Save everyone's settings (⌘S)"></button>
+    </header>
+
+    <div class="workspace characters">
+      <nav class="people" aria-label="People">
+        <label class="search">
+          <span class="search-icon" id="search-icon"></span>
+          <input class="input" id="search" type="search" placeholder="Search people" />
+        </label>
+        <div class="people-list" id="people"></div>
+      </nav>
+
+      <main class="stage">
+        <div class="view">
+          <canvas id="stage" tabindex="0" aria-label="Character preview"></canvas>
+          <div class="hint" id="hint"></div>
+          <div class="toast" id="toast" role="status" hidden></div>
+          <div class="loading" id="loading">Finding everyone in the game…</div>
+        </div>
+      </main>
+
+      <aside class="inspector" id="inspector" aria-label="Inspector"></aside>
+    </div>
+    <script type="module" src="app.js"></script>
+  </body>
+</html>

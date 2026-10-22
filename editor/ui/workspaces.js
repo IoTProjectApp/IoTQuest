@@ -18,6 +18,14 @@ export const WORKSPACES = [
     icon: 'road',
     writes: 'public/data/street-layout.js',
   },
+  {
+    id: 'character-editor',
+    name: 'Character Editor',
+    summary:
+      "Dress the game's people and set how they move: who plays them, their clothes, their walk, stance and activity, and how fast.",
+    icon: 'person',
+    writes: 'public/data/characters.js',
+  },
 ];
 
 export const workspaceUrl = (workspace) => `../workspaces/${workspace.id}/`;

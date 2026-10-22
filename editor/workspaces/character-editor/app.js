@@ -15,6 +15,8 @@ import {
   clipToGlb,
   clipEntry,
 } from './clip-import.js';
+import { createModelImport } from './model-panel.js';
+import { knownModel } from '../../../public/character-models.js';
 import { icon } from '../../ui/icons.js';
 
 const shell = window.editorShell;
@@ -43,6 +45,17 @@ const state = {
   importing: null,
 };
 const stage = new Stage($('stage'));
+// Imported character models (model-panel.js).
+const models = createModelImport({
+  stage,
+  shell,
+  toast: (...args) => toast(...args),
+  loaders: () => clipLoaders(),
+  redraw: () => {
+    renderInspector();
+    showStage();
+  },
+});
 
 // ---- Static chrome --------------------------------------------------------------------------
 $('home').innerHTML = icon('back');
@@ -76,7 +89,8 @@ function lookOf(target) {
     own = target === DEFAULTS ? {} : people[target] || {},
     pick = (key, built) => own[key] ?? defaults[key] ?? built;
   return {
-    model: pick('model', base.model),
+    // A model since removed plays them as built.
+    model: knownModel(pick('model', base.model)) ? pick('model', base.model) : base.model,
     outfit: dressed(dressed(base.outfit, defaults.outfit), own.outfit),
     scale: base.scale,
     carry: base.carry,
@@ -214,6 +228,7 @@ function renderInspector() {
     ['', defaults ? 'As each is built' : `As built (${who.model})`],
     ...WOMEN.map((m) => [m, `${m} · woman`]),
     ...MEN.map((m) => [m, `${m} · man`]),
+    ...models.choices(),
   ];
   el.innerHTML = `
     <section>
@@ -348,6 +363,7 @@ function renderInspector() {
       <div class="section-head"><h3>Imported clips</h3><button class="button" id="import-clip" title="Bring in an animation from a .glb, .gltf or .fbx file, such as a Mixamo download">${icon('plus', 16)}Import clip…</button></div>
       ${importedList()}
     </section>
+    ${models.section()}
     <section>
       <div class="actions">
         <button class="button" id="reset-all" ${s.isChanged(target) ? '' : 'disabled'}>${icon('reset', 16)}Reset everything</button>
@@ -453,6 +469,11 @@ function bindInspector(el, target) {
     b.addEventListener('click', () => s.reset(target, b.dataset.section));
   $('reset-all').addEventListener('click', () => s.reset(target));
   $('import-clip').addEventListener('click', importClip);
+  models.bind(el, (name) =>
+    Object.entries({ defaults: s.settings.defaults, ...s.settings.people })
+      .filter(([, own]) => own?.model === name)
+      .map(([id]) => id),
+  );
   for (const b of el.querySelectorAll('[data-remove-clip]'))
     b.addEventListener('click', () => removeClip(b.dataset.removeClip));
 }
@@ -540,7 +561,7 @@ function refit() {
 }
 // The person on stage, playing the clip being imported if there is one.
 function showStage() {
-  const look = lookOf(state.target);
+  const look = models.preview(lookOf(state.target));
   if (!state.importing?.fit) return stage.show(look);
   stage.show(
     state.importing.kind === 'walk'
@@ -771,7 +792,7 @@ shell?.onMenu((command) => {
 });
 
 // For test scripts and the developer console.
-window.characterEditor = { state, stage, startImport };
+window.characterEditor = { state, stage, startImport, importModel: models.start };
 
 async function start() {
   const saved = shell
@@ -780,6 +801,9 @@ async function start() {
   state.clips = shell
     ? await shell.read('clips')
     : (await import('../../../public/data/clips.js')).default;
+  models.load(
+    shell ? await shell.read('models') : (await import('../../../public/data/models.js')).default,
+  );
   state.session = new CharacterSession(saved);
   state.session.on(changed);
   // Building the town to find everyone takes a moment: let the message show first.

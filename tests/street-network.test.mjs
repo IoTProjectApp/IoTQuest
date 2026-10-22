@@ -7,7 +7,6 @@ import {
   pavement,
 } from '../public/street-network.js';
 import { createCommunity, CommunitySimulation, Network } from '../public/community-sim.js';
-import STREET_LAYOUT from '../public/data/street-layout.js';
 
 const grid = () => defaultStreetLayout();
 const build = (layout, handedness = -1) => {
@@ -23,12 +22,10 @@ const moved = (layout, id, dx, dz) => {
 };
 
 test('with no saved changes the town is the original grid', () => {
-  assert.equal(STREET_LAYOUT.town, null);
-  assert.deepEqual(STREET_LAYOUT.locations, {});
   const layout = grid();
   assert.equal(layout.junctions.length, 30);
   assert.equal(layout.roads.length, 49);
-  assert.deepEqual(streetLayoutFor('kyoto'), layout);
+  assert.deepEqual(streetLayoutFor('kyoto', { version: 1, town: null, locations: {} }), layout);
   // Every junction has four corners and four crossings, as the grid always had.
   const { walks, crossings } = build(layout);
   assert.equal(crossings.length, 120);

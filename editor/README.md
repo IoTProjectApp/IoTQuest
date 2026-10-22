@@ -296,8 +296,8 @@ export default {
 };
 ```
 
-- **The keys:** `model`, `outfit` (pieces as in `public/character-outfits.js`, with `null` taking a piece off), `walk`, `idle`, `activity` (`false` for none), `speed`, `rate` and `reactions` (see Reactions below).
-- **The keys:** `model`, `outfit` (pieces as in `public/character-outfits.js`, with `null` taking a piece off), `appearance` (as in `public/character-appearance.js`; a person's parts are laid over the defaults' one by one), `walk`, `idle`, `activity` (`false` for none), `speed` and `rate`.
+- **The keys:** `model`, `outfit` (pieces as in `public/character-outfits.js`, with `null` taking a piece off, and `wardrobe` for their own clothes, see below), `walk`, `idle`, `activity` (`false` for none), `speed`, `rate` and `reactions` (see Reactions below).
+- **The keys:** `model`, `outfit` (pieces as in `public/character-outfits.js`, with `null` taking a piece off, and `wardrobe` for their own clothes, see below), `appearance` (as in `public/character-appearance.js`; a person's parts are laid over the defaults' one by one), `walk`, `idle`, `activity` (`false` for none), `speed` and `rate`.
 - **Order:** a person's own settings come before `defaults`, and both before what the code picks.
 - **Ids** are the game's own: `player` is the technician, and others look like `Maya`, `worker:shop-floor:0` or `bus:0:1>1:1:2`.
 - **An empty file** leaves everyone as the code makes them, which `tests/character-settings.test.mjs` checks. `public/character-settings.js` applies the settings.
@@ -343,6 +343,45 @@ How the hair and beards are made (`public/three-appearance.js`):
 - **Hats** are fitted to the model's own hair, so they can sit a little high on a bald or buzz-cut head.
 
 With no look set, a person is drawn exactly as before (`tests/character-appearance.test.mjs` checks this, along with the format and the editor's changes).
+
+### Changing their own clothes
+
+The **Their own clothes** section takes off the clothes the model is made with, or dresses the person in another model's, so a generated dress, skirt or coat (in **Clothes**) goes over something plain instead of over jeans:
+
+| Choice              | What it does                                                                                                                                                              |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Top, Bottom         | **Their own**, **Taken off**, or another model's (Josh's suit, Shannon's shorts…).                                                                                        |
+| Shoes               | Their own, or another model's. Shoes are swapped, never just taken off; heels go only to someone already in heels.                                                        |
+| Base layer          | What goes on where clothes come off: a colour, **Sleeves** (short, sleeveless or long) and **Legs** (shorts, to the knee or full length), and socks under borrowed shoes. |
+| Change into a dress | One step: top and bottom off, a sleeveless base layer in the dress's colour, and a dress over it.                                                                         |
+
+**Nobody is ever drawn undressed.** Each model's body is cut away under its clothes, so a top or bottom that comes off is always replaced by the base layer (`public/three-wardrobe.js`), made from the piece's own shape so it covers exactly what the piece did:
+
+- cloth over the torso and hips, cut in a clean line at the sleeves' and legs' hems (sleeveless cuts where a dress's top would, from the chest, back and neck);
+- skin past the hems: arms made afresh as smooth limbs shaped from the body's own arm, legs drawn in to the body's own size, painted with the body's own skin as it shows past the clothes. The body's unfinished bits under the old clothes are trimmed away so they never show through;
+- under clothes borrowed from another model, cloth as far as they reach (so no skin is made only to be covered), drawn a little behind them.
+
+**Borrowed clothes** are carried over bone by bone from the other model and fitted to this body's girth on each side of each bone (a jacket cut for a flat chest is let out at the front for a fuller one), then pushed just clear of what is under them, smoothly, so they do not tear. A jacket or jumper comes without the narrow shirt front under it: the base layer is the shirt there. They load with the person (and the light versions far away follow); a model that fails to load lends nothing.
+
+**What cannot change:** Alex, James and Jennifer are made in one piece with their clothes painted on; imported models are not offered; the judo class keep their gi. Hair, faces, masks and caps that are part of a model are not clothes.
+
+**Known limits:** sleeves and legs reach only as far as the clothes taken off did (long sleeves on someone whose own shirt had short ones stay short); close up, the line where new skin meets the body's own can show, and the base layer keeps the shape of what it replaces (a hoodie's hood, a polo's collar). Borrowed pieces are fitted, not tailored: a few seams of the base layer can show at their edges.
+
+Saved as `wardrobe` in the person's (or everyone's) `outfit`:
+
+```js
+outfit: {
+  dress: '#5b3f8f',
+  wardrobe: {
+    top: 'off',        // or a model's name: 'Josh'
+    bottom: 'Shannon',
+    shoes: 'Megan',    // swapped only
+    base: { color: '#5b3f8f', sleeves: 'vest', legs: 'shorts', socks: '#ecebe6' },
+  },
+}
+```
+
+With no wardrobe set, everyone is drawn exactly as before (`tests/character-wardrobe.test.mjs` checks this, that no wardrobe can leave anyone without the base layer, the format and the editor's changes).
 
 ### Importing clips
 

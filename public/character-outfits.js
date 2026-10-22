@@ -8,7 +8,8 @@
 // 'headband' | 'headscarf' | 'turban', color }), glasses ({ kind: 'glasses' | 'sunglasses',
 // color: the frame's }), tie ({ kind: 'tie' | 'bowtie', color }), jacket, coat, dress, skirt,
 // apron, gloves, shoes, mask, scarf, lanyard, watch and backpack (colours), badge ('medical' |
-// 'lifeguard' | 'name': painted on the chest) }. Every field is optional; a fixed pick per person
+// 'lifeguard' | 'name': painted on the chest), wardrobe (their own clothes taken off or swapped for
+// another model's, see character-wardrobe.js) }. Every field is optional; a fixed pick per person
 // keeps someone dressed the same from one visit to the next. The code here dresses no one in the
 // newer pieces (jackets to watches): the Character Editor can.
 

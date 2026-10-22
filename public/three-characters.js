@@ -3,6 +3,8 @@ import { GLTFLoader } from './vendor/three-addons/GLTFLoader.js';
 import { clone } from './vendor/three-addons/SkeletonUtils.js';
 import { Outfits } from './three-outfits.js';
 import { Appearance } from './three-appearance.js';
+import { Wardrobe } from './three-wardrobe.js';
+import { MODEL_PIECES } from './character-wardrobe.js';
 import { appearanceScale } from './character-appearance.js';
 import { IMPORTED_CLIPS } from './character-clips.js';
 import { modelFile, modelHeight } from './character-models.js';
@@ -16,7 +18,8 @@ import { modelFile, modelHeight } from './character-models.js';
 // radians, 0 = +x, as figures.js), clips: [{ name, time, weight }] (blended by weight), standIn
 // (the meshes drawn while it loads), belt (optional colour), carry (optional colour: a toolbox in
 // the right hand), scale (optional; the technician is drawn a little larger to stand out), outfit
-// (optional: recoloured clothes, work wear and badges, see character-outfits.js), appearance
+// (optional: recoloured clothes, work wear and badges, and their own clothes changed with
+// `wardrobe`, see character-outfits.js and character-wardrobe.js), appearance
 // (optional: height, build, skin, hair, beard and brows, see character-appearance.js) }.
 //
 // Each model comes in full detail and a light version (-low, about 15% of the triangles): people
@@ -55,6 +58,7 @@ export class ThreeCharacters {
     }
     this.outfits = new Outfits({ shadows });
     this.appearance = new Appearance({ shadows });
+    this.wardrobe = new Wardrobe({ shadows });
     this.clips = null;
   }
   // The animations, shared by everyone, load with the first person seen.
@@ -93,6 +97,22 @@ export class ThreeCharacters {
     }
     return this.models.get(name).promise;
   }
+  // The loaded scenes of the models a wardrobe borrows from ({ [model]: scene }), at the same
+  // detail, or null while any is still loading. One that fails to load lends nothing.
+  donors(wardrobe, low) {
+    const names = ['top', 'bottom', 'shoes']
+      .map((region) => wardrobe?.[region])
+      .filter((name) => name && name !== 'off' && MODEL_PIECES[name]);
+    const donors = {};
+    for (const name of names) {
+      const file = modelFile(name, low);
+      this.load(file);
+      const entry = this.models.get(file);
+      if (entry.gltf) donors[name] = entry.gltf.scene;
+      else if (!entry.failed) return null;
+    }
+    return donors;
+  }
   // One person drawn from a loaded model: its own copy of the skeleton, an animation mixer, a
   // belt round the waist if asked for, and a soft shadow on the ground.
   create(state, gltf) {
@@ -106,6 +126,12 @@ export class ThreeCharacters {
       for (const m of [].concat(o.material)) if (!m.userData.keepColour) m.color.set(0xffffff);
     });
     this.outfits.dress(root, state.file, state.outfit);
+    // Before the appearance, which may change the neck's scale: borrowed clothes are fitted at rest.
+    this.wardrobe.apply(root, state.file, state.outfit?.wardrobe, {
+      donors: state.donors,
+      skin: state.appearance?.skin,
+      outfit: state.outfit,
+    });
     this.appearance.apply(root, state.file, state.appearance);
     const hips = root.getObjectByName('mixamorigHips');
     const person = {
@@ -172,13 +198,15 @@ export class ThreeCharacters {
         // An imported model (character-models.js) has one file, near and far.
         file = modelFile(state.model, low);
       this.load(file);
-      const entry = this.models.get(file);
-      // Until the wanted version has loaded, keep the one already shown, if any.
-      if (!entry.gltf || !this.clips) {
+      const entry = this.models.get(file),
+        donors = this.donors(state.outfit?.wardrobe, low);
+      // Until the wanted version (and any model it borrows clothes from) has loaded, keep the one
+      // already shown, if any.
+      if (!entry.gltf || !this.clips || !donors) {
         if (!person || person.model !== state.model) continue;
       } else if (person?.file !== file) {
         if (person) this.remove(state.key);
-        person = this.create({ ...state, file }, entry.gltf);
+        person = this.create({ ...state, file, donors }, entry.gltf);
         person.file = file;
         this.people.set(state.key, person);
       }
@@ -238,6 +266,7 @@ export class ThreeCharacters {
     this.sunShadowGeometry?.dispose();
     this.sunShadowMaterial?.dispose();
     this.outfits.dispose();
+    this.wardrobe.dispose();
     this.appearance.dispose();
     for (const { gltf } of this.models.values())
       gltf?.scene.traverse((o) => {

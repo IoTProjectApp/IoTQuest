@@ -19,6 +19,7 @@ The editor is a set of **workspaces**. A workspace is a screen for one job, such
 | Character Editor    | Dress the game's people and set how they move: who plays them, their clothes, their walk, stance and activity, and how fast.                       | `public/data/characters.js`                                               |
 | Quest Editor        | Write new quests: who asks and where, the devices to wire, the rules and the tests, each checked against a worked solution on both boards.         | `public/data/quests.js`                                                   |
 | Conversation Editor | Write what the game's people say, for everyone or one person in one city, and how each resident asks for their quests; try each chat as you write. | `public/data/conversations.js` (and `public/data/quests.js` for requests) |
+| City Editor         | Word each city: what it calls the household, how residents open their requests, and the home quests' titles and requests there.                    | `public/data/cities.js`                                                   |
 
 Each workspace:
 
@@ -382,3 +383,42 @@ export default {
 - **Order:** a person's city lines, then their own, then everyone's, then the game's. Only lines that differ are kept.
 - **Requests are quest changes:** changing what someone asks for saves the quest's `quote` in `public/data/quests.js` (`edits`), exactly as the Quest Editor would, so both editors show it.
 - **With the file empty, everyone says what they always said**, word for word (`tests/conversation-editor.test.mjs` checks this along with the format).
+
+## City Editor
+
+Each city words the home's eight quests its own way: the household has local names (Maya is Akari in Kyoto), residents open their requests with "Here in Kyoto, …", and the quests have local titles. The City Editor changes that wording, city by city.
+
+### Layout
+
+- **Top bar:** back to workspaces, **Beginner / Advanced** (the level the quests are shown at; some requests differ by level), undo and redo, save state, **Play-test** and **Save**.
+- **Left, the cities:** every playable city, with its country. A blue dot marks a city with your wording, a red one a city with problems.
+- **Middle, the home's quests:** the eight home quests as that city words them now, with who asks and where. The household's names are at the top. Click a quest to change it.
+- **Right, the fields:** the household's three names, how requests open, and the chosen quest's title and request. Blank fields show faintly what the game says and keep it.
+
+### The check
+
+- **Names:** chats find a resident's requests by name, so a household name that is also someone else's in that city (another of the household, or a resident with quests of their own there) would mix their chats. A name you set that clashes stops saving; a clash the code already has (Sam is Jordan in Brisbane) is a warning.
+- **The opening** must say `{request}`, and can use only `{city}` and `{request}`; the game adds the quote marks.
+- **Titles and requests** are plain text. A title another quest in the city already has, and a very long request, are warnings.
+
+### The saved wording
+
+`public/data/cities.js` holds it; `public/city-settings.js` describes the format and reads it in the game.
+
+```js
+export default {
+  version: 1,
+  cities: {
+    kyoto: {
+      names: { Maya: 'Yuki' },
+      opening: 'In {city} we say: {request}',
+      titles: { 0: 'Lantern Path' },
+      quotes: { 2: 'The moss needs water when the soil dries.' },
+    },
+  },
+};
+```
+
+- **Names** are laid over the city's own when the game loads, so everything that names the household uses them: chats, quests, the map and the Conversation Editor (whose lines stay keyed by Maya, Alex and Sam).
+- **Titles and requests** are keyed by the quest's place (0–7, the home's quests). A request is written without the opening, its first letter lowercased as the game does, and is used at both levels. The quest's devices, rules and tests stay the code's.
+- **With the file empty, every city is worded exactly as before** (`tests/city-editor.test.mjs` checks every city at both levels).

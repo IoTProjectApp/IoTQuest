@@ -53,6 +53,7 @@ To add or change characters or animations:
 - **Character Editor** sets who plays each of the game's people, what they wear and how they move. It saves to `public/data/characters.js`.
 - **Quest Editor** writes new quests (story, devices, rules and tests), each checked against a worked solution on both boards before it can be saved. It saves to `public/data/quests.js`.
 - **Conversation Editor** writes what the game's people say in chats, for everyone or one person in one city, and how each resident asks for their quests. It saves to `public/data/conversations.js`.
+- **City Editor** words each city: what it calls the household, how residents open their requests, and the home quests' titles and requests. It saves to `public/data/cities.js`.
 
 The game applies both when it builds each city. With no changes saved, every world is built exactly as before. The editor is never built or deployed; see `editor/README.md`.
 

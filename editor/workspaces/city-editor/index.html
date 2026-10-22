@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>City Editor · IoT Quest Editor</title>
+    <link rel="stylesheet" href="/editor/ui/shell.css" />
+    <link rel="stylesheet" href="/editor/ui/workspace.css" />
+    <link rel="stylesheet" href="city-editor.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <a class="button icon-only" id="home" href="/editor/ui/" title="Back to workspaces"></a>
+      <div class="title">
+        <strong>City Editor</strong>
+        <span>IoT Quest Editor</span>
+      </div>
+      <div class="divider"></div>
+      <div class="segmented" id="levels" role="group" aria-label="Level">
+        <button data-level="beginner" title="The quests as beginners play them">Beginner</button>
+        <button data-level="advanced" title="The quests as advanced players play them">
+          Advanced
+        </button>
+      </div>
+      <div class="spacer"></div>
+      <button class="button icon-only" id="undo" title="Undo (⌘Z)"></button>
+      <button class="button icon-only" id="redo" title="Redo (⇧⌘Z)"></button>
+      <span class="save-state" id="save-state"></span>
+      <button class="button" id="playtest" title="Open the game in a new window (⌘P)"></button>
+      <button class="button primary" id="save" title="Save every city's wording (⌘S)"></button>
+    </header>
+
+    <div class="workspace cities">
+      <nav class="city-list" aria-label="Cities">
+        <label class="search">
+          <span class="search-icon" id="search-icon"></span>
+          <input class="input" id="search" type="search" placeholder="Search cities" />
+        </label>
+        <div class="list" id="cities"></div>
+      </nav>
+      <main class="quests-view" id="quests" aria-label="The city's home quests"></main>
+      <aside class="inspector" id="fields" aria-label="Wording"></aside>
+    </div>
+    <div class="toast" id="toast" role="status" hidden></div>
+    <script type="module" src="app.js"></script>
+  </body>
+</html>

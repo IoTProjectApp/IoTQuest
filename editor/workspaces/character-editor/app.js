@@ -164,6 +164,17 @@ function renderInspector() {
       <select class="select" data-piece="${name}">${options(choices, kind)}</select>${value != null ? extra(value) : ''}
     </div>${reset('outfit.' + name, has)}</div>`;
   };
+  // A garment worn or not, in a colour of its own.
+  const worn = (name, text, on, fallback) =>
+    optional(
+      name,
+      text,
+      [
+        ['none', 'None'],
+        ['on', on],
+      ],
+      (v) => colour(name, v, fallback),
+    );
   const clipRow = (key, text, list) => {
     const has = key in own;
     return `<div class="row ${has ? 'set' : ''}"><span>${text}</span><div class="controls">
@@ -205,6 +216,7 @@ function renderInspector() {
       <div class="section-head"><h3>Clothes</h3><button class="link" data-section="outfit" ${own.outfit ? '' : 'disabled'}>Reset clothes</button></div>
       ${plain('top', 'Top')}
       ${plain('bottom', 'Bottom')}
+      ${plain('shoes', 'Shoes')}
       ${optional(
         'stripes',
         'Stripes',
@@ -214,6 +226,12 @@ function renderInspector() {
         ],
         (v) => colour('stripes', v),
       )}
+      ${worn('jacket', 'Jacket', 'Jacket', '#3b4a5c')}
+      ${worn('coat', 'Coat', 'Long coat', '#6b5a48')}
+      ${worn('dress', 'Dress', 'Dress', '#b5566e')}
+      ${worn('skirt', 'Skirt', 'Skirt', '#5b4a7a')}
+      ${worn('apron', 'Apron', 'Apron', '#e9e4d8')}
+      ${worn('gloves', 'Gloves', 'Gloves', '#2b2f36')}
       ${optional(
         'vest',
         'Hi-vis vest',
@@ -232,9 +250,41 @@ function renderInspector() {
           ['none', 'None'],
           ['cap', 'Cap'],
           ['hardhat', 'Hard hat'],
+          ['beanie', 'Beanie'],
+          ['sunhat', 'Sun hat'],
+          ['bucket', 'Bucket hat'],
+          ['beret', 'Beret'],
+          ['helmet', 'Bike helmet'],
+          ['headband', 'Headband'],
+          ['headscarf', 'Headscarf'],
+          ['turban', 'Turban'],
         ],
         (v) => colour('hat', v.color, '#1f3b73'),
       )}
+      ${optional(
+        'glasses',
+        'Glasses',
+        [
+          ['none', 'None'],
+          ['glasses', 'Glasses'],
+          ['sunglasses', 'Sunglasses'],
+        ],
+        (v) => colour('glasses', v.color, '#222222'),
+      )}
+      ${worn('mask', 'Face mask', 'Mask', '#9fc4d8')}
+      ${worn('scarf', 'Scarf', 'Scarf', '#a23b3b')}
+      ${optional(
+        'tie',
+        'Tie',
+        [
+          ['none', 'None'],
+          ['tie', 'Necktie'],
+          ['bowtie', 'Bow tie'],
+        ],
+        (v) => colour('tie', v.color, '#7a2e2e'),
+      )}
+      ${worn('lanyard', 'Lanyard', 'Lanyard & ID', '#1f3b73')}
+      ${worn('watch', 'Watch', 'Watch', '#2b2f36')}
       ${optional(
         'backpack',
         'Backpack',
@@ -306,8 +356,37 @@ function bindInspector(el, target) {
       const fresh = {
         stripes: '#f2efe6',
         vest: { color: '#d8f03a', ...(typeof current === 'object' ? current : {}) },
-        hat: { kind, color: current?.color || (kind === 'hardhat' ? '#f4f4f0' : '#1f3b73') },
+        hat: {
+          kind,
+          color:
+            current?.color ||
+            {
+              hardhat: '#f4f4f0',
+              cap: '#1f3b73',
+              beanie: '#7a2e2e',
+              sunhat: '#e3d9c6',
+              bucket: '#6b7b3a',
+              beret: '#2b2f36',
+              helmet: '#d08a2e',
+              headband: '#a23b3b',
+              headscarf: '#5b4a7a',
+              turban: '#d08a2e',
+            }[kind] ||
+            '#1f3b73',
+        },
+        glasses: { kind, color: current?.color || '#222222' },
+        tie: { kind, color: current?.color || '#7a2e2e' },
+        coat: '#6b5a48',
+        dress: '#b5566e',
+        gloves: '#2b2f36',
+        mask: '#9fc4d8',
+        lanyard: '#1f3b73',
+        watch: '#2b2f36',
         backpack: '#2d3e50',
+        jacket: '#3b4a5c',
+        skirt: '#5b4a7a',
+        apron: '#e9e4d8',
+        scarf: '#a23b3b',
         badge: kind,
       }[name];
       s.wear(target, name, kind === 'none' ? null : fresh, 'Change ' + name);

@@ -11,7 +11,7 @@ import { worldSunlight } from '../../../public/world-materials.js';
 import { updateSky } from '../../../public/sky.js';
 import { multiply, perspective, lookAt, screenRay } from '../../../public/world-math.js';
 import { partBounds } from '../../../public/world-layout.js';
-import { terrainHeightAt } from '../../../public/world-builder/terrain.js';
+import { terrainHeightAt, terrainSurface } from '../../../public/world-builder/terrain.js';
 
 const FOV = 0.82;
 const ACCENT = 0x4f9cf9;
@@ -151,6 +151,15 @@ export class WorldBuilderViewport {
     this.roadPreviewGroup = new THREE.Group();
     this.gltfGroup = new THREE.Group();
     this.renderer.world.add(this.gltfGroup);
+    // The ground: one smooth mesh (terrainSurface), made again when the terrain changes.
+    this.terrainMesh = new THREE.Mesh(
+      new THREE.BufferGeometry(),
+      new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.92, metalness: 0 }),
+    );
+    this.terrainMesh.receiveShadow = true;
+    this.terrainMesh.castShadow = true;
+    this.terrainKey = null;
+    this.renderer.world.add(this.terrainMesh);
     this.renderer.scene.add(
       this.selectionBox,
       this.hoverBox,
@@ -374,8 +383,33 @@ export class WorldBuilderViewport {
   refresh() {
     if (!this.session) return;
     if (!this.gizmo.dragging) this.attachGizmo();
+    this.syncTerrain();
     this.syncGLTFInstances();
     this.updateOutlines();
+  }
+
+  // The ground mesh, made again only when the heights, surfaces or the terrain layer change.
+  syncTerrain() {
+    const w = this.session.world,
+      t = w.terrain,
+      visible = w.layers?.find((l) => l.id === 'terrain')?.visible !== false;
+    this.terrainMesh.visible = visible;
+    const key = t ? `${t.size}|${t.extent}|${t.heights.join()}|${t.paints.join()}` : '';
+    if (!t || key === this.terrainKey) return;
+    this.terrainKey = key;
+    const surface = terrainSurface(t),
+      g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.BufferAttribute(surface.positions, 3));
+    g.setAttribute('normal', new THREE.BufferAttribute(surface.normals, 3));
+    // three.js lights in linear colour: the surfaces' colours are sRGB.
+    const linear = surface.colors.map((c) =>
+      c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4,
+    );
+    g.setAttribute('color', new THREE.BufferAttribute(linear, 3));
+    g.setIndex(new THREE.BufferAttribute(surface.indices, 1));
+    g.computeBoundingSphere();
+    this.terrainMesh.geometry.dispose();
+    this.terrainMesh.geometry = g;
   }
 
   // Loads and syncs any imported GLB/GLTF 3D models in the scene
@@ -384,22 +418,35 @@ export class WorldBuilderViewport {
     const w = this.session.world;
     const assetsById = new Map((w.importedAssets || []).map((a) => [a.id, a]));
 
-    // Trigger async load for any new dataUrl not yet cached
+    // Load each model not yet loaded: from its bytes while they wait for a save, else its file.
     for (const asset of w.importedAssets || []) {
-      if (asset.dataUrl && !this.gltfCache.has(asset.id)) {
-        this.gltfCache.set(asset.id, 'loading');
-        this.gltfLoader.load(
-          asset.dataUrl,
-          (gltf) => {
-            this.gltfCache.set(asset.id, gltf.scene);
-            this.syncGLTFInstances();
-          },
-          undefined,
-          () => {
-            this.gltfCache.set(asset.id, null);
-          },
-        );
-      }
+      if (this.gltfCache.has(asset.id)) continue;
+      this.gltfCache.set(asset.id, 'loading');
+      const loaded = (gltf) => {
+          this.gltfCache.set(asset.id, gltf.scene);
+          // Its size, so the session can give it a click target that fits.
+          const box = new THREE.Box3().setFromObject(gltf.scene),
+            scale = Number(asset.scale) || 1,
+            size = box.getSize(new THREE.Vector3()).multiplyScalar(scale);
+          this.session.modelSizes.set(asset.id, [
+            Math.max(0.1, size.x),
+            Math.max(0.1, size.y),
+            Math.max(0.1, size.z),
+            ((box.min.y + box.max.y) / 2) * scale,
+          ]);
+          this.session.rebuildSceneModel();
+          this.syncGLTFInstances();
+          this.updateOutlines();
+        },
+        failed = () => {
+          this.gltfCache.set(asset.id, null);
+          this.onModelMissing?.(asset);
+        },
+        bytes = this.session.modelBytes?.get(asset.id);
+      if (bytes) this.gltfLoader.parse(bytes.slice().buffer, '', loaded, failed);
+      else if (asset.file)
+        this.gltfLoader.load('../../../public/' + asset.file, loaded, undefined, failed);
+      else failed();
     }
 
     // Clear and repopulate rendered GLTF clones for placed imported objects

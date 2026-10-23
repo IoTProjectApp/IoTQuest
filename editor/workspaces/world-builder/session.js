@@ -36,6 +36,29 @@ export { DEFAULT_LAYERS, defaultEnvironment };
 export const WORLD_PROJECT_FORMAT = 'iotquest-world-project';
 export const WORLD_PROJECT_VERSION = 1;
 export const COMPLEXITY_WARNING_LIMIT = 200;
+// Imported models are saved as files beside the game's other models (public/models is kept out
+// of the public repository, like the people's): worlds.js holds only where each one is.
+export const MODEL_FOLDER = 'models/worlds';
+export const MODEL_ID = /^custom-model-[a-z0-9-]{1,60}$/;
+export const MODEL_MAX_BYTES = 64 * 1024 * 1024;
+export const modelFile = (id) => `${MODEL_FOLDER}/${id}.glb`;
+// A binary glTF file starts with the bytes "glTF".
+export const isGlb = (bytes) =>
+  bytes?.length >= 12 && String.fromCharCode(bytes[0], bytes[1], bytes[2], bytes[3]) === 'glTF';
+// The bytes inside a base64 data URL (as older worlds and exported projects hold models).
+function bytesOfDataUrl(url) {
+  const base64 = String(url).split(',')[1] || '';
+  const text = atob(base64),
+    bytes = new Uint8Array(text.length);
+  for (let i = 0; i < text.length; i++) bytes[i] = text.charCodeAt(i);
+  return bytes;
+}
+export function dataUrlOf(bytes) {
+  let text = '';
+  for (let i = 0; i < bytes.length; i += 0x8000)
+    text += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+  return 'data:model/gltf-binary;base64,' + btoa(text);
+}
 
 const clone = (v) => JSON.parse(JSON.stringify(v));
 const round = (v, p = 3) => Math.round((Number(v) || 0) * 10 ** p) / 10 ** p;
@@ -132,6 +155,13 @@ export class WorldBuilderSession {
     this.undoStack = [];
     this.redoStack = [];
     this.listeners = new Set();
+    // Imported models not yet written to their files, by id: their bytes stay out of the world (and
+    // so out of undo steps and the autosave).
+    this.modelBytes = new Map();
+    // Whether loading moved models out of the saved file, which then needs saving again.
+    this.movedModels = false;
+    // Each loaded model's size, [width, height, depth, centre height], measured by the viewport.
+    this.modelSizes = new Map();
 
     // Editor view & selection state
     this.selectedIds = new Set();
@@ -162,6 +192,8 @@ export class WorldBuilderSession {
 
   ensureWorldDefaults(w) {
     normaliseWorld(w);
+    // Models packed into older saves and projects become files (see adoptModels).
+    this.adoptModels(w);
   }
 
   on(listener) {
@@ -248,24 +280,37 @@ export class WorldBuilderSession {
   }
 
   // ---- Undo / Redo ----
-  // `merge` names an edit that goes on (one brush stroke): its later commits join the first's
-  // undo step. A gizmo drag's live preview has already changed the world, so its commit undoes to
-  // the world as it was when the drag began.
-  commit(label, mutator, { merge = null } = {}) {
-    const before = this.dragBefore || clone(this.world);
+  // What an undo step puts back: the world, and the prefabs and favourites shared by every world.
+  snapshot(world = this.world) {
+    return clone({ world, prefabs: this.prefabs, favorites: this.favorites });
+  }
+  restore(snapshot) {
+    const idx = this.worlds.findIndex((w) => w.id === this.activeWorldId);
+    if (idx >= 0) this.worlds[idx] = snapshot.world;
+    this.prefabs = snapshot.prefabs;
+    this.favorites = snapshot.favorites;
+  }
+  // `merge` names an edit that goes on (one brush stroke, typing in the code, one slider drag):
+  // its later commits join the first's undo step, until one with `close` ends it. `quiet` keeps
+  // the scene and panels as they are (a slider or the code is still being changed). A gizmo drag's
+  // live preview has already changed the world, so its commit undoes to the world as it was when
+  // the drag began.
+  commit(label, mutator, { merge = null, close = false, quiet = false } = {}) {
+    const before = this.snapshot(this.dragBefore || this.world);
     this.dragBefore = null;
     mutator(this.world);
-    if (JSON.stringify(before) === JSON.stringify(this.world)) return false;
     const top = this.undoStack.at(-1);
-    if (merge && top?.merge === merge && !this.redoStack.length) {
-      this.assignDefaultPins();
-      this.rebuildSceneModel();
-      this.emit();
-      return true;
+    if (JSON.stringify(before) === JSON.stringify(this.snapshot())) {
+      if (close && merge && top?.merge === merge) top.merge = null;
+      return false;
     }
-    this.undoStack.push({ label, snapshot: before, merge });
-    if (this.undoStack.length > 50) this.undoStack.shift();
-    this.redoStack = [];
+    if (!(merge && top?.merge === merge && !this.redoStack.length)) {
+      this.undoStack.push({ label, snapshot: before, merge });
+      if (this.undoStack.length > 50) this.undoStack.shift();
+      this.redoStack = [];
+    }
+    if (close) this.undoStack.at(-1).merge = null;
+    if (quiet) return true;
     this.assignDefaultPins();
     this.rebuildSceneModel();
     this.emit();
@@ -275,9 +320,8 @@ export class WorldBuilderSession {
   undo() {
     const step = this.undoStack.pop();
     if (!step) return null;
-    this.redoStack.push({ label: step.label, snapshot: clone(this.world) });
-    const idx = this.worlds.findIndex((w) => w.id === this.activeWorldId);
-    if (idx >= 0) this.worlds[idx] = step.snapshot;
+    this.redoStack.push({ label: step.label, snapshot: this.snapshot() });
+    this.restore(step.snapshot);
     this.rebuildSceneModel();
     this.emit();
     return step.label;
@@ -286,9 +330,8 @@ export class WorldBuilderSession {
   redo() {
     const step = this.redoStack.pop();
     if (!step) return null;
-    this.undoStack.push({ label: step.label, snapshot: clone(this.world) });
-    const idx = this.worlds.findIndex((w) => w.id === this.activeWorldId);
-    if (idx >= 0) this.worlds[idx] = step.snapshot;
+    this.undoStack.push({ label: step.label, snapshot: this.snapshot() });
+    this.restore(step.snapshot);
     this.rebuildSceneModel();
     this.emit();
     return step.label;
@@ -499,6 +542,14 @@ export class WorldBuilderSession {
     return this.world.objects.find((o) => o.id === id) || null;
   }
 
+  // Hiding is about the view, not the object: a locked object can be hidden and shown too.
+  setObjectHidden(id, hidden) {
+    return this.commit(hidden ? 'Hide object' : 'Show object', (w) => {
+      const obj = w.objects.find((o) => o.id === id);
+      if (obj) obj.hidden = !!hidden;
+    });
+  }
+
   updateObject(id, patch = {}, label = 'Update object') {
     const target = this.getObject(id);
     if (!target || target.locked) return false;
@@ -650,8 +701,7 @@ export class WorldBuilderSession {
         props: clone(o.props || {}),
       })),
     };
-    this.prefabs.push(prefab);
-    this.emit();
+    this.commit(`Save prefab ${prefab.name}`, () => this.prefabs.push(prefab));
     return prefab;
   }
 
@@ -694,11 +744,12 @@ export class WorldBuilderSession {
   }
 
   toggleFavorite(assetId) {
-    const idx = this.favorites.indexOf(assetId);
-    if (idx >= 0) this.favorites.splice(idx, 1);
-    else this.favorites.push(assetId);
-    this.emit();
-    return this.favorites.includes(assetId);
+    const on = !this.favorites.includes(assetId);
+    this.commit(on ? 'Add favourite' : 'Remove favourite', () => {
+      if (on) this.favorites.push(assetId);
+      else this.favorites.splice(this.favorites.indexOf(assetId), 1);
+    });
+    return on;
   }
 
   setLayerState(layerId, { visible, locked } = {}) {
@@ -778,28 +829,88 @@ export class WorldBuilderSession {
   }
 
   // ---- Imported GLB/GLTF Assets & Packaging ----
+  // An id no world's model uses yet, from the model's name.
+  uniqueModelId(name = 'model', taken = new Set()) {
+    for (const w of this.worlds) for (const a of w.importedAssets || []) taken.add(a.id);
+    for (const id of this.modelBytes.keys()) taken.add(id);
+    const base = 'custom-model-' + slug(name).slice(0, 40);
+    let id = base,
+      n = 2;
+    while (taken.has(id)) id = `${base}-${n++}`;
+    return id;
+  }
+  // Makes a world's models references to files: a model still packed into the world (older saves,
+  // exported projects) is unpacked to bytes for its file. Copies of a world share their models'
+  // files; a different model arriving under an id already in use, or an id that is not a safe file
+  // name, gets a new id everywhere the world uses it.
+  adoptModels(w) {
+    const taken = new Set();
+    for (const other of this.worlds || [])
+      if (other !== w) for (const a of other.importedAssets || []) taken.add(a.id);
+    const renamed = new Map();
+    w.importedAssets = (w.importedAssets || []).filter((a) => a && typeof a === 'object');
+    for (const asset of w.importedAssets) {
+      const id = String(asset.id ?? ''),
+        packed = typeof asset.dataUrl === 'string' && asset.dataUrl.startsWith('data:'),
+        bytes = packed ? bytesOfDataUrl(asset.dataUrl) : null,
+        known = this.modelBytes.get(id),
+        same =
+          known && bytes && known.length === bytes.length && known.every((b, i) => b === bytes[i]);
+      if (!MODEL_ID.test(id) || (bytes && taken.has(id) && !same) || renamed.has(id)) {
+        const fresh = this.uniqueModelId(asset.name || 'model', new Set(renamed.values()));
+        renamed.set(id, fresh);
+        asset.id = fresh;
+      }
+      asset.name = String(asset.name ?? 'Imported Model');
+      asset.fileName = String(asset.fileName ?? 'model.glb');
+      if (packed) {
+        if (isGlb(bytes) && bytes.length <= MODEL_MAX_BYTES) this.modelBytes.set(asset.id, bytes);
+        this.movedModels = true;
+      }
+      delete asset.dataUrl;
+      asset.file = modelFile(asset.id);
+    }
+    if (renamed.size)
+      for (const obj of w.objects || []) {
+        const old = String(obj.kind).startsWith('imported/') && obj.kind.slice('imported/'.length);
+        if (old !== false && renamed.has(old)) obj.kind = 'imported/' + renamed.get(old);
+      }
+  }
+  // Adds a model from its bytes (binary glTF), kept until the next save writes its file.
   registerImportedAsset({
-    id = 'custom-model-' + (Date.now() % 10000),
     name = 'Imported Model',
     fileName = 'model.glb',
-    dataUrl = null,
+    bytes = null,
     scale = 1,
     rotation = [0, 0, 0],
     size = [2, 2, 2],
   } = {}) {
+    if (!isGlb(bytes)) throw new Error('That is not a binary glTF (.glb) model.');
+    if (bytes.length > MODEL_MAX_BYTES) throw new Error('That model is over 64 MB.');
+    const id = this.uniqueModelId(name);
+    this.modelBytes.set(id, bytes);
     this.commit(`Import model ${name}`, (w) => {
-      w.importedAssets = (w.importedAssets || []).filter((a) => a.id !== id);
       w.importedAssets.push({
         id,
-        name,
-        fileName,
-        dataUrl, // Packaged inline as base64 data URL so exported project files reopen self-contained
+        name: String(name),
+        fileName: String(fileName),
+        file: modelFile(id),
         scale: round(scale, 3),
         rotation: rotation.map((r) => round(r, 4)),
         size,
       });
     });
     return id;
+  }
+  // Models some world uses whose files the next save must write: [[id, bytes]].
+  unsavedModels() {
+    const used = new Set(this.worlds.flatMap((w) => (w.importedAssets || []).map((a) => a.id)));
+    return [...this.modelBytes].filter(([id]) => used.has(id));
+  }
+  // After a save has written them: their files now hold them.
+  modelsSaved(ids) {
+    for (const id of ids) this.modelBytes.delete(id);
+    this.movedModels = false;
   }
 
   // Checks for missing imported assets or unknown object kinds and offers recovery options.
@@ -810,7 +921,7 @@ export class WorldBuilderSession {
       if (obj.kind.startsWith('imported/')) {
         const assetId = obj.kind.slice('imported/'.length);
         const asset = (w.importedAssets || []).find((a) => a.id === assetId);
-        if (!importedIds.has(assetId) || !asset?.dataUrl) {
+        if (!importedIds.has(assetId) || !asset?.file) {
           warnings.push({
             objectId: obj.id,
             name: obj.name,
@@ -870,18 +981,25 @@ export class WorldBuilderSession {
 
   setProgrammingLanguage(language) {
     if (!['cpp', 'python'].includes(language)) return false;
-    this.world.iot.language = language;
-    if (!this.world.iot.code[language]?.trim()) {
-      this.world.iot.code[language] = this.generateStarterCode(language);
-    }
-    this.emit();
+    this.commit(`Program in ${language === 'cpp' ? 'C++' : 'MicroPython'}`, (w) => {
+      w.iot.language = language;
+      if (!w.iot.code[language]?.trim())
+        w.iot.code[language] = this.generateStarterCode(language, w);
+    });
     return true;
   }
 
-  // `quiet`: the caller is typing in the code and keeps its own panel (no redraw).
+  // `quiet`: the caller is typing in the code and keeps its own panel (no redraw); the typing is
+  // one undo step until something else changes.
   setCode(source, language = this.world.iot.language, { quiet = false } = {}) {
-    this.world.iot.code[language] = String(source ?? '');
-    if (!quiet) this.emit();
+    const changed = this.commit(
+      'Edit program',
+      (w) => {
+        w.iot.code[language] = String(source ?? '');
+      },
+      quiet ? { merge: 'code:' + language, quiet: true } : {},
+    );
+    if (!changed && !quiet) this.emit();
   }
 
   generateStarterCode(language = this.world.iot.language, w = this.world) {
@@ -890,17 +1008,33 @@ export class WorldBuilderSession {
 
   // ---- Environment & Play Mode Simulation ----
   // `quiet`: a slider is being dragged; the viewport follows, the panels redraw when it is let go.
+  // In Play Mode the change is to the running simulation only; otherwise it is the world's, and a
+  // slider's whole drag is one undo step.
   setEnvironment(patch = {}, { quiet = false } = {}) {
-    const target =
-      this.mode === 'play' && this.simEnvironment ? this.simEnvironment : this.world.environment;
-    Object.assign(target, patch);
-    if (patch.timeOfDay !== undefined && patch.sunlight === undefined) {
-      // Derive sunlight 0..100 from time of day (6:00..18:00 daylight curve)
-      const h = Number(patch.timeOfDay) || 12;
-      const sun = Math.max(5, Math.round(Math.max(0, Math.sin(((h - 6) / 12) * Math.PI)) * 95));
-      target.sunlight = sun;
+    const apply = (target) => {
+      Object.assign(target, patch);
+      if (patch.timeOfDay !== undefined && patch.sunlight === undefined) {
+        // Derive sunlight 0..100 from time of day (6:00..18:00 daylight curve)
+        const h = Number(patch.timeOfDay) || 12;
+        target.sunlight = Math.max(
+          5,
+          Math.round(Math.max(0, Math.sin(((h - 6) / 12) * Math.PI)) * 95),
+        );
+      }
+    };
+    if (this.mode === 'play' && this.simEnvironment) {
+      apply(this.simEnvironment);
+      if (!quiet) this.emit();
+      return;
     }
-    if (!quiet) this.emit();
+    const keys = Object.keys(patch).sort().join(',');
+    const changed = this.commit('Change ' + keys, (w) => apply(w.environment), {
+      merge: 'environment:' + keys,
+      close: !quiet,
+      quiet,
+    });
+    // A slider let go where the drag already took it: the panels still catch up.
+    if (!changed && !quiet) this.emit();
   }
 
   // Builds the runtime environment readings object expected by Runtime.step(env).
@@ -934,6 +1068,7 @@ export class WorldBuilderSession {
 
   enterPlayMode() {
     this.mode = 'play';
+    this.playOpened = new Set();
     this.simEnvironment = clone(this.world.environment);
     this.playerPos = [...(this.world.spawn || [0, 0, 12])];
     this.simTime = 0;
@@ -994,8 +1129,21 @@ export class WorldBuilderSession {
     this.simPaused = false;
     this.simOutputs = {};
     this.simEnvironment = null;
+    this.playOpened = null;
     this.rebuildSceneModel();
     this.emit();
+  }
+  // Opens or closes a door or gate for this run of Play Mode only (the saved world keeps it as
+  // built, as the game does). Returns whether it is now open.
+  togglePlayDoor(id) {
+    if (this.mode !== 'play') return false;
+    this.playOpened ??= new Set();
+    const open = !this.playOpened.has(id);
+    if (open) this.playOpened.add(id);
+    else this.playOpened.delete(id);
+    this.rebuildSceneModel();
+    this.emit();
+    return open;
   }
 
   // ---- 3D Scene Model Construction (Compatible with ThreeWorldRenderer) ----
@@ -1008,6 +1156,8 @@ export class WorldBuilderSession {
       agents: this.simAgents,
       hideRoofs: this.hideRoofs,
       maxVisibleStory: this.maxVisibleStory,
+      modelSizes: this.modelSizes,
+      opened: playing ? this.playOpened : null,
     });
     this.objectParts = model.objectParts;
 
@@ -1036,14 +1186,22 @@ export class WorldBuilderSession {
     };
   }
 
-  exportWorldProject(worldId = this.activeWorldId) {
+  // An exported project carries its models inside it (as base64), so it opens anywhere: `models`
+  // gives each model's bytes by id (from its file, or not yet saved).
+  exportWorldProject(worldId = this.activeWorldId, models = {}) {
     const target = this.worlds.find((w) => w.id === worldId) || this.world;
+    const world = clone(target);
+    for (const asset of world.importedAssets || []) {
+      const bytes = models[asset.id] || this.modelBytes.get(asset.id);
+      if (bytes) asset.dataUrl = dataUrlOf(bytes);
+      delete asset.file;
+    }
     return JSON.stringify(
       {
         format: WORLD_PROJECT_FORMAT,
         version: WORLD_PROJECT_VERSION,
         exportedAt: new Date().toISOString(),
-        world: clone(target),
+        world,
         prefabs: clone(this.prefabs),
       },
       null,

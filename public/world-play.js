@@ -148,7 +148,8 @@ function play() {
     [asset.file, asset.url, asset.dataUrl].find(
       (s) =>
         typeof s === 'string' &&
-        (/^data:model\/gltf-binary;base64,/.test(s) || /^models\/[\w./-]+\.glb$/.test(s)),
+        (/^data:model\/gltf-binary;base64,/.test(s) ||
+          (/^models\/[\w./-]+\.glb$/.test(s) && !s.includes('..'))),
     );
   function syncImported() {
     if (!importedGroup) return;

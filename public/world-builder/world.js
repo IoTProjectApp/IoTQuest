@@ -477,6 +477,10 @@ export function buildWorldScene(
     layers = w.layers,
     // Doors and gates opened by hand in a simulation, by object id.
     opened = null,
+    // Imported models' measured sizes, by asset id ([w, h, d, centre y]), once each has loaded.
+    // A model not yet measured gets a faint stand-in box in the editor and nothing in the game,
+    // which draws the model itself.
+    modelSizes = null,
   } = {},
 ) {
   const objects = [];
@@ -555,10 +559,16 @@ export function buildWorldScene(
       }
     }
 
+    const imported = obj.kind.startsWith('imported/') ? obj.kind.slice('imported/'.length) : null;
+    if (imported && !modelSizes) {
+      model.objectParts.set(obj.id, []);
+      continue;
+    }
     const built = buildAssetInstance(model, instanceObj, {
       hideRoofs,
       maxVisibleStory,
       deviceOutputs: activeOutputs,
+      importedSize: imported ? modelSizes.get(imported) : undefined,
     });
     model.objectParts.set(obj.id, built.parts);
 

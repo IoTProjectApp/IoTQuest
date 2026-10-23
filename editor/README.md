@@ -12,15 +12,18 @@ The script checks for Node.js 20 or newer, installs the game's development packa
 
 The editor is a set of **workspaces**. A workspace is a screen for one job, such as placing objects in the 3D world. The editor opens on a home page with a card for each workspace. Click a card to open that workspace, and use the back arrow at the top left to return.
 
-| Workspace           | What it does                                                                                                                                                     | Writes                                                                    |
-| ------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
-| Map Editor          | Move, add and remove furniture, garden features and town buildings in the 3D world, city by city.                                                                | `public/data/world-layout.js`                                             |
-| Street Editor       | Lay out the town's roads: junctions, roads, traffic lights, stop signs and crossings, then watch the traffic run.                                                | `public/data/street-layout.js`                                            |
-| Character Editor    | Dress the game's people and set how they move: who plays them, their clothes, their walk, stance and activity, and how fast.                                     | `public/data/characters.js`                                               |
-| Quest Editor        | Write new quests: who asks and where, the devices to wire, the rules and the tests, each checked against a worked solution on both boards.                       | `public/data/quests.js`                                                   |
-| Conversation Editor | Write what the game's people say, for everyone or one person in one city, and how each resident asks for their quests; try each chat as you write.               | `public/data/conversations.js` (and `public/data/quests.js` for requests) |
-| City Editor         | Word each city: what it calls the household, how residents open their requests, and the home quests' titles and requests there.                                  | `public/data/cities.js`                                                   |
-| World Builder       | Create, sculpt, build, furnish, wire and explore complete 3D environments for IoT learning missions with terrain, modular buildings, roads and live simulations. | `public/data/worlds.js`                                                   |
+| Workspace                      | What it does                                                                                                                                                     | Writes                                                                    |
+| ------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
+| Map Editor                     | Move, add and remove furniture, garden features and town buildings in the 3D world, city by city.                                                                | `public/data/world-layout.js`                                             |
+| Street Editor                  | Lay out the town's roads: junctions, roads, traffic lights, stop signs and crossings, then watch the traffic run.                                                | `public/data/street-layout.js`                                            |
+| Character Editor               | Dress the game's people and set how they move: who plays them, their clothes, their walk, stance and activity, and how fast.                                     | `public/data/characters.js`                                               |
+| Quest Editor                   | Write new quests: who asks and where, the devices to wire, the rules and the tests, each checked against a worked solution on both boards.                       | `public/data/quests.js`                                                   |
+| Conversation Editor            | Write what the game's people say, for everyone or one person in one city, and how each resident asks for their quests; try each chat as you write.               | `public/data/conversations.js` (and `public/data/quests.js` for requests) |
+| City Editor                    | Word each city: what it calls the household, how residents open their requests, and the home quests' titles and requests there.                                  | `public/data/cities.js`                                                   |
+| World Builder                  | Create, sculpt, build, furnish, wire and explore complete 3D environments for IoT learning missions with terrain, modular buildings, roads and live simulations. | `public/data/worlds.js`                                                   |
+| Component & Circuit Lab        | Design and customize IoT sensors and actuators, inspect breadboard wiring on ESP32 and Raspberry Pi Pico, and test live signal waveforms.                        | `public/data/components.js`                                               |
+| Curriculum & Code Coach Editor | Author programming patterns in C++ and MicroPython, write Check Your Understanding questions, and test live Code Coach diagnostic hints.                         | `public/data/curriculum.js`                                               |
+| Climate & Soundscape Studio    | Tune each city's regional weather curves, build extreme weather presets, and synthesizer-test procedural WebAudio soundscapes.                                   | `public/data/climate.js`                                                  |
 
 Each workspace:
 
@@ -717,3 +720,15 @@ The **World Builder** (`editor/workspaces/world-builder/`) lets users create, ed
 ### The saved worlds
 
 `public/data/worlds.js` holds the saved worlds, reusable prefabs, and asset favourites (`tests/world-builder.test.mjs` verifies terrain sculpting, modular and footprint building construction, roads, IoT simulation, and project persistence).
+
+## Component & Circuit Lab
+
+The **Component & Circuit Lab** (`editor/workspaces/component-editor/`) lets educators customize built-in IoT devices and create new calibrated sensors or actuators (`public/data/components.js`), preview breadboard wiring for `ESP32` and `Raspberry Pi Pico`, test live signal-to-ADC waveforms, and generate Arduino C++, MicroPython, and Web Serial hardware link code.
+
+## Curriculum & Code Coach Editor
+
+The **Curriculum & Code Coach Editor** (`editor/workspaces/curriculum-editor/`) lets authors edit C++ and MicroPython programming patterns (`TECHNIQUES`), write multiple-choice comprehension questions (`TECHNIQUE_QUESTIONS`), and test custom **Code Coach** diagnostic rules against live student code (`public/data/curriculum.js`).
+
+## Climate & Soundscape Studio
+
+The **Climate & Soundscape Studio** (`editor/workspaces/climate-editor/`) tunes each city's practice weather readings and building thermal envelope (`insulation`, `shade`), previews 24-hour diurnal solar and temperature curves, manages extreme weather presets, and synthesizer-tests procedural WebAudio soundscapes (`public/data/climate.js`).

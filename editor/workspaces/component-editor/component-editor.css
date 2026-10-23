@@ -1,0 +1,197 @@
+/* Component & Circuit Lab Styles */
+.comp-workspace {
+  grid-template-columns: 280px 1fr 340px;
+}
+
+.comp-list-pane {
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid var(--line);
+  background: var(--panel);
+  min-height: 0;
+}
+
+.comp-filter-bar {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  border-bottom: 1px solid var(--line);
+}
+
+.comp-filter-bar .search {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.comp-filter-bar .search-icon {
+  position: absolute;
+  left: 9px;
+  color: var(--faint);
+}
+
+.comp-filter-bar .input {
+  width: 100%;
+  padding-left: 30px;
+}
+
+.comp-filter-bar .segmented {
+  width: 100%;
+}
+
+.comp-filter-bar .segmented button {
+  flex: 1;
+  justify-content: center;
+  padding: 0 4px;
+  font-size: 11px;
+}
+
+.comp-list-pane .list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 6px;
+}
+
+.comp-entry {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  text-align: left;
+  cursor: pointer;
+}
+
+.comp-entry:hover {
+  background: var(--hover);
+}
+
+.comp-entry.active {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.comp-entry .icon-glyph {
+  width: 24px;
+  height: 24px;
+  display: grid;
+  place-items: center;
+  border-radius: 6px;
+  background: var(--panel-raised);
+  font-size: 14px;
+}
+
+.comp-entry .info {
+  flex: 1;
+  min-width: 0;
+}
+
+.comp-entry .name {
+  display: block;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.comp-entry .meta {
+  display: block;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.comp-entry .dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.comp-entry .dot.edited {
+  background: var(--accent);
+}
+
+.comp-entry .dot.custom {
+  background: var(--ok);
+}
+
+.comp-entry .dot.bad {
+  background: var(--danger);
+}
+
+/* Stage */
+.comp-stage {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 18px;
+  overflow-y: auto;
+  background: var(--bg);
+}
+
+.comp-bench-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+
+.comp-card {
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--panel);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.comp-card h3 {
+  margin: 0;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+}
+
+.comp-svg-box {
+  width: 100%;
+  height: 210px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #14181f;
+}
+
+.comp-code-pre {
+  margin: 0;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #101318;
+  font: 12px/1.5 var(--mono);
+  color: var(--text);
+  overflow-x: auto;
+  white-space: pre;
+}
+
+.problem {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 6px 0 0;
+  padding: 6px 8px;
+  border-radius: 6px;
+  font-size: 12px;
+}
+
+.problem.error {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+.problem.warning {
+  background: var(--warn-soft);
+  color: var(--warn);
+}

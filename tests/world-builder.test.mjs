@@ -95,13 +95,14 @@ test('Terrain templates, sculpting brushes, surface painting, water bodies, and 
   assert.equal(session.world.terrain.waters.length, 1);
 
   const scattered = session.scatterVegetation({
-    kind: 'nature/tree-oak',
+    kind: 'broadleaf',
     density: 8,
     minScale: 0.8,
     maxScale: 1.2,
     seed: 99,
   });
   assert.equal(scattered.length, 8);
+  assert.equal(session.missingAssetsReport().length, 0, 'scattered items are real assets');
 });
 
 test('Buildings, modular parts, furniture, expandable asset packs, and roads work', () => {
@@ -227,7 +228,7 @@ test('Complete 7-step core workflow: create world, sculpt & paint, build house, 
   const sofaId = session.addObject('furniture/sofa', { pos: [-1.5, 0.2, 0] });
   const tableId = session.addObject('furniture/table', { pos: [1.5, 0.2, 0] });
   const streetlightId = session.addObject('furniture/streetlight', { pos: [6, 0, 8] });
-  const treeId = session.addObject('nature/tree-oak', { pos: [-10, 0, 6] });
+  const treeId = session.addObject('nature/broadleaf', { pos: [-10, 0, 6] });
   const carId = session.addObject('infra/vehicle-car', { pos: [-12, 0, 10] });
   const road1 = session.addRoad({
     name: 'Front Road',

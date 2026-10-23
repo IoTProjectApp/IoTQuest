@@ -52,7 +52,7 @@ const state = {
     waterKind: 'pond',
     waterWidth: 16,
     waterDepth: 12,
-    scatterKind: 'nature/tree-oak',
+    scatterKind: 'broadleaf',
     scatterDensity: 12,
     scatterMinScale: 0.85,
     scatterMaxScale: 1.25,

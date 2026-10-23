@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Curriculum &amp; Code Coach Editor · IoT Quest Editor</title>
+    <link rel="stylesheet" href="/editor/ui/shell.css" />
+    <link rel="stylesheet" href="/editor/ui/workspace.css" />
+    <link rel="stylesheet" href="curriculum-editor.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <a class="button icon-only" id="home" href="/editor/ui/" title="Back to workspaces"></a>
+      <div class="title">
+        <strong>Curriculum &amp; Code Coach Editor</strong>
+        <span>IoT Quest Editor</span>
+      </div>
+      <div class="divider"></div>
+      <div class="segmented" id="mode-tabs" role="group" aria-label="Curriculum section">
+        <button data-mode="techniques" class="active">Techniques &amp; Questions</button>
+        <button data-mode="sandbox">Code Coach Sandbox &amp; Rules</button>
+      </div>
+      <button class="button" id="add-btn">+ New Pattern</button>
+      <div class="spacer"></div>
+      <button class="button icon-only" id="undo" title="Undo (⌘Z)"></button>
+      <button class="button icon-only" id="redo" title="Redo (⇧⌘Z)"></button>
+      <span class="save-state" id="save-state"></span>
+      <button
+        class="button"
+        id="playtest"
+        title="Play-test in IoT Quest (⌘P). Shift-click: from the beginning (⇧⌘P)"
+      ></button>
+      <button class="button primary" id="save" title="Save curriculum (⌘S)"></button>
+    </header>
+
+    <div class="workspace curr-workspace">
+      <nav class="curr-list-pane" aria-label="Curriculum items">
+        <label
+          class="search"
+          style="
+            padding: 10px;
+            border-bottom: 1px solid var(--line);
+            display: flex;
+            align-items: center;
+            position: relative;
+          "
+        >
+          <span
+            class="search-icon"
+            id="search-icon"
+            style="position: absolute; left: 18px; color: var(--faint)"
+          ></span>
+          <input
+            class="input"
+            id="search"
+            type="search"
+            placeholder="Search patterns &amp; rules…"
+            style="width: 100%; padding-left: 28px"
+          />
+        </label>
+        <div class="list" id="item-list"></div>
+      </nav>
+
+      <main class="curr-stage" id="curr-stage" aria-label="Student Guide and Quiz Preview"></main>
+
+      <aside class="inspector" id="inspector" aria-label="Editor Inspector"></aside>
+    </div>
+    <div class="toast" id="toast" role="status" hidden></div>
+    <script type="module" src="app.js"></script>
+  </body>
+</html>

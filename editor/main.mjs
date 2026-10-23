@@ -87,6 +87,40 @@ const STORES = {
       Array.isArray(v.prefabs) &&
       Array.isArray(v.favorites),
   },
+  components: {
+    file: join(PUBLIC, 'data', 'components.js'),
+    about: 'Custom IoT components and circuit definitions, written by the Component & Circuit Lab',
+    valid: (v) =>
+      v?.version === 1 &&
+      v.edits !== null &&
+      typeof v.edits === 'object' &&
+      !Array.isArray(v.edits) &&
+      Array.isArray(v.custom),
+  },
+  curriculum: {
+    file: join(PUBLIC, 'data', 'curriculum.js'),
+    about:
+      'Programming techniques, comprehension questions and Code Coach hints, written by the Curriculum & Code Coach Editor',
+    valid: (v) =>
+      v?.version === 1 &&
+      v.techniques !== null &&
+      typeof v.techniques === 'object' &&
+      v.questions !== null &&
+      typeof v.questions === 'object' &&
+      Array.isArray(v.coachTips),
+  },
+  climate: {
+    file: join(PUBLIC, 'data', 'climate.js'),
+    about:
+      'City climate profiles, weather presets and soundscape settings, written by the Climate & Soundscape Studio',
+    valid: (v) =>
+      v?.version === 1 &&
+      v.cities !== null &&
+      typeof v.cities === 'object' &&
+      Array.isArray(v.presets) &&
+      v.soundscape !== null &&
+      typeof v.soundscape === 'object',
+  },
 };
 // three.js add-ons the editor uses (from the game's pinned three in node_modules), pointed at the
 // game's vendored three so both share one copy.

@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Component &amp; Circuit Lab · IoT Quest Editor</title>
+    <link rel="stylesheet" href="/editor/ui/shell.css" />
+    <link rel="stylesheet" href="/editor/ui/workspace.css" />
+    <link rel="stylesheet" href="component-editor.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <a class="button icon-only" id="home" href="/editor/ui/" title="Back to workspaces"></a>
+      <div class="title">
+        <strong>Component &amp; Circuit Lab</strong>
+        <span>IoT Quest Editor</span>
+      </div>
+      <div class="divider"></div>
+      <div class="segmented" id="board-select" role="group" aria-label="Controller board">
+        <button data-board="ESP32" class="active" title="Preview ESP32 DevKit wiring &amp; ADC">
+          ESP32
+        </button>
+        <button
+          data-board="Raspberry Pi Pico"
+          title="Preview Raspberry Pi Pico wiring &amp; MicroPython"
+        >
+          Raspberry Pi Pico
+        </button>
+      </div>
+      <button class="button" id="add-comp" title="Create a new custom sensor or actuator">
+        + New Component
+      </button>
+      <div class="spacer"></div>
+      <button class="button icon-only" id="undo" title="Undo (⌘Z)"></button>
+      <button class="button icon-only" id="redo" title="Redo (⇧⌘Z)"></button>
+      <span class="save-state" id="save-state"></span>
+      <button
+        class="button"
+        id="playtest"
+        title="Play-test in IoT Quest (⌘P). Shift-click: from the beginning (⇧⌘P)"
+      ></button>
+      <button class="button primary" id="save" title="Save components (⌘S)"></button>
+    </header>
+
+    <div class="workspace comp-workspace">
+      <nav class="comp-list-pane" aria-label="Components">
+        <div class="comp-filter-bar">
+          <label class="search">
+            <span class="search-icon" id="search-icon"></span>
+            <input
+              class="input"
+              id="search"
+              type="search"
+              placeholder="Search sensors &amp; actuators…"
+            />
+          </label>
+          <div class="segmented" id="role-filter" role="group">
+            <button data-filter="all" class="active">All</button>
+            <button data-filter="sensors">Sensors</button>
+            <button data-filter="actuators">Outputs</button>
+            <button data-filter="custom">Custom</button>
+          </div>
+        </div>
+        <div class="list" id="comp-list"></div>
+      </nav>
+
+      <main class="comp-stage" id="comp-stage" aria-label="Circuit and Signal Bench"></main>
+
+      <aside class="inspector" id="inspector" aria-label="Component Properties"></aside>
+    </div>
+    <div class="toast" id="toast" role="status" hidden></div>
+    <script type="module" src="app.js"></script>
+  </body>
+</html>

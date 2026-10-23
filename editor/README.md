@@ -94,15 +94,27 @@ Some objects carry a caution in the inspector:
 
 Everything is edited as whole objects (an edit group). For example, moving a sofa moves its cushions, legs, shadow and collision box together.
 
-| Category  | Examples                                                                                                     | Ids                                                   |
-| --------- | ------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------- |
-| Furniture | Each piece of house furniture, each town furnishing (desks, shelves, equipment)                              | `furniture/sofa#1`, `town/furniture/office:desk0`     |
-| Garden    | Trees, beds, tank, pump, greenhouse, lanterns, fence sections, gate, paths, hedges, each city's own features | `garden/tree#4`, `garden/fence#12`, `garden/fountain` |
-| Buildings | Each town lot with what stands on it: shops, residences, the school, the park                                | `town/shop`, `town/residence3`                        |
-| Street    | Street lights and bus stops                                                                                  | `town/street-light#7`, `town/bus-stop#2`              |
-| Added     | Copies placed from the catalogue                                                                             | `added/1`                                             |
+| Category  | Examples                                                                                                                                                                                      | Ids                                                   |
+| --------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------- |
+| Furniture | Each piece of house furniture, each town furnishing (desks, shelves, equipment)                                                                                                               | `furniture/sofa#1`, `town/furniture/office:desk0`     |
+| Garden    | Trees, beds, tank, pump, greenhouse, lanterns, fence sections, gate, paths, hedges, each city's own features, the trees on the hills, farm fences, feed stations, troughs and the pond garden | `garden/tree#4`, `landscape/tree#3`, `farm/fence#2`   |
+| Buildings | Each town lot with everything that stands on it: its walls, signs, trim and paving, its fences and lawn                                                                                       | `town/shop`, `town/residence3`                        |
+| Street    | Street lights, bus stops, street trees and the odd detail standing between lots                                                                                                               | `town/street-light#7`, `town/tree#2`, `town/detail#4` |
+| Added     | Copies placed from the catalogue                                                                                                                                                              | `added/1`                                             |
 
-The house's walls and floors are edited with the **House** tool (below). Not editable here: the house's roof, the landscape beyond the property, and moving people and vehicles. Roads, junctions and traffic signals are edited in the **Street Editor**.
+**Every part of the world can be clicked.** What can move is an object; what stays put is shown with a lock and the reason, and where it is changed instead:
+
+| Stays put                    | Why, and where it changes                                                                 |
+| ---------------------------- | ----------------------------------------------------------------------------------------- |
+| Roads, junctions, crossings  | Laid out in the **Street Editor** (a button opens it), so traffic and walkers follow them |
+| Traffic lights, stop lines   | Follow each junction's control, set in the **Street Editor**                              |
+| The house's walls and floors | Changed with the **House** tool (a button opens it)                                       |
+| House trim                   | Each city's house style built onto the walls (beams, boards, posts, a raised floor)       |
+| The driveway                 | Runs from the garage to the street, so the car can still drive in                         |
+| Hills, the river, the lake   | Part of the land: shaped, not moved                                                       |
+| The roof                     | Covers the house as built; the **Roofs** toggle hides it                                  |
+
+Where a movable object and a locked part are both under the cursor, the object is picked (a tree on a hillside is the tree), and a click on open ground or a room floor still clears the selection. People, animals and vehicles are moved by the game and are not edited here.
 
 ### The House tool: walls and rooms
 
@@ -121,6 +133,24 @@ Each change is checked before it is made, and a change that fails is not made (t
 - walls are 0.3–2.5 m high, doorways 0.8–4 m wide, inside their wall and not overlapping.
 
 Furniture, windows and the household stay where they are: if a moved wall now runs through something, the inspector names it so you can move it with **Select**. Some cities rebuild part of the house in their own style (court houses, round houses): there the walls cannot move, but the walls they keep can change height, colour and doorways, and a city with no grid walls shows none.
+
+#### New walls
+
+**Draw a wall** (in the House tool's list) and drag across the ground from one end to the other: inside to split a room, or out in the garden as a garden wall or fence. With **Snap** on, ends snap to the 5 cm grid and to the ends of other walls, and a wall that is nearly square to the house is made square; hold **Shift** for 15° steps. A new wall is selected straight away:
+
+- **Drag a blue end** to stretch or swing it, or **the arrow** to slide it. Its doorways and windows stay where they are as an end moves.
+- **Ends** can be typed in metres; **height** (0.2–4 m), **thickness** (0.05–1 m) and **colour** too.
+- **Doorways and windows:** add either (each goes in the middle of the longest solid stretch), move or resize them by their middle and width, or close them. A doorway is a gap the full height; a window leaves a sill below and, on a tall wall, a lintel above, with glass between, and needs a wall at least 1.2 m high.
+- **Delete** removes it (or the button in its inspector); every change undoes.
+
+New walls get colliders, so people walk round them. Each change is checked first, and refused with the reason if:
+
+- a size or an opening is out of range, or two openings overlap;
+- it crosses a road or the driveway;
+- it stands on a quest spot (where a room's or garden area's devices and resident go);
+- it would leave any room or garden area of the home that could be reached before unreachable from the garden (a flood fill round the house's walls and the new ones, with a person's width either side).
+
+Furniture a new wall runs through is named in a note, but allowed.
 
 ### The saved layout
 
@@ -143,7 +173,11 @@ export default {
         "lines": {"divider-left": -7.6},
         "walls": {"back": {"height": 1.8, "color": "#d9c7a8", "openings": [{"at": -6, "width": 1.2}]}},
         "rooms": {"Kitchen": {"color": "#c9b79a"}}
-      }
+      },
+      "walls": [
+        {"id": "wall/1", "from": [-12, 6], "to": [-6, 6], "height": 2.2,
+         "openings": [{"at": 3, "width": 1.2, "kind": "window"}]}
+      ]
     }
   }
 };
@@ -154,6 +188,7 @@ export default {
 - `scale` is the object's size: one factor (`1.25`) when it is resized evenly, or three (`[1.2, 1, 0.8]`) when it is stretched, for its width, height and depth along its own sides before it is turned.
 - Added objects carry their own parts, measured from their base centre, so they do not depend on the object they were copied from.
 - `house` holds changes to the house itself (`public/house-shell.js` describes them): where inner wall lines stand (`lines`, in metres on x or z), each wall's `height`, `color` and `openings` (doorways, by their middle and width), and each room floor's `color`. Only what differs is kept. The house is changed before objects are placed, so furniture stands where it was saved. If the house changes have a problem in a city (its code changed, say), the game leaves all of them out and lists why in `model.layoutWarnings`.
+- `walls` are new walls (`public/added-walls.js` describes them): each runs straight `from` one place `to` another (`[x, z]` in metres), with `height`, `thickness` and `color` when they differ from 1.1 m, 0.18 m and `#eadbbf`, and `openings` by their middle along the wall from `from`, their width and their `kind` (`door` or `window`). They are built after the house's own changes; if any has a problem, all are left out and listed in `model.layoutWarnings`.
 
 With an empty file the game builds every world exactly as before; a test (`tests/world-layout.test.mjs`) checks that. When the game builds a city (`buildWorldModel` in `public/world3d.js`), `applyWorldLayout` in `public/world-layout.js` applies its changes.
 
@@ -169,7 +204,9 @@ buildTree(...);
 tag(); // …until the next tag
 ```
 
-An id ending in `#` is numbered in build order (`garden/tree#1`, `garden/tree#2`, …), so keep that order stable. **Changing an existing group's id, or the order of numbered groups, detaches saved edits from their object.** The test above will tell you if a committed edit no longer finds its object. The house's walls and rooms are not edit groups: `createWorldModel` records them in `model.shell` (each wall's lines, doorways, height and parts), so keep the grid's walls built through `shellWall` there. House furniture is tagged per piece in `house-objects.js`. Town lots, furnishings and bus stops are grouped in `tagTownGroups` in `community-world.js`. New builders should tag what a person would want to move as one thing, and leave untagged what should stay put.
+An id ending in `#` is numbered in build order (`garden/tree#1`, `garden/tree#2`, …), so keep that order stable. **Changing an existing group's id, or the order of numbered groups, detaches saved edits from their object.** The test above will tell you if a committed edit no longer finds its object. The house's walls and rooms are not edit groups: `createWorldModel` records them in `model.shell` (each wall's lines, doorways, height and parts), so keep the grid's walls built through `shellWall` there. House furniture is tagged per piece in `house-objects.js`. Town lots, furnishings and bus stops are grouped in `tagTownGroups` in `community-world.js`. New builders should tag what a person would want to move as one thing.
+
+Whatever is still untagged when the town is built gets a group or a lock from `tagLooseParts` in `public/world-detach.js`: town pieces join the lot they stand on (paving and kerbs off the lots are street), trees become one group each, farm pieces and other loose pieces become one object per set of touching pieces, and roads, traffic lights, the driveway, hills and water, the ground, the house's walls and floors, house trim and the roof are given an `editLock` naming the reason (`LOCKS`). Numbering follows build order, as with `tag`. Mark what should stay put with an `editLock` of an existing kind (or a new one with its reason in `LOCKS`), so the editor can say why; `tests/map-detach.test.mjs` fails if any part of any city is left with neither.
 
 ## Street Editor
 

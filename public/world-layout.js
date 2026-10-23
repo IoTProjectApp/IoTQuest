@@ -5,14 +5,17 @@
 //   { version: 1, locations: { [locationId]: {
 //       edits: { [groupId]: { pos: [x, y, z], turn, scale } | { removed: true } },
 //       added: [{ id, name, pos: [x, y, z], turn, scale, parts: [...], colliders: [...] }],
-//       house: { lines, walls, rooms } } } }
+//       house: { lines, walls, rooms },
+//       walls: [{ id, from: [x, z], to: [x, z], height, thickness, color, openings }] } } }
 // `pos` is where the group's base centre goes (the middle of its footprint, at its lowest point),
 // `turn` a rotation about the vertical axis in radians, and `scale` its size: one factor, or
 // [across, up, along] factors on the group's own unturned x, y and z (stretching it). Added
 // objects carry their own parts, measured from a base centre at the origin. `house` changes the
-// walls and rooms themselves (see house-shell.js). An empty layout leaves the world exactly as built.
+// walls and rooms themselves (see house-shell.js); `walls` are new walls, indoors or out (see
+// added-walls.js). An empty layout leaves the world exactly as built.
 import WORLD_LAYOUT from './data/world-layout.js';
 import { applyHouseShell } from './house-shell.js';
+import { applyAddedWalls } from './added-walls.js';
 
 export { WORLD_LAYOUT };
 
@@ -204,6 +207,8 @@ export function applyWorldLayout(model, locationId, layout = WORLD_LAYOUT) {
   // The house first: furniture placed afterwards stands where it was saved.
   for (const problem of applyHouseShell(model, changes.house))
     model.layoutWarnings.push(`${locationId}: house changes left out: ${problem.text}`);
+  for (const problem of applyAddedWalls(model, changes.walls))
+    model.layoutWarnings.push(`${locationId}: added walls left out: ${problem.text}`);
   const groups = editGroups(model);
   for (const [id, edit] of Object.entries(changes.edits || {})) {
     const group = groups.get(id);

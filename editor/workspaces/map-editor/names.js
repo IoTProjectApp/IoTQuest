@@ -30,7 +30,8 @@ export function categoryOf(id) {
   if (id.startsWith('house/') || id.startsWith('furniture/blinds')) return 'house';
   if (id.startsWith('furniture/') || id.startsWith('town/furniture/')) return 'furniture';
   if (id.startsWith('garden/')) return 'garden';
-  if (id.startsWith('town/street-light') || id.startsWith('town/bus-stop')) return 'street';
+  if (/^town\/(street-light|bus-stop|tree|detail)/.test(id)) return 'street';
+  if (id.startsWith('farm/') || id.startsWith('landscape/')) return 'garden';
   if (id.startsWith('town/')) return 'buildings';
   return 'garden';
 }
@@ -55,7 +56,7 @@ export function cautionFor(id) {
     return 'Opens for cars and in quests: it rises and falls by itself, so only its place across the floor stays where you put it.';
   if (id.startsWith('furniture/blinds') || id === 'house/shutter')
     return 'A servo in quests lowers and raises it, so its height changes by itself.';
-  if (/^town\/(?!furniture\/|street-light|bus-stop)/.test(id))
+  if (/^town\/(?!furniture\/|street-light|bus-stop|tree|detail)/.test(id))
     return "The town's people, cars and paths still use this lot's original place.";
   if (id.startsWith('town/bus-stop'))
     return 'Buses still stop at the original place, and waiting passengers stay there.';

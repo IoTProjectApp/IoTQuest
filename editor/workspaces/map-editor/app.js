@@ -4,6 +4,10 @@ import { WorldSession } from './session.js';
 import { Viewport, dimensions } from './viewport.js';
 import { catalogueItems, Thumbnails } from './catalogue.js';
 import { CATEGORIES } from './names.js';
+import { lockedInspector } from './locked.js';
+import { WallTool, addedWallsSection, addedWallInspector, bindAddedWall } from './wall-tool.js';
+import { wallLine } from '../../../public/added-walls.js';
+import { wallName } from './session.js';
 import { scaleOf } from '../../../public/world-layout.js';
 import {
   LINES,
@@ -92,7 +96,8 @@ for (const l of locations)
 const viewport = new Viewport($('canvas'), {
   onPick(group) {
     if (state.tool === 'erase') {
-      if (group) {
+      if (group?.locked) toast(group.reason, true);
+      else if (group) {
         state.session.remove(group.id);
         toast(`Removed ${group.name}. Undo brings it back.`);
       }
@@ -119,6 +124,7 @@ const viewport = new Viewport($('canvas'), {
   },
   onHousePick(target) {
     viewport.selectHouse(target);
+    wallTool.select(target?.kind === 'added' ? target.id : null);
     renderInspector();
     hint();
   },
@@ -132,6 +138,9 @@ const viewport = new Viewport($('canvas'), {
   },
   onHouseEnd(line, at) {
     moveLine(line, at);
+  },
+  onWallMoved(id, from, to) {
+    editAddedWall(id, 'Move', (w) => Object.assign(w, { from, to }));
   },
   onHover(group) {
     const label = $('hover-label');
@@ -216,7 +225,8 @@ function changed() {
   $('redo').title = s?.redoStack.length
     ? `Redo ${s.redoStack.at(-1).label} (⇧⌘Z)`
     : 'Nothing to redo';
-  if (viewport.selected && !s.groups.has(viewport.selected.id)) viewport.select(null);
+  if (viewport.selected && !viewport.selected.locked && !s.groups.has(viewport.selected.id))
+    viewport.select(null);
   if (viewport.selected?.hidden) viewport.select(null);
   viewport.refresh();
   renderInspector();
@@ -226,6 +236,10 @@ function changed() {
 function setTool(tool) {
   state.tool = tool;
   stopPlacing();
+  if (tool !== 'house') {
+    wallTool.stopDrawing();
+    wallTool.select(null);
+  }
   viewport.setTool(tool);
   for (const b of $('tools').children) b.classList.toggle('active', b.dataset.tool === tool);
   $('catalogue').hidden = tool !== 'object';
@@ -270,36 +284,46 @@ function hint() {
         ['Esc', 'stops'],
       )
     : state.tool === 'house'
-      ? viewport.selectedWall() && !LOCKED_LINES[viewport.selectedWall().line]
-        ? keys(['Drag the arrow', 'to move the wall'], ['Esc', 'deselects'])
-        : keys(['Click', 'a wall or a room floor'], ['Drag', 'to orbit'], ['Scroll', 'to zoom'])
+      ? wallTool.drawing
+        ? keys(['Drag', 'on the ground to draw a wall'], ['Shift', '15° steps'], ['Esc', 'stops'])
+        : viewport.house?.kind === 'added'
+          ? keys(
+              ['Drag a blue end', 'to stretch it'],
+              ['Drag the arrow', 'to slide it'],
+              ['Delete', 'removes it'],
+            )
+          : viewport.selectedWall() && !LOCKED_LINES[viewport.selectedWall().line]
+            ? keys(['Drag the arrow', 'to move the wall'], ['Esc', 'deselects'])
+            : keys(['Click', 'a wall or a room floor'], ['Drag', 'to orbit'], ['Scroll', 'to zoom'])
       : state.tool === 'object'
         ? 'Pick something from the catalogue below, then click in the world to place it'
         : state.tool === 'erase'
           ? keys(['Click', 'an object to remove it'], ['⌘Z', 'brings it back'])
           : state.tool === 'camera'
             ? keys(['Drag', 'to orbit'], ['Right-drag', 'to pan'], ['Scroll', 'to zoom'])
-            : viewport.selected && state.gizmo === 'scale'
-              ? keys(
-                  ['Drag a square', 'to stretch that way'],
-                  ['the round one or Shift', 'resizes evenly'],
-                  ['G', 'back to moving'],
-                  ['Esc', 'deselects'],
-                )
-              : viewport.selected
+            : viewport.selected?.locked
+              ? keys(['Click', 'something else to select it'], ['Esc', 'deselects'])
+              : viewport.selected && state.gizmo === 'scale'
                 ? keys(
-                    ['Drag the handles', 'to move'],
-                    ['G R S', 'move, turn, size'],
-                    ['F', 'focus'],
-                    ['Delete', 'removes'],
+                    ['Drag a square', 'to stretch that way'],
+                    ['the round one or Shift', 'resizes evenly'],
+                    ['G', 'back to moving'],
                     ['Esc', 'deselects'],
                   )
-                : keys(
-                    ['Click', 'an object to select it'],
-                    ['Drag', 'to orbit'],
-                    ['Right-drag', 'to pan'],
-                    ['Scroll', 'to zoom'],
-                  );
+                : viewport.selected
+                  ? keys(
+                      ['Drag the handles', 'to move'],
+                      ['G R S', 'move, turn, size'],
+                      ['F', 'focus'],
+                      ['Delete', 'removes'],
+                      ['Esc', 'deselects'],
+                    )
+                  : keys(
+                      ['Click', 'an object to select it'],
+                      ['Drag', 'to orbit'],
+                      ['Right-drag', 'to pan'],
+                      ['Scroll', 'to zoom'],
+                    );
   $('hint').innerHTML = text;
 }
 
@@ -414,6 +438,12 @@ function renderInspector() {
           else setTool('house');
           return;
         }
+        if (id.startsWith('wall:')) {
+          const wallId = id.slice('wall:'.length);
+          if (revert) return removeAddedWall(wallId);
+          setTool('house');
+          return pickHouse({ kind: 'added', id: wallId });
+        }
         if (revert) {
           if (id.startsWith('added/')) s.remove(id);
           else s.reset(id);
@@ -425,6 +455,19 @@ function renderInspector() {
           viewport.focus(target);
         }
       });
+    return;
+  }
+  if (group.locked) {
+    el.innerHTML = lockedInspector(group, { escape, icon });
+    el.querySelector('[data-locked-action]')?.addEventListener('click', (e) => {
+      if (e.target.dataset.lockedAction === 'house') return setTool('house');
+      if (
+        currentText() !== state.savedText &&
+        !confirm('Leave the Map Editor? Unsaved changes will be lost.')
+      )
+        return;
+      location.href = '../street-editor/';
+    });
     return;
   }
   const p = group.placement,
@@ -508,7 +551,7 @@ function renderInspector() {
 }
 function duplicate() {
   const group = viewport.selected;
-  if (!group) return;
+  if (!group || group.locked) return;
   const p = group.placement,
     id = state.session.add(group, { ...p, pos: [p.pos[0] + 0.5, p.pos[1], p.pos[2] + 0.5] });
   select(state.session.groups.get(id));
@@ -517,13 +560,18 @@ function duplicate() {
 function removeSelected() {
   const group = viewport.selected;
   if (!group) return;
+  if (group.locked) return toast(group.reason, true);
   state.session.remove(group.id);
   toast(`Removed ${group.name}. Undo brings it back.`);
 }
 
 // ---- House: walls and rooms -----------------------------------------------------------------
 const houseName = (target) =>
-  target.kind === 'wall' ? WALL_NAMES[target.id] : target.id + ' floor';
+  target.kind === 'wall'
+    ? WALL_NAMES[target.id]
+    : target.kind === 'added'
+      ? wallName(target.id)
+      : target.id + ' floor';
 const colourValue = (c) => (/^#[0-9a-f]{6}$/i.test(c || '') ? c : '#ffffff');
 // Saves a change to the house, or says why it cannot be made.
 function editHouse(label, change) {
@@ -548,7 +596,60 @@ function editWall(id, label, change) {
     change((house.walls[id] ??= {}));
   });
 }
+// New walls (wall-tool.js): drawn on the ground, then changed in their inspector.
+const wallTool = new WallTool(viewport, {
+  drawn(from, to) {
+    wallTool.stopDrawing();
+    const id = state.session.nextWallId();
+    if (editWalls('Add a wall', (walls) => walls.push({ id, from, to })))
+      pickHouse({ kind: 'added', id });
+  },
+  moved(id, from, to) {
+    editAddedWall(id, 'Stretch', (w) => {
+      // Doorways and windows stay where they are in the world as an end moves.
+      const old = wallLine(w),
+        now = wallLine({ from, to });
+      for (const o of w.openings || []) {
+        const x = w.from[0] + old.dir[0] * o.at - from[0],
+          z = w.from[1] + old.dir[1] * o.at - from[1];
+        o.at = Math.round((x * now.dir[0] + z * now.dir[1]) * 1000) / 1000;
+      }
+      Object.assign(w, { from, to });
+    });
+  },
+});
+// Changes the added walls, or says why not; returns whether the change was made.
+function editWalls(label, change) {
+  const problems = state.session.editWalls(label, change),
+    error = problems.find((p) => p.error);
+  if (error) toast(error.text, true);
+  else if (problems.length) toast(problems[0].text);
+  viewport.refresh();
+  renderInspector();
+  return !error;
+}
+function editAddedWall(id, label, change) {
+  return editWalls(`${label} ${wallName(id).toLowerCase()}`, (walls) => {
+    const wall = walls.find((w) => w.id === id);
+    if (wall) change(wall);
+  });
+}
+function removeAddedWall(id) {
+  const removed = editWalls('Delete ' + wallName(id).toLowerCase(), (walls) =>
+    walls.splice(
+      walls.findIndex((w) => w.id === id),
+      1,
+    ),
+  );
+  if (!removed) return;
+  viewport.selectHouse(null);
+  wallTool.select(null);
+  renderInspector();
+  toast(`Deleted ${wallName(id).toLowerCase()}. Undo brings it back.`);
+}
 function onHouseBack() {
+  wallTool.stopDrawing();
+  wallTool.select(null);
   viewport.selectHouse(null);
   renderInspector();
   hint();
@@ -570,6 +671,7 @@ function renderHouse(el) {
     positions = Object.fromEntries(
       Object.keys(LINES).map((l) => [l, house.lines?.[l] ?? LINES[l][1]]),
     );
+  if (target?.kind !== 'added') wallTool.select(null);
   const notes =
     (!walls.length
       ? caution('This city builds its own house, with no walls to change here.')
@@ -610,10 +712,40 @@ function renderHouse(el) {
           )
           .join('')}</div>
       </section>`;
+    el.insertAdjacentHTML(
+      'beforeend',
+      addedWallsSection(s, { escape, icon, drawing: wallTool.drawing }),
+    );
+    $('draw-wall').addEventListener('click', () => {
+      if (wallTool.drawing) wallTool.stopDrawing();
+      else wallTool.startDrawing();
+      renderInspector();
+      hint();
+    });
+    for (const b of el.querySelectorAll('[data-added-wall]'))
+      b.addEventListener('click', () => pickHouse({ kind: 'added', id: b.dataset.addedWall }));
     for (const b of el.querySelectorAll('[data-room]'))
       b.addEventListener('click', () => pickHouse({ kind: 'room', id: b.dataset.room }));
     for (const b of el.querySelectorAll('[data-wall]'))
       b.addEventListener('click', () => pickHouse({ kind: 'wall', id: b.dataset.wall }));
+    return;
+  }
+  if (target.kind === 'added') {
+    const wall = s.addedWall(target.id);
+    if (!wall) {
+      viewport.selectHouse(null);
+      wallTool.select(null);
+      return renderHouse(el);
+    }
+    wallTool.select(wall.id);
+    const left = (s.wallProblems || []).map((p) => caution('Saved walls left out: ' + p.text));
+    el.innerHTML = addedWallInspector(wall, { escape, icon, notes: left.join('') });
+    bindAddedWall(el, wall, {
+      edit: (label, change) => editAddedWall(wall.id, label, change),
+      remove: () => removeAddedWall(wall.id),
+      toast,
+    });
+    $('house-back').addEventListener('click', onHouseBack);
     return;
   }
   if (target.kind === 'room') {
@@ -814,7 +946,11 @@ document.addEventListener('keydown', (e) => {
   if (mod) return;
   if (e.key === 'Escape') {
     if (state.placing) stopPlacing();
-    else if (state.tool === 'house') onHouseBack();
+    else if (wallTool.drawing) {
+      wallTool.stopDrawing();
+      renderInspector();
+      hint();
+    } else if (state.tool === 'house') onHouseBack();
     else select(null);
     return;
   }
@@ -822,6 +958,8 @@ document.addEventListener('keydown', (e) => {
     return viewport.turnGhost(((e.shiftKey ? -1 : 1) * Math.PI) / 4);
   if ((e.key === 'Delete' || e.key === 'Backspace') && state.tool !== 'house')
     return removeSelected();
+  if ((e.key === 'Delete' || e.key === 'Backspace') && viewport.house?.kind === 'added')
+    return removeAddedWall(viewport.house.id);
   const tool = { v: 'select', o: 'object', x: 'erase', c: 'camera', h: 'house' }[key];
   if (tool) return setTool(tool);
   if (state.tool === 'select') {
@@ -838,7 +976,7 @@ shell?.onMenu((command) => {
 });
 
 // For test scripts and the developer console.
-window.mapEditor = { state, viewport };
+window.mapEditor = { state, viewport, wallTool };
 
 // ---- Start ----------------------------------------------------------------------------------
 async function start() {

@@ -22,6 +22,7 @@ import {
   WALL_NAMES,
   LINE_NAMES,
 } from '../../../public/house-shell.js';
+import { applyAddedWalls, checkWalls, WALL_DEFAULTS } from '../../../public/added-walls.js';
 import { kindOf, nameOf, categoryOf, cautionFor } from './names.js';
 
 const round = (v, places) => Math.round(v * 10 ** places) / 10 ** places || 0;
@@ -60,6 +61,26 @@ export function tidyHouse(house) {
     if (entries.length) out[key] = Object.fromEntries(entries);
   }
   return Object.keys(out).length ? out : null;
+}
+
+// 'wall/3' → 'Added wall 3'.
+export const wallName = (id) => 'Added wall ' + id.split('/')[1];
+// A wall as saved: places to the millimetre, defaults left out, openings in order.
+export function tidyWall(wall) {
+  const out = {
+    id: wall.id,
+    from: wall.from.map((v) => round(v, 3)),
+    to: wall.to.map((v) => round(v, 3)),
+  };
+  for (const key of ['height', 'thickness'])
+    if (wall[key] !== undefined && round(wall[key], 3) !== WALL_DEFAULTS[key])
+      out[key] = round(wall[key], 3);
+  if (wall.color && wall.color.toLowerCase() !== WALL_DEFAULTS.color) out.color = wall.color;
+  if (wall.openings?.length)
+    out.openings = [...wall.openings]
+      .sort((a, b) => a.at - b.at)
+      .map((o) => ({ at: round(o.at, 3), width: round(o.width, 3), kind: o.kind || 'door' }));
+  return out;
 }
 
 export class WorldSession {
@@ -164,6 +185,39 @@ export class WorldSession {
     });
     return [];
   }
+  // ---- Walls added by hand (see public/added-walls.js) ----
+  addedWalls() {
+    return this.changes.walls || [];
+  }
+  addedWall(id) {
+    return this.addedWalls().find((w) => w.id === id);
+  }
+  nextWallId() {
+    let n = 1;
+    for (const w of this.addedWalls()) n = Math.max(n, Number(w.id.split('/')[1]) + 1 || n);
+    return 'wall/' + n;
+  }
+  // Shows walls as they are drawn or dragged, without checking or recording them.
+  previewWalls(walls) {
+    applyAddedWalls(this.model, walls, { check: false });
+  }
+  // Changes the added walls: `change(walls)` edits a copy (a list). Changes with problems are not
+  // made; their problems are returned instead (warnings are returned with a change that is made).
+  editWalls(label, change) {
+    const walls = clone(this.addedWalls());
+    change(walls);
+    const tidied = walls.map(tidyWall),
+      problems = checkWalls(this.model, tidied);
+    if (problems.some((p) => p.error)) {
+      applyAddedWalls(this.model, this.changes.walls);
+      return problems.filter((p) => p.error);
+    }
+    this.commit(label, (changes) => {
+      if (tidied.length) changes.walls = tidied;
+      else delete changes.walls;
+    });
+    return problems;
+  }
   // Problems to point out in the house as it now stands: furniture left inside a moved wall.
   houseWarnings() {
     return furnitureInWalls(this.model).map(({ group, wall }) => ({
@@ -231,6 +285,7 @@ export class WorldSession {
   restore(changes) {
     this.changes = { edits: { ...changes.edits }, added: [...(changes.added || [])] };
     if (changes.house) this.changes.house = clone(changes.house);
+    if (changes.walls?.length) this.changes.walls = clone(changes.walls);
     this.undoStack = [];
     this.redoStack = [];
     this.sync();
@@ -242,6 +297,7 @@ export class WorldSession {
     const { edits, added } = this.changes;
     // Saved house changes this city cannot take (a problem found on opening) are listed.
     this.houseProblems = applyHouseShell(this.model, this.changes.house);
+    this.wallProblems = applyAddedWalls(this.model, this.changes.walls);
     this.missing = Object.keys(edits).filter((id) => !this.groups.has(id));
     const wanted = new Map(added.map((a) => [a.id, a]));
     for (const [id, group] of [...this.groups]) {
@@ -305,6 +361,8 @@ export class WorldSession {
       list.push({ id: 'house:walls:' + wall, name: WALL_NAMES[wall] || wall, what: 'Changed' });
     for (const room of Object.keys(house.rooms || {}))
       list.push({ id: 'house:rooms:' + room, name: room + ' floor', what: 'Changed' });
+    for (const wall of this.addedWalls())
+      list.push({ id: 'wall:' + wall.id, name: wallName(wall.id), what: 'Added' });
     return list;
   }
   // Puts one house change back as built: 'house:lines:middle', 'house:walls:back'...
@@ -316,8 +374,8 @@ export class WorldSession {
   }
   // The changes as saved: null when there are none, so the layout file stays clean.
   saved() {
-    const { edits, added, house } = this.changes;
-    if (!Object.keys(edits).length && !added.length && !house) return null;
-    return clone(house ? { edits, added, house } : { edits, added });
+    const { edits, added, house, walls } = this.changes;
+    if (!Object.keys(edits).length && !added.length && !house && !walls?.length) return null;
+    return clone({ edits, added, ...(house && { house }), ...(walls?.length && { walls }) });
   }
 }

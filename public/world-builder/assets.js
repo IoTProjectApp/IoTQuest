@@ -1,9 +1,10 @@
-// Expandable Asset Library and Procedural 3D Builders for the World Builder workspace.
+// Expandable Asset Library and Procedural 3D Builders for the World Builder workspace
+// (editor/workspaces/world-builder), shared with the game, which plays saved worlds (world.html).
 // Covers Ready-made buildings, Modular construction parts, Furniture & decor, Infrastructure,
 // Nature & vegetation, and IoT components. Free of DOM so it runs under Node.
-import { components } from '../../../public/missions.js';
-import { addDeviceDetails } from '../../../public/device-objects.js';
-import { buildTree, buildCrop } from '../../../public/vegetation.js';
+import { components } from '../missions.js';
+import { addDeviceDetails } from '../device-objects.js';
+import { buildTree, buildCrop } from '../vegetation.js';
 
 export const ARCHITECTURAL_STYLES = {
   contemporary: {
@@ -1738,6 +1739,15 @@ export function buildAssetInstance(model, obj, options = {}) {
       m.editGroup = obj.id;
       if (!parts.includes(m)) parts.push(m);
     }
+    return { parts, colliders };
+  }
+
+  // An imported model is drawn by the viewport; here it is only something to click: the model's
+  // own size once it has loaded (nearly invisible), a faint box while it loads.
+  if (kind.startsWith('imported/')) {
+    const size = options.importedSize;
+    if (size) addPart('box', [0, size[3], 0], size.slice(0, 3), '#4f9cf9', { opacity: 0.02 });
+    else addPart('box', [0, 0.5, 0], [1, 1, 1], '#8fa39b', { opacity: 0.35 });
     return { parts, colliders };
   }
 

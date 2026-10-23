@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Custom world · IoT Quest</title>
+    <script src="./channel.js"></script>
+    <script src="./theme-init.js"></script>
+    <link rel="stylesheet" href="./game.css" />
+    <link rel="stylesheet" href="./modern.css" />
+    <link rel="stylesheet" href="./themes.css" />
+    <link rel="stylesheet" href="./world-play.css" />
+    <link rel="icon" href="./favicon.svg" />
+    <link rel="manifest" href="./manifest.webmanifest" />
+    <meta name="theme-color" content="#5260df" />
+  </head>
+  <body class="world-play">
+    <header class="world-bar">
+      <a class="outline" id="back" href="./game.html">← Destinations</a>
+      <div class="world-title">
+        <strong id="worldName">Custom world</strong>
+        <small id="worldNote">Built in the IoT Quest World Builder</small>
+      </div>
+      <span class="world-status" id="status" hidden></span>
+    </header>
+    <main class="world-main">
+      <div class="world-view">
+        <canvas
+          id="view"
+          aria-label="The world. WASD or the arrow keys walk, drag to look round, E interacts"
+        ></canvas>
+        <div class="world-hint" id="hint" hidden></div>
+        <div class="world-keys">
+          <b>WASD</b> or arrows walk · <b>drag</b> to look · <b>scroll</b> to zoom · <b>E</b> to use
+        </div>
+        <div class="world-message" id="message" hidden></div>
+      </div>
+      <aside class="world-panel" aria-label="Mission">
+        <nav class="world-tabs" role="tablist">
+          <button role="tab" data-tab="mission" class="active">Mission</button>
+          <button role="tab" data-tab="program">Program</button>
+          <button role="tab" data-tab="conditions">Conditions</button>
+        </nav>
+        <section class="world-tab" data-panel="mission" id="mission"></section>
+        <section class="world-tab" data-panel="program" hidden>
+          <div class="program-head">
+            <select id="language" aria-label="Language">
+              <option value="cpp">Arduino C++</option>
+              <option value="python">MicroPython</option>
+            </select>
+            <button class="primary" id="run">Run</button>
+            <button class="outline" id="starter" title="Start the program again from the starter">
+              Starter
+            </button>
+          </div>
+          <textarea
+            id="code"
+            spellcheck="false"
+            autocomplete="off"
+            aria-label="Your program"
+            maxlength="30000"
+          ></textarea>
+          <div class="program-state" id="programState"></div>
+        </section>
+        <section class="world-tab" data-panel="conditions" id="conditions" hidden></section>
+      </aside>
+    </main>
+    <script type="module" src="./world-play.js"></script>
+  </body>
+</html>

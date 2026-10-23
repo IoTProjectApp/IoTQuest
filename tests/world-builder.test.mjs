@@ -12,14 +12,14 @@ import {
   BRUSH_MODES,
   createTerrain,
   terrainHeightAt,
-} from '../editor/workspaces/world-builder/terrain.js';
+} from '../public/world-builder/terrain.js';
 import {
   ASSET_LIBRARY,
   ARCH_STYLES,
   MATERIAL_PRESETS,
   getAssetSpec,
   registerAssetPack,
-} from '../editor/workspaces/world-builder/assets.js';
+} from '../public/world-builder/assets.js';
 import {
   WorldBuilderSession,
   WORLD_PROJECT_FORMAT,
@@ -342,4 +342,171 @@ test('Missing-asset detection and recovery options work', () => {
   session.recoverMissingAsset(badId, 'replace', 'furniture/shipping-container');
   assert.equal(session.missingAssetsReport().length, 0);
   assert.equal(session.getObject(badId).kind, 'furniture/shipping-container');
+});
+
+// A tiny but real binary glTF: the 12-byte header and a JSON chunk.
+function glb(extra = 0) {
+  const json = Buffer.from('{"asset":{"version":"2.0"}}  '),
+    bytes = Buffer.alloc(12 + 8 + json.length + extra);
+  bytes.write('glTF', 0, 'latin1');
+  bytes.writeUInt32LE(2, 4);
+  bytes.writeUInt32LE(bytes.length, 8);
+  bytes.writeUInt32LE(json.length, 12);
+  bytes.write('JSON', 16, 'latin1');
+  json.copy(bytes, 20);
+  return new Uint8Array(bytes);
+}
+
+test('Imported models are files: worlds, undo steps and autosaves hold only where they are', async () => {
+  const { MODEL_ID, modelFile, isGlb } =
+    await import('../editor/workspaces/world-builder/session.js');
+  const session = new WorldBuilderSession();
+  const bytes = glb();
+  const a = session.registerImportedAsset({ name: 'Wind Turbine', fileName: 'turbine.glb', bytes });
+  const b = session.registerImportedAsset({ name: 'Wind Turbine', fileName: 'turbine.glb', bytes });
+  assert.notEqual(a, b, 'two models with one name get their own ids');
+  assert.match(a, MODEL_ID);
+  assert.equal(session.world.importedAssets[0].file, modelFile(a));
+  const stored = JSON.stringify(session.toStoreData()) + JSON.stringify(session.undoStack);
+  assert.ok(!stored.includes('base64') && !stored.includes('dataUrl'));
+  assert.deepEqual(
+    session.unsavedModels().map(([id]) => id),
+    [a, b],
+  );
+  session.modelsSaved([a, b]);
+  assert.equal(session.unsavedModels().length, 0);
+  assert.ok(isGlb(bytes) && !isGlb(new Uint8Array(12)));
+  assert.throws(
+    () => session.registerImportedAsset({ name: 'x', bytes: new Uint8Array(20) }),
+    /glTF/,
+  );
+
+  // An exported project carries its models packed in; opening it moves them out again, and a
+  // different model under an id already in use gets a new one everywhere the world uses it.
+  session.addObject('imported/' + a, { pos: [0, 0, 0] });
+  const other = glb(8);
+  const project = JSON.parse(session.exportWorldProject(undefined, { [a]: other, [b]: bytes }));
+  assert.match(project.world.importedAssets[0].dataUrl, /^data:model\/gltf-binary;base64,/);
+  const imported = session.importWorldProject(JSON.stringify(project));
+  const ids = imported.importedAssets.map((x) => x.id);
+  assert.ok(!ids.includes(a), 'a different model under a taken id is renamed');
+  assert.ok(imported.objects.some((o) => o.kind === 'imported/' + ids[0]));
+  assert.ok(imported.importedAssets.every((x) => !('dataUrl' in x) && x.file === modelFile(x.id)));
+  assert.equal(session.unsavedModels().length, 2);
+
+  // An older save with a model packed in is moved out on loading, and needs saving again.
+  const old = session.toStoreData();
+  old.worlds[0].importedAssets[0].dataUrl =
+    'data:model/gltf-binary;base64,' + Buffer.from(bytes).toString('base64');
+  old.worlds[0].importedAssets[0].id = 'custom-model-1234';
+  const reopened = new WorldBuilderSession(old);
+  assert.ok(reopened.movedModels);
+  assert.ok(reopened.modelBytes.has('custom-model-1234'));
+  // Copies of a world share their models' files.
+  const copy = reopened.duplicateWorld();
+  const again = new WorldBuilderSession(reopened.toStoreData());
+  assert.deepEqual(
+    again.worlds.find((w) => w.id === copy.id).importedAssets.map((x) => x.id),
+    reopened.worlds[0].importedAssets.map((x) => x.id),
+  );
+});
+
+test('The shell saves World Builder models by safe id only, as binary glTF, atomically', () => {
+  const main = fs.readFileSync(path.join(ROOT, 'editor/main.mjs'), 'utf8');
+  const handler = main.slice(main.indexOf("ipcMain.handle('world-model:save'"));
+  assert.ok(main.includes('const WORLD_MODEL_ID = /^custom-model-[a-z0-9-]{1,60}$/;'));
+  assert.match(handler, /WORLD_MODEL_ID\.test\(id\)/);
+  assert.match(handler, /!== 'glTF'/);
+  assert.match(handler, /64 \* MB/);
+  assert.match(handler, /rename\(file \+ '\.tmp', file\)/);
+  const preload = fs.readFileSync(path.join(ROOT, 'editor/preload.cjs'), 'utf8');
+  assert.match(preload, /saveWorldModel: \(id, bytes\) => ipcRenderer\.invoke\('world-model:save'/);
+});
+
+test('Terrain is one smooth surface that objects stand on exactly', async () => {
+  const { terrainSurface } = await import('../public/world-builder/terrain.js');
+  const terrain = createTerrain('mountains', 7);
+  const surface = terrainSurface(terrain, { detail: 4 });
+  const n = terrain.size * 4 + 1;
+  assert.equal(surface.positions.length, (n * n + 8 * n) * 3);
+  assert.equal(surface.colors.length, surface.positions.length);
+  for (let k = 0; k < n * n; k += 97) {
+    const [x, y, z] = surface.positions.slice(k * 3, k * 3 + 3);
+    assert.ok(Math.abs(y - terrainHeightAt(terrain, x, z)) < 1e-3, 'drawn where objects stand');
+  }
+  // Smooth: no sudden step between points 25 cm apart.
+  let worst = 0;
+  for (let x = -60; x < 60; x += 0.5)
+    worst = Math.max(
+      worst,
+      Math.abs(terrainHeightAt(terrain, x + 0.25, 10) - terrainHeightAt(terrain, x, 10)),
+    );
+  assert.ok(worst < 1, `largest jump over 25 cm was ${worst} m`);
+  // Every ground normal points up and is a unit vector.
+  for (let k = 0; k < n * n; k += 53) {
+    const [nx, ny, nz] = surface.normals.slice(k * 3, k * 3 + 3);
+    assert.ok(ny > 0 && Math.abs(Math.hypot(nx, ny, nz) - 1) < 1e-4);
+  }
+  // Old worlds keep loading: the saved heights are the same cells as before.
+  assert.equal(terrain.heights.length, terrain.size * terrain.size);
+});
+
+test('Environment, code, language, favourites and prefabs undo; typing and a slider drag are one step', () => {
+  const session = new WorldBuilderSession();
+  const t0 = session.world.environment.temperature;
+  session.setEnvironment({ temperature: 30 }, { quiet: true });
+  session.setEnvironment({ temperature: 33 }, { quiet: true });
+  session.setEnvironment({ temperature: 35 });
+  session.setEnvironment({ temperature: 20 });
+  assert.equal(session.undoStack.length, 2, 'one step a drag');
+  session.undo();
+  assert.equal(session.world.environment.temperature, 35);
+  session.undo();
+  assert.equal(session.world.environment.temperature, t0);
+  const code = session.world.iot.code.cpp;
+  for (const ch of '// hi')
+    session.setCode(session.world.iot.code.cpp + ch, 'cpp', { quiet: true });
+  assert.equal(session.undoStack.length, 1);
+  session.undo();
+  assert.equal(session.world.iot.code.cpp, code);
+  session.setProgrammingLanguage('python');
+  session.undo();
+  assert.equal(session.world.iot.language, 'cpp');
+  const favourites = [...session.favorites];
+  session.toggleFavorite('nature/rock');
+  session.undo();
+  assert.deepEqual(session.favorites, favourites);
+  const id = session.addObject('building/house', { pos: [8, 0, 8] });
+  session.select(id);
+  session.saveSelectedAsPrefab('House prefab');
+  assert.equal(session.prefabs.length, 1);
+  session.undo();
+  assert.equal(session.prefabs.length, 0);
+  session.redo();
+  assert.equal(session.prefabs.length, 1);
+});
+
+test('A locked object can still be hidden and shown', () => {
+  const session = new WorldBuilderSession();
+  const id = session.addObject('building/house', { pos: [8, 0, 8] });
+  session.commit('Lock', (w) => (w.objects.find((o) => o.id === id).locked = true));
+  assert.equal(session.updateObject(id, { pos: [9, 0, 9] }), false, 'locked: not moved');
+  assert.ok(session.setObjectHidden(id, true));
+  assert.equal(session.getObject(id).hidden, true);
+  session.setObjectHidden(id, false);
+  assert.equal(session.getObject(id).hidden, false);
+});
+
+test('Saved files keep the text inside strings exactly, and existing data files round-trip', async () => {
+  const { format, storeText } = await import('../editor/store-format.mjs');
+  const code = 'void loop(){x=analogRead(34),y=2;s="a":1}';
+  assert.ok(format({ code, n: [1, -2, true, null, 'x,1'] }).includes(JSON.stringify(code)));
+  assert.equal(format([1, true, [2, 'a,3'], null]), '[1,true,[2, "a,3"],null]');
+  for (const file of ['world-layout.js', 'street-layout.js']) {
+    const text = fs.readFileSync(path.join(ROOT, 'public/data', file), 'utf8');
+    const value = (await import('../public/data/' + file)).default;
+    assert.equal(storeText(text.split('\n')[0].slice(3), value), text, file + ' is unchanged');
+  }
+  const main = fs.readFileSync(path.join(ROOT, 'editor/main.mjs'), 'utf8');
+  assert.match(main, /import \{ storeText \} from '\.\/store-format\.mjs'/);
 });

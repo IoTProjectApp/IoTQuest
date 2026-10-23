@@ -8,6 +8,7 @@
 //   chat    true to open a chat with that person
 //   at      [x, z] in world metres to stand at (a Map Editor object)
 //   place   'town' to stand in the town's streets
+//   world   a World Builder world's id: the game opens that world's page (world.html) instead
 // With the parameter present at all, the game starts fresh and saves nothing: a play-test never
 // reads or writes the player's progress, whichever browser it is opened in.
 export const PLAY_PARAM = 'editor-play';
@@ -15,7 +16,7 @@ export const PLAY_PARAM = 'editor-play';
 const text = (v) => (typeof v === 'string' && v.trim() ? v.trim().slice(0, 80) : null);
 
 // The target in a page's query string, checked; null when the page was not opened for a play-test.
-export function readPlayTarget(search, { locationIds = [], questCount = 0 } = {}) {
+export function readPlayTarget(search, { locationIds = [], questCount = 0, worldIds = null } = {}) {
   let raw;
   try {
     raw = new URLSearchParams(search || '').get(PLAY_PARAM);
@@ -42,6 +43,13 @@ export function readPlayTarget(search, { locationIds = [], questCount = 0 } = {}
     chat: !!person && value.chat === true,
     at: at ? [...value.at] : null,
     place: value.place === 'town' ? 'town' : null,
+    // A world's id; checked against the saved worlds when the game knows them.
+    world:
+      typeof value.world === 'string' &&
+      /^[A-Za-z0-9_-]{1,80}$/.test(value.world) &&
+      (!worldIds || worldIds.includes(value.world))
+        ? value.world
+        : null,
   };
 }
 // The game's address for a target (null or {} starts from the beginning, still saving nothing).

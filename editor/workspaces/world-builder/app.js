@@ -8,15 +8,22 @@ import {
   BRUSH_MODES,
   SCATTER_TYPES,
   createTerrain,
-} from './terrain.js';
+} from '../../../public/world-builder/terrain.js';
 import {
   ASSET_CATEGORIES,
   ARCH_STYLES,
   MATERIAL_PRESETS,
   ASSET_LIBRARY,
   getAssetSpec,
-} from './assets.js';
-import { WorldBuilderSession, COMPLEXITY_WARNING_LIMIT } from './session.js';
+} from '../../../public/world-builder/assets.js';
+import {
+  WorldBuilderSession,
+  COMPLEXITY_WARNING_LIMIT,
+  MODEL_MAX_BYTES,
+  isGlb,
+} from './session.js';
+import { GLTFLoader } from '/editor/three/loaders/GLTFLoader.js';
+import { GLTFExporter } from '/editor/three/exporters/GLTFExporter.js';
 import { WorldBuilderViewport } from './viewport.js';
 
 const shell = window.editorShell;
@@ -181,8 +188,7 @@ const viewport = new WorldBuilderViewport($('canvas'), {
       obj.kind === 'modular/wall-door' ||
       obj.kind.startsWith('building/')
     ) {
-      const nextOpen = !obj.props?.doorOpen;
-      state.session.updateObject(objectId, { props: { doorOpen: nextOpen } }, 'Toggle door/gate');
+      const nextOpen = state.session.togglePlayDoor(objectId);
       toast(`${obj.name}: ${nextOpen ? 'Opened' : 'Closed'}`);
     } else if (obj.kind.startsWith('iot/')) {
       const compId = obj.props?.componentId || obj.kind.slice(4);
@@ -278,7 +284,17 @@ function triggerAutosave() {
     );
     const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     $('autosave-msg').textContent = `Autosaved ${timeStr}`;
-  } catch {}
+    state.autosaveFailed = false;
+  } catch (error) {
+    // Usually the browser's storage is full: say so once, rather than losing autosaves silently.
+    $('autosave-msg').textContent = 'Autosave failed';
+    if (!state.autosaveFailed)
+      toast(
+        `Autosave failed (${error.name || 'storage full'}): save with ⌘S to keep your work.`,
+        true,
+      );
+    state.autosaveFailed = true;
+  }
 }
 
 // ---- Tool & Mode Switching ----
@@ -1019,7 +1035,7 @@ function renderProjectTab() {
     <div class="wb-card">
       <h3>Import GLB / GLTF 3D Model</h3>
       <p class="muted" style="font-size:11px">
-        Imported models are packaged inline as base64 data URLs inside exported project files so projects reopen cleanly on any machine.
+        Saving writes each model to public/models/worlds/ (kept out of the public repository, like the people's models); the world keeps only where it is. Exported projects carry their models inside them, so they open on any machine.
       </p>
       <div class="wb-row">
         <label>Default Scale</label>
@@ -1416,7 +1432,7 @@ function renderInspector() {
     });
   });
   $('ins-hide').addEventListener('click', () => {
-    state.session.updateObject(obj.id, { hidden: !obj.hidden }, 'Toggle visibility');
+    state.session.setObjectHidden(obj.id, !obj.hidden);
   });
 
   const updatePos = () => {
@@ -1593,7 +1609,7 @@ function renderHierarchyAndLayers() {
     for (const btn of listEl.querySelectorAll('[data-toggle-hide]')) {
       btn.addEventListener('click', () => {
         const target = state.session.getObject(btn.dataset.toggleHide);
-        if (target) state.session.updateObject(target.id, { hidden: !target.hidden });
+        if (target) state.session.setObjectHidden(target.id, !target.hidden);
       });
     }
     for (const btn of listEl.querySelectorAll('[data-toggle-lock]')) {
@@ -1828,6 +1844,10 @@ async function saveWorlds() {
   const data = state.session.toStoreData();
   try {
     if (shell) {
+      // Models first, so the saved worlds never point at a file that is not there yet.
+      const models = state.session.unsavedModels();
+      for (const [id, bytes] of models) await shell.saveWorldModel(id, bytes);
+      state.session.modelsSaved(models.map(([id]) => id));
       await shell.write('worlds', data);
     }
     state.savedText = JSON.stringify(data);
@@ -1846,13 +1866,27 @@ async function playtestInGame(fromStart = false) {
     if (!confirm('Save changes before opening IoT Quest?')) return;
     if (!(await saveWorlds())) return;
   }
-  // Saved worlds are not played by the game yet: Play-test opens the game at home.
-  shell?.openGame(fromStart ? null : { city: 'legacy' });
+  // The game plays saved worlds on their own page (world.html), this one first.
+  shell?.openGame(fromStart ? null : { world: state.session?.activeWorldId });
 }
 
-function exportProjectFile() {
+async function exportProjectFile() {
   if (!state.session) return;
-  const json = state.session.exportWorldProject();
+  // Each saved model's bytes from its file, so the project carries them.
+  const models = {};
+  for (const asset of state.session.world.importedAssets || []) {
+    if (state.session.modelBytes.has(asset.id)) continue;
+    try {
+      const response = await fetch('../../../public/' + asset.file);
+      if (response.ok) models[asset.id] = new Uint8Array(await response.arrayBuffer());
+    } catch {}
+  }
+  const missing = (state.session.world.importedAssets || []).filter(
+    (a) => !models[a.id] && !state.session.modelBytes.has(a.id),
+  );
+  if (missing.length)
+    toast(`Exported without ${missing.map((a) => a.name).join(', ')}: its file is missing.`, true);
+  const json = state.session.exportWorldProject(undefined, models);
   const blob = new Blob([json], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
@@ -1986,30 +2020,39 @@ $('unhide-all-btn').addEventListener('click', () => {
 });
 
 // GLB/GLTF File Input Handler
-$('glb-file-input').addEventListener('change', (e) => {
+// A model file as binary glTF: a .glb as it is, a self-contained .gltf converted.
+async function glbOf(file) {
+  const buffer = await file.arrayBuffer(),
+    bytes = new Uint8Array(buffer);
+  if (isGlb(bytes)) return bytes;
+  const gltf = await new Promise((resolve, reject) =>
+    new GLTFLoader().parse(buffer, '', resolve, reject),
+  );
+  return new Uint8Array(await new GLTFExporter().parseAsync(gltf.scene, { binary: true }));
+}
+$('glb-file-input').addEventListener('change', async (e) => {
   const file = e.target.files?.[0];
+  e.target.value = '';
   if (!file || !state.session) return;
+  if (file.size > MODEL_MAX_BYTES) return toast(`"${file.name}" is over 64 MB.`, true);
   const scale = Number($('glb-scale')?.value) || 1;
   const rotY = ((Number($('glb-rot-y')?.value) || 0) * Math.PI) / 180;
-  const reader = new FileReader();
-  reader.onload = () => {
+  const name = file.name.replace(/\.(glb|gltf)$/i, '');
+  try {
     const id = state.session.registerImportedAsset({
-      name: file.name.replace(/\.(glb|gltf)$/i, ''),
+      name,
       fileName: file.name,
-      dataUrl: reader.result,
+      bytes: await glbOf(file),
       scale,
       rotation: [0, rotY, 0],
     });
-    state.session.addObject(`imported/${id}`, {
-      name: file.name.replace(/\.(glb|gltf)$/i, ''),
-      pos: [0, 0, 0],
-    });
+    state.session.addObject(`imported/${id}`, { name, pos: [0, 0, 0] });
     viewport.syncGLTFInstances();
     renderProjectTab();
-    toast(`Imported and placed 3D model "${file.name}".`);
-  };
-  reader.readAsDataURL(file);
-  e.target.value = '';
+    toast(`Imported and placed 3D model "${file.name}". Save to write its file.`);
+  } catch (error) {
+    toast(`Could not import "${file.name}": ${error.message}`, true);
+  }
 });
 
 // Project JSON Import Handler
@@ -2128,8 +2171,11 @@ async function start() {
   } catch {}
 
   state.session = new WorldBuilderSession(storeData);
-  // What was loaded, with any defaults the session fills in: opening the workspace is not an edit.
-  state.savedText = currentStoreText();
+  // What was loaded, with any defaults the session fills in: opening the workspace is not an edit,
+  // unless models packed into the saved file were moved out (the next save writes their files).
+  state.savedText = state.session.movedModels ? JSON.stringify(storeData) : currentStoreText();
+  if (state.session.movedModels)
+    toast('Imported models will move out of worlds.js into their own files when you save.');
 
   state.session.on(() => {
     viewport.refresh();
@@ -2137,6 +2183,11 @@ async function start() {
     renderAll();
   });
 
+  viewport.onModelMissing = (asset) =>
+    toast(
+      `The model "${asset.name}" could not be loaded: its file ${asset.file} is missing.`,
+      true,
+    );
   viewport.setSession(state.session);
   renderAll();
 }

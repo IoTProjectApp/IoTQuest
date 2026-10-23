@@ -4,10 +4,8 @@
 // reusable prefabs, favourites, GLB/GLTF import metadata, and Play Mode IoT simulation.
 // Free of the DOM so it can be tested directly under Node.
 import { Runtime } from '../../../public/runtime.js';
-import { defaults, validate, program } from '../../../public/missions.js';
-import { baseEnv, ADC_SIGNALS, ADC_SCALE, programReading } from '../../../public/signals.js';
-import { prepareWorldMaterials } from '../../../public/world-materials.js';
-import { addSky } from '../../../public/sky.js';
+import { defaults, validate } from '../../../public/missions.js';
+import { ADC_SCALE, programReading } from '../../../public/signals.js';
 import {
   createTerrain,
   terrainHeightAt,
@@ -15,29 +13,52 @@ import {
   paintTerrain,
   flattenFootprint,
   generateScatterItems,
-  buildTerrainMeshes,
-} from './terrain.js';
+} from '../../../public/world-builder/terrain.js';
+import { ASSET_LIBRARY, getAssetSpec } from '../../../public/world-builder/assets.js';
 import {
-  ASSET_LIBRARY,
-  getAssetSpec,
-  getComponentSpec,
-  buildAssetInstance,
-  buildRoadMeshes,
-  sampleRoadPoints,
-} from './assets.js';
+  DEFAULT_LAYERS,
+  defaultEnvironment,
+  layerForKind,
+  normaliseWorld,
+  worldDevices,
+  assignPins,
+  starterCode,
+  runtimeEnv,
+  worldAgents,
+  stepWorldSim,
+  buildWorldScene,
+  prepareWorldScene,
+} from '../../../public/world-builder/world.js';
+
+// The world format, devices, simulation and scene are shared with the game (world.html).
+export { DEFAULT_LAYERS, defaultEnvironment };
 
 export const WORLD_PROJECT_FORMAT = 'iotquest-world-project';
 export const WORLD_PROJECT_VERSION = 1;
 export const COMPLEXITY_WARNING_LIMIT = 200;
-
-export const DEFAULT_LAYERS = [
-  { id: 'terrain', name: 'Terrain & Water', visible: true, locked: false },
-  { id: 'buildings', name: 'Buildings & Structure', visible: true, locked: false },
-  { id: 'furniture', name: 'Furniture & Decor', visible: true, locked: false },
-  { id: 'infrastructure', name: 'Roads & Infrastructure', visible: true, locked: false },
-  { id: 'nature', name: 'Nature & Vegetation', visible: true, locked: false },
-  { id: 'iot', name: 'IoT Components', visible: true, locked: false },
-];
+// Imported models are saved as files beside the game's other models (public/models is kept out
+// of the public repository, like the people's): worlds.js holds only where each one is.
+export const MODEL_FOLDER = 'models/worlds';
+export const MODEL_ID = /^custom-model-[a-z0-9-]{1,60}$/;
+export const MODEL_MAX_BYTES = 64 * 1024 * 1024;
+export const modelFile = (id) => `${MODEL_FOLDER}/${id}.glb`;
+// A binary glTF file starts with the bytes "glTF".
+export const isGlb = (bytes) =>
+  bytes?.length >= 12 && String.fromCharCode(bytes[0], bytes[1], bytes[2], bytes[3]) === 'glTF';
+// The bytes inside a base64 data URL (as older worlds and exported projects hold models).
+function bytesOfDataUrl(url) {
+  const base64 = String(url).split(',')[1] || '';
+  const text = atob(base64),
+    bytes = new Uint8Array(text.length);
+  for (let i = 0; i < text.length; i++) bytes[i] = text.charCodeAt(i);
+  return bytes;
+}
+export function dataUrlOf(bytes) {
+  let text = '';
+  for (let i = 0; i < bytes.length; i += 0x8000)
+    text += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+  return 'data:model/gltf-binary;base64,' + btoa(text);
+}
 
 const clone = (v) => JSON.parse(JSON.stringify(v));
 const round = (v, p = 3) => Math.round((Number(v) || 0) * 10 ** p) / 10 ** p;
@@ -47,25 +68,6 @@ const slug = (s) =>
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '')
     .slice(0, 40) || 'world';
-
-export function defaultEnvironment() {
-  return {
-    timeOfDay: 11.5, // 0..24 hours
-    sunlight: 85, // 0..100
-    rain: 0, // 0..100
-    fog: 10, // 0..100
-    wind: 12, // km/h
-    temperature: 24, // °C
-    humidity: 50, // %
-    soilMoisture: 35, // 0..100 (ADC scaled in program)
-    waterLevel: 80, // 0..100
-    motion: 0, // 0 or 1
-    distance: 120, // cm
-    dust: 10, // 0..100 (smoke/gas/dust)
-    pressed: 0, // button/keypad
-    docked: 0, // rfid/dock
-  };
-}
 
 export function createStarterWorld({
   id = 'world-' + Date.now(),
@@ -153,6 +155,13 @@ export class WorldBuilderSession {
     this.undoStack = [];
     this.redoStack = [];
     this.listeners = new Set();
+    // Imported models not yet written to their files, by id: their bytes stay out of the world (and
+    // so out of undo steps and the autosave).
+    this.modelBytes = new Map();
+    // Whether loading moved models out of the saved file, which then needs saving again.
+    this.movedModels = false;
+    // Each loaded model's size, [width, height, depth, centre height], measured by the viewport.
+    this.modelSizes = new Map();
 
     // Editor view & selection state
     this.selectedIds = new Set();
@@ -182,50 +191,9 @@ export class WorldBuilderSession {
   }
 
   ensureWorldDefaults(w) {
-    if (!w) return;
-    w.version ??= 1;
-    w.units ||= 'm';
-    w.terrain ||= createTerrain('flat', 42);
-    w.terrain.waters ||= [];
-    w.objects ||= [];
-    w.roads ||= [];
-    w.groups ||= [];
-    w.importedAssets ||= [];
-    w.layers ||= clone(DEFAULT_LAYERS);
-    // A world can come from a file (Import Project): its numbers and names are made what the panels
-    // expect, so a hand-edited project can neither break them nor put markup in them.
-    const num = (v, fallback = 0) => (Number.isFinite(Number(v)) ? Number(v) : fallback);
-    const environment = defaultEnvironment();
-    for (const [k, v] of Object.entries(w.environment || {}))
-      if (k in environment) environment[k] = num(v, environment[k]);
-    w.environment = environment;
-    if (!['m', 'cm', 'ft'].includes(w.units)) w.units = 'm';
-    w.name = String(w.name ?? 'Imported World');
-    w.terrain.waterLevel = num(w.terrain.waterLevel, -2);
-    w.spawn = Array.isArray(w.spawn)
-      ? [0, 1, 2].map((i) => num(w.spawn[i]))
-      : [0, terrainHeightAt(w.terrain, 0, 12), 12];
-    for (const o of w.objects) {
-      o.id = String(o.id);
-      o.name = String(o.name ?? o.kind);
-      o.kind = String(o.kind ?? '');
-      o.pos = [0, 1, 2].map((i) => num(o.pos?.[i]));
-      o.turn = num(o.turn);
-      o.scale = Array.isArray(o.scale) ? [0, 1, 2].map((i) => num(o.scale[i], 1)) : num(o.scale, 1);
-      o.props ||= {};
-      if (o.props.color !== undefined && !/^#[0-9a-f]{6}$/i.test(o.props.color))
-        delete o.props.color;
-    }
-    for (const r of w.roads) r.width = num(r.width, 8);
-    w.iot ||= { board: 'ESP32', language: 'cpp', code: { cpp: '', python: '' } };
-    w.iot.board ||= 'ESP32';
-    w.iot.language ||= 'cpp';
-    w.iot.code ||= { cpp: '', python: '' };
-    this.assignDefaultPins(w);
-    if (!w.iot.code.cpp && !w.iot.code.python) {
-      w.iot.code.cpp = this.generateStarterCode('cpp', w);
-      w.iot.code.python = this.generateStarterCode('python', w);
-    }
+    normaliseWorld(w);
+    // Models packed into older saves and projects become files (see adoptModels).
+    this.adoptModels(w);
   }
 
   on(listener) {
@@ -312,24 +280,37 @@ export class WorldBuilderSession {
   }
 
   // ---- Undo / Redo ----
-  // `merge` names an edit that goes on (one brush stroke): its later commits join the first's
-  // undo step. A gizmo drag's live preview has already changed the world, so its commit undoes to
-  // the world as it was when the drag began.
-  commit(label, mutator, { merge = null } = {}) {
-    const before = this.dragBefore || clone(this.world);
+  // What an undo step puts back: the world, and the prefabs and favourites shared by every world.
+  snapshot(world = this.world) {
+    return clone({ world, prefabs: this.prefabs, favorites: this.favorites });
+  }
+  restore(snapshot) {
+    const idx = this.worlds.findIndex((w) => w.id === this.activeWorldId);
+    if (idx >= 0) this.worlds[idx] = snapshot.world;
+    this.prefabs = snapshot.prefabs;
+    this.favorites = snapshot.favorites;
+  }
+  // `merge` names an edit that goes on (one brush stroke, typing in the code, one slider drag):
+  // its later commits join the first's undo step, until one with `close` ends it. `quiet` keeps
+  // the scene and panels as they are (a slider or the code is still being changed). A gizmo drag's
+  // live preview has already changed the world, so its commit undoes to the world as it was when
+  // the drag began.
+  commit(label, mutator, { merge = null, close = false, quiet = false } = {}) {
+    const before = this.snapshot(this.dragBefore || this.world);
     this.dragBefore = null;
     mutator(this.world);
-    if (JSON.stringify(before) === JSON.stringify(this.world)) return false;
     const top = this.undoStack.at(-1);
-    if (merge && top?.merge === merge && !this.redoStack.length) {
-      this.assignDefaultPins();
-      this.rebuildSceneModel();
-      this.emit();
-      return true;
+    if (JSON.stringify(before) === JSON.stringify(this.snapshot())) {
+      if (close && merge && top?.merge === merge) top.merge = null;
+      return false;
     }
-    this.undoStack.push({ label, snapshot: before, merge });
-    if (this.undoStack.length > 50) this.undoStack.shift();
-    this.redoStack = [];
+    if (!(merge && top?.merge === merge && !this.redoStack.length)) {
+      this.undoStack.push({ label, snapshot: before, merge });
+      if (this.undoStack.length > 50) this.undoStack.shift();
+      this.redoStack = [];
+    }
+    if (close) this.undoStack.at(-1).merge = null;
+    if (quiet) return true;
     this.assignDefaultPins();
     this.rebuildSceneModel();
     this.emit();
@@ -339,9 +320,8 @@ export class WorldBuilderSession {
   undo() {
     const step = this.undoStack.pop();
     if (!step) return null;
-    this.redoStack.push({ label: step.label, snapshot: clone(this.world) });
-    const idx = this.worlds.findIndex((w) => w.id === this.activeWorldId);
-    if (idx >= 0) this.worlds[idx] = step.snapshot;
+    this.redoStack.push({ label: step.label, snapshot: this.snapshot() });
+    this.restore(step.snapshot);
     this.rebuildSceneModel();
     this.emit();
     return step.label;
@@ -350,9 +330,8 @@ export class WorldBuilderSession {
   redo() {
     const step = this.redoStack.pop();
     if (!step) return null;
-    this.undoStack.push({ label: step.label, snapshot: clone(this.world) });
-    const idx = this.worlds.findIndex((w) => w.id === this.activeWorldId);
-    if (idx >= 0) this.worlds[idx] = step.snapshot;
+    this.undoStack.push({ label: step.label, snapshot: this.snapshot() });
+    this.restore(step.snapshot);
     this.rebuildSceneModel();
     this.emit();
     return step.label;
@@ -476,12 +455,7 @@ export class WorldBuilderSession {
   }
 
   layerForKind(kind = '') {
-    if (kind.startsWith('building/') || kind.startsWith('modular/')) return 'buildings';
-    if (kind.startsWith('furniture/')) return 'furniture';
-    if (kind.startsWith('infra/')) return 'infrastructure';
-    if (kind.startsWith('nature/')) return 'nature';
-    if (kind.startsWith('iot/')) return 'iot';
-    return 'furniture';
+    return layerForKind(kind);
   }
 
   addObject(
@@ -566,6 +540,14 @@ export class WorldBuilderSession {
 
   getObject(id) {
     return this.world.objects.find((o) => o.id === id) || null;
+  }
+
+  // Hiding is about the view, not the object: a locked object can be hidden and shown too.
+  setObjectHidden(id, hidden) {
+    return this.commit(hidden ? 'Hide object' : 'Show object', (w) => {
+      const obj = w.objects.find((o) => o.id === id);
+      if (obj) obj.hidden = !!hidden;
+    });
   }
 
   updateObject(id, patch = {}, label = 'Update object') {
@@ -719,8 +701,7 @@ export class WorldBuilderSession {
         props: clone(o.props || {}),
       })),
     };
-    this.prefabs.push(prefab);
-    this.emit();
+    this.commit(`Save prefab ${prefab.name}`, () => this.prefabs.push(prefab));
     return prefab;
   }
 
@@ -763,11 +744,12 @@ export class WorldBuilderSession {
   }
 
   toggleFavorite(assetId) {
-    const idx = this.favorites.indexOf(assetId);
-    if (idx >= 0) this.favorites.splice(idx, 1);
-    else this.favorites.push(assetId);
-    this.emit();
-    return this.favorites.includes(assetId);
+    const on = !this.favorites.includes(assetId);
+    this.commit(on ? 'Add favourite' : 'Remove favourite', () => {
+      if (on) this.favorites.push(assetId);
+      else this.favorites.splice(this.favorites.indexOf(assetId), 1);
+    });
+    return on;
   }
 
   setLayerState(layerId, { visible, locked } = {}) {
@@ -847,28 +829,88 @@ export class WorldBuilderSession {
   }
 
   // ---- Imported GLB/GLTF Assets & Packaging ----
+  // An id no world's model uses yet, from the model's name.
+  uniqueModelId(name = 'model', taken = new Set()) {
+    for (const w of this.worlds) for (const a of w.importedAssets || []) taken.add(a.id);
+    for (const id of this.modelBytes.keys()) taken.add(id);
+    const base = 'custom-model-' + slug(name).slice(0, 40);
+    let id = base,
+      n = 2;
+    while (taken.has(id)) id = `${base}-${n++}`;
+    return id;
+  }
+  // Makes a world's models references to files: a model still packed into the world (older saves,
+  // exported projects) is unpacked to bytes for its file. Copies of a world share their models'
+  // files; a different model arriving under an id already in use, or an id that is not a safe file
+  // name, gets a new id everywhere the world uses it.
+  adoptModels(w) {
+    const taken = new Set();
+    for (const other of this.worlds || [])
+      if (other !== w) for (const a of other.importedAssets || []) taken.add(a.id);
+    const renamed = new Map();
+    w.importedAssets = (w.importedAssets || []).filter((a) => a && typeof a === 'object');
+    for (const asset of w.importedAssets) {
+      const id = String(asset.id ?? ''),
+        packed = typeof asset.dataUrl === 'string' && asset.dataUrl.startsWith('data:'),
+        bytes = packed ? bytesOfDataUrl(asset.dataUrl) : null,
+        known = this.modelBytes.get(id),
+        same =
+          known && bytes && known.length === bytes.length && known.every((b, i) => b === bytes[i]);
+      if (!MODEL_ID.test(id) || (bytes && taken.has(id) && !same) || renamed.has(id)) {
+        const fresh = this.uniqueModelId(asset.name || 'model', new Set(renamed.values()));
+        renamed.set(id, fresh);
+        asset.id = fresh;
+      }
+      asset.name = String(asset.name ?? 'Imported Model');
+      asset.fileName = String(asset.fileName ?? 'model.glb');
+      if (packed) {
+        if (isGlb(bytes) && bytes.length <= MODEL_MAX_BYTES) this.modelBytes.set(asset.id, bytes);
+        this.movedModels = true;
+      }
+      delete asset.dataUrl;
+      asset.file = modelFile(asset.id);
+    }
+    if (renamed.size)
+      for (const obj of w.objects || []) {
+        const old = String(obj.kind).startsWith('imported/') && obj.kind.slice('imported/'.length);
+        if (old !== false && renamed.has(old)) obj.kind = 'imported/' + renamed.get(old);
+      }
+  }
+  // Adds a model from its bytes (binary glTF), kept until the next save writes its file.
   registerImportedAsset({
-    id = 'custom-model-' + (Date.now() % 10000),
     name = 'Imported Model',
     fileName = 'model.glb',
-    dataUrl = null,
+    bytes = null,
     scale = 1,
     rotation = [0, 0, 0],
     size = [2, 2, 2],
   } = {}) {
+    if (!isGlb(bytes)) throw new Error('That is not a binary glTF (.glb) model.');
+    if (bytes.length > MODEL_MAX_BYTES) throw new Error('That model is over 64 MB.');
+    const id = this.uniqueModelId(name);
+    this.modelBytes.set(id, bytes);
     this.commit(`Import model ${name}`, (w) => {
-      w.importedAssets = (w.importedAssets || []).filter((a) => a.id !== id);
       w.importedAssets.push({
         id,
-        name,
-        fileName,
-        dataUrl, // Packaged inline as base64 data URL so exported project files reopen self-contained
+        name: String(name),
+        fileName: String(fileName),
+        file: modelFile(id),
         scale: round(scale, 3),
         rotation: rotation.map((r) => round(r, 4)),
         size,
       });
     });
     return id;
+  }
+  // Models some world uses whose files the next save must write: [[id, bytes]].
+  unsavedModels() {
+    const used = new Set(this.worlds.flatMap((w) => (w.importedAssets || []).map((a) => a.id)));
+    return [...this.modelBytes].filter(([id]) => used.has(id));
+  }
+  // After a save has written them: their files now hold them.
+  modelsSaved(ids) {
+    for (const id of ids) this.modelBytes.delete(id);
+    this.movedModels = false;
   }
 
   // Checks for missing imported assets or unknown object kinds and offers recovery options.
@@ -879,7 +921,7 @@ export class WorldBuilderSession {
       if (obj.kind.startsWith('imported/')) {
         const assetId = obj.kind.slice('imported/'.length);
         const asset = (w.importedAssets || []).find((a) => a.id === assetId);
-        if (!importedIds.has(assetId) || !asset?.dataUrl) {
+        if (!importedIds.has(assetId) || !asset?.file) {
           warnings.push({
             objectId: obj.id,
             name: obj.name,
@@ -917,67 +959,11 @@ export class WorldBuilderSession {
 
   // ---- IoT Integration & Programming ----
   iotDevices(w = this.world) {
-    const list = [];
-    for (const obj of w.objects || []) {
-      if (!obj.kind.startsWith('iot/') || obj.kind.startsWith('iot/board-')) continue;
-      const compId = obj.props?.componentId || obj.kind.slice(4);
-      const spec = getComponentSpec(compId);
-      if (!spec) continue;
-      list.push({
-        objectId: obj.id,
-        id: spec.id,
-        name: obj.name || spec.name,
-        signal: spec.signal,
-        output: !!spec.output,
-        analog: !!spec.analog,
-        resistor: spec.resistor,
-        pin: obj.props?.pin,
-        power: obj.props?.power !== false,
-        ground: obj.props?.ground !== false,
-        resistorConnected: obj.props?.resistorConnected !== false,
-        area: 'World Builder',
-      });
-    }
-    return list;
+    return worldDevices(w);
   }
 
   assignDefaultPins(w = this.world) {
-    const board = w.iot?.board || 'ESP32';
-    const analogPins = board === 'ESP32' ? [34, 35, 32, 33, 36, 39] : [26, 27, 28];
-    const digitalPins = board === 'ESP32' ? [27, 14, 13, 4, 16, 17] : [16, 17, 18, 19, 20, 21];
-    const outputPins =
-      board === 'ESP32'
-        ? [26, 25, 18, 19, 21, 22, 23, 5, 2, 15]
-        : [15, 14, 13, 12, 11, 10, 9, 8, 7, 6];
-    const allowed = new Set([...analogPins, ...digitalPins, ...outputPins]);
-    const used = new Set();
-    let a = 0,
-      d = 0,
-      o = 0;
-
-    for (const obj of w.objects || []) {
-      if (!obj.kind.startsWith('iot/') || obj.kind.startsWith('iot/board-')) continue;
-      const compId = obj.props?.componentId || obj.kind.slice(4);
-      const spec = getComponentSpec(compId);
-      if (!spec) continue;
-      obj.props ||= {};
-      const currentPin = Number(obj.props.pin);
-      if (
-        Number.isInteger(currentPin) &&
-        allowed.has(currentPin) &&
-        !used.has(currentPin) &&
-        (!spec.analog || analogPins.includes(currentPin))
-      ) {
-        used.add(currentPin);
-        continue;
-      }
-      const pool = spec.output ? outputPins : spec.analog ? analogPins : digitalPins;
-      let picked = pool.find((p) => !used.has(p));
-      if (picked === undefined)
-        picked = pool[(spec.output ? o++ : spec.analog ? a++ : d++) % pool.length];
-      obj.props.pin = picked;
-      used.add(picked);
-    }
+    assignPins(w);
   }
 
   setControllerBoard(board) {
@@ -995,109 +981,69 @@ export class WorldBuilderSession {
 
   setProgrammingLanguage(language) {
     if (!['cpp', 'python'].includes(language)) return false;
-    this.world.iot.language = language;
-    if (!this.world.iot.code[language]?.trim()) {
-      this.world.iot.code[language] = this.generateStarterCode(language);
-    }
-    this.emit();
+    this.commit(`Program in ${language === 'cpp' ? 'C++' : 'MicroPython'}`, (w) => {
+      w.iot.language = language;
+      if (!w.iot.code[language]?.trim())
+        w.iot.code[language] = this.generateStarterCode(language, w);
+    });
     return true;
   }
 
-  // `quiet`: the caller is typing in the code and keeps its own panel (no redraw).
+  // `quiet`: the caller is typing in the code and keeps its own panel (no redraw); the typing is
+  // one undo step until something else changes.
   setCode(source, language = this.world.iot.language, { quiet = false } = {}) {
-    this.world.iot.code[language] = String(source ?? '');
-    if (!quiet) this.emit();
+    const changed = this.commit(
+      'Edit program',
+      (w) => {
+        w.iot.code[language] = String(source ?? '');
+      },
+      quiet ? { merge: 'code:' + language, quiet: true } : {},
+    );
+    if (!changed && !quiet) this.emit();
   }
 
   generateStarterCode(language = this.world.iot.language, w = this.world) {
-    const devices = this.iotDevices(w);
-    const board = w.iot?.board || 'ESP32';
-    if (!devices.length) {
-      return language === 'cpp'
-        ? '// Place IoT sensors and actuators in the world, then program them here.\nvoid setup() {\n  Serial.begin(115200);\n}\n\nvoid loop() {\n  delay(200);\n}\n'
-        : '# Place IoT sensors and actuators in the world, then program them here.\nfrom machine import Pin, ADC\nimport time\n\nwhile True:\n    time.sleep_ms(200)\n';
-    }
-    const sensors = devices.filter((d) => !d.output && d.signal);
-    const outputs = devices.filter((d) => d.output);
-    const conditions = outputs.map((out) => {
-      if (sensors.some((s) => s.signal === 'light') && ['led', 'porch', 'rgb'].includes(out.id)) {
-        return 'light < 1800';
-      }
-      if (sensors.some((s) => s.signal === 'soil') && ['pump', 'valve'].includes(out.id)) {
-        return 'soil < 2400';
-      }
-      if (
-        sensors.some((s) => s.signal === 'motion') &&
-        ['led', 'porch', 'buzzer'].includes(out.id)
-      ) {
-        return 'motion == 1';
-      }
-      if (sensors.some((s) => s.signal === 'temp') && ['fan', 'ac'].includes(out.id)) {
-        return 'temp > 27';
-      }
-      if (sensors.some((s) => s.signal === 'distance') && ['servo', 'gate'].includes(out.id)) {
-        return 'distance < 50';
-      }
-      const s0 = sensors[0];
-      if (!s0) return 'true';
-      return ADC_SIGNALS.includes(s0.signal) ? `${s0.signal} < 2000` : `${s0.signal} == 1`;
-    });
-
-    const syntheticMission = {
-      title: w.name || 'World Builder Mission',
-      conditions,
-    };
-    // Deduplicate by signal for starter code generation while preserving device pins
-    const uniqueDevices = [];
-    const seenSignals = new Set();
-    for (const d of devices) {
-      if (!d.output && seenSignals.has(d.signal)) continue;
-      if (!d.output && d.signal) seenSignals.add(d.signal);
-      uniqueDevices.push(d);
-    }
-    return program(syntheticMission, language, uniqueDevices, true, board);
+    return starterCode(w, language);
   }
 
   // ---- Environment & Play Mode Simulation ----
   // `quiet`: a slider is being dragged; the viewport follows, the panels redraw when it is let go.
+  // In Play Mode the change is to the running simulation only; otherwise it is the world's, and a
+  // slider's whole drag is one undo step.
   setEnvironment(patch = {}, { quiet = false } = {}) {
-    const target =
-      this.mode === 'play' && this.simEnvironment ? this.simEnvironment : this.world.environment;
-    Object.assign(target, patch);
-    if (patch.timeOfDay !== undefined && patch.sunlight === undefined) {
-      // Derive sunlight 0..100 from time of day (6:00..18:00 daylight curve)
-      const h = Number(patch.timeOfDay) || 12;
-      const sun = Math.max(5, Math.round(Math.max(0, Math.sin(((h - 6) / 12) * Math.PI)) * 95));
-      target.sunlight = sun;
+    const apply = (target) => {
+      Object.assign(target, patch);
+      if (patch.timeOfDay !== undefined && patch.sunlight === undefined) {
+        // Derive sunlight 0..100 from time of day (6:00..18:00 daylight curve)
+        const h = Number(patch.timeOfDay) || 12;
+        target.sunlight = Math.max(
+          5,
+          Math.round(Math.max(0, Math.sin(((h - 6) / 12) * Math.PI)) * 95),
+        );
+      }
+    };
+    if (this.mode === 'play' && this.simEnvironment) {
+      apply(this.simEnvironment);
+      if (!quiet) this.emit();
+      return;
     }
-    if (!quiet) this.emit();
+    const keys = Object.keys(patch).sort().join(',');
+    const changed = this.commit('Change ' + keys, (w) => apply(w.environment), {
+      merge: 'environment:' + keys,
+      close: !quiet,
+      quiet,
+    });
+    // A slider let go where the drag already took it: the panels still catch up.
+    if (!changed && !quiet) this.emit();
   }
 
   // Builds the runtime environment readings object expected by Runtime.step(env).
   currentRuntimeEnv() {
-    const envCfg =
+    return runtimeEnv(
       (this.mode === 'play' && this.simEnvironment) ||
-      this.world.environment ||
-      defaultEnvironment();
-    return {
-      ...baseEnv,
-      light: envCfg.sunlight ?? 80,
-      temp: envCfg.temperature ?? 24,
-      outdoorTemp: envCfg.temperature ?? 24,
-      humidity: envCfg.humidity ?? 50,
-      rain: envCfg.rain ?? 0,
-      wind: envCfg.wind ?? 12,
-      cloud: envCfg.fog ?? 10,
-      soil: envCfg.soilMoisture ?? 35,
-      tank: envCfg.waterLevel ?? 80,
-      pond: envCfg.waterLevel ?? 80,
-      motion: envCfg.motion ? 1 : 0,
-      occupied: envCfg.motion ? 1 : 0,
-      distance: envCfg.distance ?? 120,
-      dust: envCfg.dust ?? 10,
-      pressed: envCfg.pressed ? 1 : 0,
-      docked: envCfg.docked ? 1 : 0,
-    };
+        this.world.environment ||
+        defaultEnvironment(),
+    );
   }
 
   // Formatted human-readable simulated readings for the UI, clearly marked as simulated.
@@ -1122,6 +1068,7 @@ export class WorldBuilderSession {
 
   enterPlayMode() {
     this.mode = 'play';
+    this.playOpened = new Set();
     this.simEnvironment = clone(this.world.environment);
     this.playerPos = [...(this.world.spawn || [0, 0, 12])];
     this.simTime = 0;
@@ -1132,17 +1079,7 @@ export class WorldBuilderSession {
     this.simRunning = true;
 
     // Initialize vehicle & pedestrian simulation agents from placed objects
-    this.simAgents = this.world.objects
-      .filter((o) => o.kind === 'infra/vehicle-car' || o.kind === 'infra/pedestrian')
-      .map((o) => ({
-        objectId: o.id,
-        kind: o.kind,
-        pos: [...o.pos],
-        startPos: [...o.pos],
-        turn: o.turn || 0,
-        speed: Number(o.props?.speed) || (o.kind === 'infra/vehicle-car' ? 6 : 1.4),
-        progress: 0,
-      }));
+    this.simAgents = worldAgents(this.world);
 
     this.compileRuntime();
     this.stepSimulation(0.2);
@@ -1170,76 +1107,8 @@ export class WorldBuilderSession {
 
   stepSimulation(dtSeconds = 0.2) {
     if (this.mode !== 'play' || !this.simRunning || this.simPaused) return;
-    this.simTime = round(this.simTime + dtSeconds, 2);
-
-    // Step microcontroller program
-    if (this.runtime) {
-      try {
-        const res = this.runtime.step(this.currentRuntimeEnv());
-        this.simOutputs = res.outputs || {};
-        if (res.logs?.length) {
-          this.simLogs.push(...res.logs);
-          if (this.simLogs.length > 40) this.simLogs.splice(0, this.simLogs.length - 40);
-        }
-      } catch (err) {
-        this.simError = err.message || String(err);
-      }
-    }
-
-    // Apply actuator outputs to world objects (e.g. servo/gate opens doors & gates, pump waters soil)
-    const devices = this.iotDevices();
-    const gateActive = devices.some(
-      (d) => ['servo', 'gate', 'motor'].includes(d.id) && (this.simOutputs[d.pin] || 0) > 0,
-    );
-    const pumpActive = devices.some(
-      (d) => ['pump', 'valve', 'valve2'].includes(d.id) && (this.simOutputs[d.pin] || 0) > 0,
-    );
-    const coolingActive = devices.some(
-      (d) => ['fan', 'ac'].includes(d.id) && (this.simOutputs[d.pin] || 0) > 0,
-    );
-
-    if (pumpActive && this.simEnvironment) {
-      this.simEnvironment.soilMoisture = Math.min(
-        100,
-        round(this.simEnvironment.soilMoisture + dtSeconds * 2, 1),
-      );
-    }
-    if (coolingActive && this.simEnvironment) {
-      this.simEnvironment.temperature = Math.max(
-        16,
-        round(this.simEnvironment.temperature - dtSeconds * 0.4, 1),
-      );
-    }
-
-    // Step road/path agents while obeying red traffic signals and avoiding collisions
-    const redSignalActive = devices.some(
-      (d) => ['red', 'red2', 'waitLight'].includes(d.id) && (this.simOutputs[d.pin] || 0) > 0,
-    );
-    const roads = this.world.roads || [];
-    for (const agent of this.simAgents) {
-      if (redSignalActive) continue;
-      if (roads.length) {
-        const road =
-          roads.find((r) =>
-            agent.kind === 'infra/pedestrian' ? r.kind === 'footpath' : r.kind !== 'footpath',
-          ) || roads[0];
-        const pts = sampleRoadPoints(road.points, road.curvature);
-        if (pts.length >= 2) {
-          agent.progress = (agent.progress + dtSeconds * agent.speed * 0.05) % 1;
-          const idx = Math.min(pts.length - 2, Math.floor(agent.progress * (pts.length - 1)));
-          const localT = agent.progress * (pts.length - 1) - idx;
-          const a = pts[idx],
-            b = pts[idx + 1];
-          const nx = a.x + (b.x - a.x) * localT;
-          const nz = a.z + (b.z - a.z) * localT;
-          const ny = terrainHeightAt(this.world.terrain, nx, nz);
-          agent.pos = [round(nx, 2), round(ny, 2), round(nz, 2)];
-          agent.turn = round(Math.atan2(b.x - a.x, b.z - a.z), 3);
-        }
-      }
-    }
-
-    this.rebuildSceneModel({ gateActive });
+    stepWorldSim(this, this.world, dtSeconds);
+    this.rebuildSceneModel();
   }
 
   pausePlayMode() {
@@ -1260,113 +1129,40 @@ export class WorldBuilderSession {
     this.simPaused = false;
     this.simOutputs = {};
     this.simEnvironment = null;
+    this.playOpened = null;
     this.rebuildSceneModel();
     this.emit();
   }
+  // Opens or closes a door or gate for this run of Play Mode only (the saved world keeps it as
+  // built, as the game does). Returns whether it is now open.
+  togglePlayDoor(id) {
+    if (this.mode !== 'play') return false;
+    this.playOpened ??= new Set();
+    const open = !this.playOpened.has(id);
+    if (open) this.playOpened.add(id);
+    else this.playOpened.delete(id);
+    this.rebuildSceneModel();
+    this.emit();
+    return open;
+  }
 
   // ---- 3D Scene Model Construction (Compatible with ThreeWorldRenderer) ----
-  rebuildSceneModel({ gateActive = false } = {}) {
+  rebuildSceneModel() {
     const w = this.world;
-    const objects = [];
-    const colliders = [];
-    const roofs = [];
-    const lamps = [];
+    const playing = this.mode === 'play';
+    const model = buildWorldScene(w, {
+      playing,
+      outputs: this.simOutputs,
+      agents: this.simAgents,
+      hideRoofs: this.hideRoofs,
+      maxVisibleStory: this.maxVisibleStory,
+      modelSizes: this.modelSizes,
+      opened: playing ? this.playOpened : null,
+    });
+    this.objectParts = model.objectParts;
 
-    const model = {
-      objects,
-      colliders,
-      roofs,
-      rooms: [],
-      lamps,
-      mesh(shape, pos, size, color, extra = {}) {
-        const m = {
-          shape,
-          pos: [...pos],
-          size: [...size],
-          color,
-          rotation: [0, 0, 0],
-          ...extra,
-        };
-        objects.push(m);
-        return m;
-      },
-      cylinder(x, y, z, r, h, color, extra = {}) {
-        return this.mesh('cylinder', [x, y, z], [r * 2, h, r * 2], color, extra);
-      },
-      sphere(x, y, z, r, color, extra = {}) {
-        return this.mesh('sphere', [x, y, z], [r * 2, r * 2, r * 2], color, extra);
-      },
-      floorHeight: (x, z) => terrainHeightAt(w.terrain, x, z),
-    };
-
-    const layerMap = new Map((w.layers || DEFAULT_LAYERS).map((l) => [l.id, l]));
-    const isLayerVisible = (layerId) => layerMap.get(layerId)?.visible !== false;
-
-    // 1. Sky
-    model.sky = addSky(model);
-
-    // 2. Terrain & Water
-    if (isLayerVisible('terrain')) {
-      buildTerrainMeshes(model, w.terrain);
-    }
-
-    // 2. Roads & Footpaths
-    if (isLayerVisible('infrastructure')) {
-      buildRoadMeshes(model, w.roads, w.terrain, terrainHeightAt);
-    }
-
-    // 3. Placed Objects (Buildings, Modular Parts, Furniture, Nature, IoT)
-    this.objectParts = new Map();
-    const activeOutputs = this.mode === 'play' ? this.simOutputs : {};
-    const anyLampOn = this.iotDevices(w).some(
-      (d) => ['led', 'porch', 'rgb', 'lightB'].includes(d.id) && (activeOutputs[d.pin] || 0) > 0,
-    );
-
-    for (const obj of w.objects || []) {
-      if (obj.hidden) continue;
-      if (!isLayerVisible(obj.layer || this.layerForKind(obj.kind))) continue;
-
-      // In Play Mode, sync dynamic agent positions and servo/gate door states
-      let instanceObj = obj;
-      if (this.mode === 'play') {
-        const agent = this.simAgents.find((a) => a.objectId === obj.id);
-        if (agent) {
-          instanceObj = { ...obj, pos: agent.pos, turn: agent.turn };
-        } else if (
-          gateActive &&
-          (obj.kind === 'modular/gate' ||
-            obj.kind === 'modular/door' ||
-            obj.kind === 'building/garage' ||
-            obj.props?.behavior === 'servo')
-        ) {
-          instanceObj = { ...obj, props: { ...(obj.props || {}), doorOpen: true } };
-        }
-      }
-
-      const built = buildAssetInstance(model, instanceObj, {
-        hideRoofs: this.hideRoofs,
-        maxVisibleStory: this.maxVisibleStory,
-        deviceOutputs: activeOutputs,
-      });
-      this.objectParts.set(obj.id, built.parts);
-
-      // Dynamic point lights for active lamps & streetlights in Play Mode
-      if (
-        (anyLampOn && obj.kind === 'furniture/streetlight') ||
-        (obj.kind.startsWith('iot/') &&
-          ['led', 'porch', 'rgb'].includes(obj.props?.componentId || obj.kind.slice(4)) &&
-          (activeOutputs[obj.props?.pin] || 0) > 0)
-      ) {
-        lamps.push({
-          pos: [instanceObj.pos[0], instanceObj.pos[1] + 2.2, instanceObj.pos[2]],
-          color: [1.0, 0.92, 0.72],
-          range: 9.5,
-        });
-      }
-    }
-
-    // 4. Spawn Marker (visible in Edit Mode)
-    if (this.mode === 'edit' && w.spawn) {
+    // Spawn Marker (visible in Edit Mode)
+    if (!playing && w.spawn) {
       const [sx, , sz] = w.spawn;
       const sy = terrainHeightAt(w.terrain, sx, sz);
       w.spawn[1] = sy;
@@ -1376,9 +1172,8 @@ export class WorldBuilderSession {
       });
     }
 
-    prepareWorldMaterials(model);
-    this.model = model;
-    return model;
+    this.model = prepareWorldScene(model);
+    return this.model;
   }
 
   // ---- Serialization & Export / Import ----
@@ -1391,14 +1186,22 @@ export class WorldBuilderSession {
     };
   }
 
-  exportWorldProject(worldId = this.activeWorldId) {
+  // An exported project carries its models inside it (as base64), so it opens anywhere: `models`
+  // gives each model's bytes by id (from its file, or not yet saved).
+  exportWorldProject(worldId = this.activeWorldId, models = {}) {
     const target = this.worlds.find((w) => w.id === worldId) || this.world;
+    const world = clone(target);
+    for (const asset of world.importedAssets || []) {
+      const bytes = models[asset.id] || this.modelBytes.get(asset.id);
+      if (bytes) asset.dataUrl = dataUrlOf(bytes);
+      delete asset.file;
+    }
     return JSON.stringify(
       {
         format: WORLD_PROJECT_FORMAT,
         version: WORLD_PROJECT_VERSION,
         exportedAt: new Date().toISOString(),
-        world: clone(target),
+        world,
         prefabs: clone(this.prefabs),
       },
       null,

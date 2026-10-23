@@ -128,6 +128,7 @@ export function addLandscape(model, location = { id: 'legacy', climate: 'tempera
     mesh('cylinder', [x, -0.045, z], [width + 1.6, 0.13, length + width + 1.6], colours.rock, {
       rotation: [0, angle, 0],
       terrainFeature: 'river-bank',
+      editGroup: 'landscape/river',
     });
     const water = mesh(
       'cylinder',
@@ -139,14 +140,26 @@ export function addLandscape(model, location = { id: 'legacy', climate: 'tempera
         roughness: 0.2,
         opacity: 1,
         terrainFeature: tributary ? 'tributary' : 'river',
+        editGroup: 'landscape/river',
       },
     );
     const flow = box(x, 0.055, z, width * 0.5, 0.012, 0.18, '#b7d4d0', {
       rotation: [0, angle, 0],
       opacity: 0.1,
       terrainFeature: 'water-flow',
+      editGroup: 'landscape/river',
     });
-    landscape.waters.push({ mesh: water, flow, x, z, angle, length, phase: rand(), kind: 'river' });
+    landscape.waters.push({
+      mesh: water,
+      flow,
+      x,
+      z,
+      angle,
+      length,
+      size: [...water.size],
+      phase: rand(),
+      kind: 'river',
+    });
   };
   const curve = riverCurve(points);
   for (let i = 0; i < curve.length - 1; i++)
@@ -158,16 +171,19 @@ export function addLandscape(model, location = { id: 'legacy', climate: 'tempera
     lakeZ = 16;
   mesh('cylinder', [lakeX, -0.02, lakeZ], [22, 0.2, 17], colours.rock, {
     terrainFeature: 'lake-bank',
+    editGroup: 'landscape/lake',
   });
   const lake = mesh('cylinder', [lakeX, 0.015, lakeZ], [19, 0.06, 14], '#537e88', {
     roughness: 0.18,
     opacity: 1,
     terrainFeature: 'lake',
+    editGroup: 'landscape/lake',
   });
   const ripples = Array.from({ length: 3 }, (_, i) =>
     mesh('torus', [lakeX, 0.106, lakeZ], [3 + i * 3, 0.05, 2 + i * 2], '#b4cecb', {
       opacity: 0.14,
       terrainFeature: 'lake-ripple',
+      editGroup: 'landscape/lake',
     }),
   );
   landscape.waters.push({ mesh: lake, ripples, x: lakeX, z: lakeZ, kind: 'lake' });
@@ -181,7 +197,7 @@ export function addLandscape(model, location = { id: 'legacy', climate: 'tempera
       0.5 + rand() * 0.4,
       0.8 + rand(),
       colours.rock,
-      { terrainFeature: 'shore-rock' },
+      { terrainFeature: 'shore-rock', editGroup: 'landscape/lake' },
     );
   }
   // Forest edges remain beyond even the widest farm paddocks and Melbourne lots.
@@ -193,7 +209,8 @@ export function addLandscape(model, location = { id: 'legacy', climate: 'tempera
       style: alpine ? 'conifer' : location.iso === 'AUS' ? 'eucalypt' : 'broadleaf',
       detailed: false,
       foliage: [colours.tree, colours.hill],
-      extra: { landscape: true, terrainFeature: 'tree' },
+      // Each tree is its own edit group, so the Map Editor can move, resize or remove it.
+      extra: { landscape: true, terrainFeature: 'tree', editGroup: 'landscape/tree#' + (i + 1) },
     });
   }
   box(54, -0.08, 40, 28, 0.14, 13, colours.ground, { terrainFeature: 'wildlife-clearing' });
@@ -282,12 +299,13 @@ export function updateLandscape(model, env, dt, still = false) {
   for (const water of landscape.waters) {
     water.mesh.roughness = 0.18 + wind * 0.004;
     if (water.flow) {
-      const travel = ((time * 0.65 + water.phase * water.length) % water.length) - water.length / 2;
-      water.flow.pos = [
-        water.x + Math.sin(water.angle) * travel,
-        0.055,
-        water.z + Math.cos(water.angle) * travel,
-      ];
+      // Along the water as it now stands (the Map Editor may have moved, turned or resized it).
+      const [x, y, z] = water.mesh.pos,
+        angle = water.mesh.rotation?.[1] ?? water.angle,
+        length = water.length * (water.mesh.size[2] / water.size[2]),
+        travel = ((time * 0.65 + water.phase * length) % length) - length / 2;
+      water.flow.pos = [x + Math.sin(angle) * travel, y + 0.04, z + Math.cos(angle) * travel];
+      water.flow.rotation = [0, angle, 0];
     }
     for (let i = 0; i < (water.ripples?.length || 0); i++) {
       const radius = 2 + ((time * 0.3 + i * 2.8) % 8);

@@ -228,3 +228,19 @@ test('the Map Editor draws, changes, undoes and saves added walls', () => {
     to: [1, 0],
   });
 });
+
+test('the bathroom mirror moves on its own, not with the vanity', async () => {
+  const { createRegionalModel } = await import('../public/regions.js');
+  const { addCommunityWorld } = await import('../public/community-world.js');
+  const { locationById } = await import('../public/locations.js');
+  const { editGroups } = await import('../public/world-layout.js');
+  const model = createRegionalModel('legacy');
+  addCommunityWorld(model, locationById('legacy'));
+  const groups = editGroups(model),
+    vanity = groups.get('furniture/vanity#1'),
+    mirror = groups.get('furniture/bathroom-mirror#1');
+  assert.ok(vanity && mirror);
+  // The mirror hangs on the wall, above and behind the basin; the vanity stands on the floor.
+  assert.ok(mirror.parts.every((p) => p.pos[1] > 1.4));
+  assert.ok(vanity.parts.every((p) => p.pos[2] > -10.2));
+});

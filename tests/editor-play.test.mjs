@@ -97,6 +97,7 @@ test('the game never loads or saves progress in a play-test, and the editor send
     'quest-editor',
     'conversation-editor',
     'city-editor',
+    'world-builder',
   ]) {
     const app = await readFile(
       new URL(`../editor/workspaces/${workspace}/app.js`, import.meta.url),
@@ -105,7 +106,7 @@ test('the game never loads or saves progress in a play-test, and the editor send
     assert.match(app, /playstart/, workspace + ' offers the beginning too');
     assert.match(
       app,
-      /shell\.openGame\(\s*(fromStart\s*\?\s*null\s*:\s*)?\{/,
+      /shell\??\.openGame\(\s*(fromStart\s*\?\s*null\s*:\s*)?\{/,
       workspace + ' sends a target',
     );
   }

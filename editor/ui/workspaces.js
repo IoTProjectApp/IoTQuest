@@ -50,6 +50,14 @@ export const WORKSPACES = [
     icon: 'city',
     writes: 'public/data/cities.js',
   },
+  {
+    id: 'world-builder',
+    name: 'World Builder',
+    summary:
+      'Create, sculpt, build, furnish, wire and explore complete 3D environments for IoT learning missions with terrain, modular buildings, roads and live simulations.',
+    icon: 'world',
+    writes: 'public/data/worlds.js',
+  },
 ];
 
 export const workspaceUrl = (workspace) => `../workspaces/${workspace.id}/`;

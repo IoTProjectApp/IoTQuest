@@ -12,14 +12,15 @@ The script checks for Node.js 20 or newer, installs the game's development packa
 
 The editor is a set of **workspaces**. A workspace is a screen for one job, such as placing objects in the 3D world. The editor opens on a home page with a card for each workspace. Click a card to open that workspace, and use the back arrow at the top left to return.
 
-| Workspace           | What it does                                                                                                                                       | Writes                                                                    |
-| ------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
-| Map Editor          | Move, add and remove furniture, garden features and town buildings in the 3D world, city by city.                                                  | `public/data/world-layout.js`                                             |
-| Street Editor       | Lay out the town's roads: junctions, roads, traffic lights, stop signs and crossings, then watch the traffic run.                                  | `public/data/street-layout.js`                                            |
-| Character Editor    | Dress the game's people and set how they move: who plays them, their clothes, their walk, stance and activity, and how fast.                       | `public/data/characters.js`                                               |
-| Quest Editor        | Write new quests: who asks and where, the devices to wire, the rules and the tests, each checked against a worked solution on both boards.         | `public/data/quests.js`                                                   |
-| Conversation Editor | Write what the game's people say, for everyone or one person in one city, and how each resident asks for their quests; try each chat as you write. | `public/data/conversations.js` (and `public/data/quests.js` for requests) |
-| City Editor         | Word each city: what it calls the household, how residents open their requests, and the home quests' titles and requests there.                    | `public/data/cities.js`                                                   |
+| Workspace           | What it does                                                                                                                                                     | Writes                                                                    |
+| ------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
+| Map Editor          | Move, add and remove furniture, garden features and town buildings in the 3D world, city by city.                                                                | `public/data/world-layout.js`                                             |
+| Street Editor       | Lay out the town's roads: junctions, roads, traffic lights, stop signs and crossings, then watch the traffic run.                                                | `public/data/street-layout.js`                                            |
+| Character Editor    | Dress the game's people and set how they move: who plays them, their clothes, their walk, stance and activity, and how fast.                                     | `public/data/characters.js`                                               |
+| Quest Editor        | Write new quests: who asks and where, the devices to wire, the rules and the tests, each checked against a worked solution on both boards.                       | `public/data/quests.js`                                                   |
+| Conversation Editor | Write what the game's people say, for everyone or one person in one city, and how each resident asks for their quests; try each chat as you write.               | `public/data/conversations.js` (and `public/data/quests.js` for requests) |
+| City Editor         | Word each city: what it calls the household, how residents open their requests, and the home quests' titles and requests there.                                  | `public/data/cities.js`                                                   |
+| World Builder       | Create, sculpt, build, furnish, wire and explore complete 3D environments for IoT learning missions with terrain, modular buildings, roads and live simulations. | `public/data/worlds.js`                                                   |
 
 Each workspace:
 
@@ -700,3 +701,19 @@ export default {
 - **Names** are laid over the city's own when the game loads, so everything that names the household uses them: chats, quests, the map and the Conversation Editor (whose lines stay keyed by Maya, Alex and Sam).
 - **Titles and requests** are keyed by the quest's place (0–7, the home's quests). A request is written without the opening, its first letter lowercased as the game does, and is used at both levels. The quest's devices, rules and tests stay the code's.
 - **With the file empty, every city is worded exactly as before** (`tests/city-editor.test.mjs` checks every city at both levels).
+
+## World Builder
+
+The **World Builder** (`editor/workspaces/world-builder/`) lets users create, edit, save, export, and explore complete 3D environments for IoT learning missions.
+
+### Layout
+
+- **Top toolbar:** World selector, New / Duplicate world, **Select** (`V`), **Move** (`G`), **Rotate** (`R`), **Scale** (`S`), **Duplicate** (`⌘D`), **Undo** (`⌘Z`), **Redo** (`⇧⌘Z`), **Play Mode** toggle, **Play-test** (`⌘P`), and **Save** (`⌘S`).
+- **Left panel:** Searchable asset library and building tools across six tabs (**Assets**, **Terrain**, **Footprint**, **Roads**, **IoT Code**, and **Project**).
+- **Centre:** Interactive 3D viewport powered by `ThreeWorldRenderer`, with Orbit and First-Person cameras, zoom, focus (`F`), movement speed control, 3D grid, XYZ axis indicators, transform handles, and roof/storey cutaway filters.
+- **Right panel:** Properties inspector for the selected object(s) or world environment (exact dimensions, materials, architectural styles, door/gate states and hinges, and IoT GPIO pin connections).
+- **Bottom panel:** Scene hierarchy tree, layer visibility/lock manager, object/complexity counters, autosave status, and contextual guidance.
+
+### The saved worlds
+
+`public/data/worlds.js` holds the saved worlds, reusable prefabs, and asset favourites (`tests/world-builder.test.mjs` verifies terrain sculpting, modular and footprint building construction, roads, IoT simulation, and project persistence).

@@ -78,6 +78,15 @@ const STORES = {
       typeof v.locations === 'object' &&
       (v.town === null || Array.isArray(v.town?.roads)),
   },
+  worlds: {
+    file: join(PUBLIC, 'data', 'worlds.js'),
+    about: 'Custom 3D worlds created in the World Builder',
+    valid: (v) =>
+      v?.version === 1 &&
+      Array.isArray(v.worlds) &&
+      Array.isArray(v.prefabs) &&
+      Array.isArray(v.favorites),
+  },
 };
 // three.js add-ons the editor uses (from the game's pinned three in node_modules), pointed at the
 // game's vendored three so both share one copy.

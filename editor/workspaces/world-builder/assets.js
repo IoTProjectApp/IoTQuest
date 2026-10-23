@@ -1741,6 +1741,15 @@ export function buildAssetInstance(model, obj, options = {}) {
     return { parts, colliders };
   }
 
+  // An imported model is drawn by the viewport; here it is only something to click: the model's
+  // own size once it has loaded (nearly invisible), a faint box while it loads.
+  if (kind.startsWith('imported/')) {
+    const size = options.importedSize;
+    if (size) addPart('box', [0, size[3], 0], size.slice(0, 3), '#4f9cf9', { opacity: 0.02 });
+    else addPart('box', [0, 0.5, 0], [1, 1, 1], '#8fa39b', { opacity: 0.35 });
+    return { parts, colliders };
+  }
+
   // Fallback box
   addPart('box', [0, 0.5, 0], [1, 1, 1], matColor || '#8fa39b');
   return { parts, colliders };

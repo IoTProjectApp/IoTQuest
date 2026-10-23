@@ -4,7 +4,7 @@ const { contextBridge, ipcRenderer } = require('electron');
 contextBridge.exposeInMainWorld('editorShell', {
   // Saved files by name: 'world-layout' (Map Editor), 'street-layout' (Street Editor),
   // 'characters', 'clips', 'models' and 'people' (Character Editor), 'quests' (Quest Editor),
-  // 'conversations' (Conversation Editor), 'cities' (City Editor).
+  // 'conversations' (Conversation Editor), 'cities' (City Editor), 'worlds' (World Builder).
   read: (store) => ipcRenderer.invoke('store:read', store),
   write: (store, value) => ipcRenderer.invoke('store:write', store, value),
   // The game in a play-test window, at a target (see public/editor-play.js) or the beginning.
@@ -19,6 +19,8 @@ contextBridge.exposeInMainWorld('editorShell', {
   openModel: () => ipcRenderer.invoke('model:open'),
   saveModel: (name, bytes) => ipcRenderer.invoke('model:save', name, bytes),
   removeModel: (name) => ipcRenderer.invoke('model:remove', name),
+  // World Builder models: one imported into a world, saved as public/models/worlds/<id>.glb.
+  saveWorldModel: (id, bytes) => ipcRenderer.invoke('world-model:save', id, bytes),
   setUnsaved: (value) => ipcRenderer.send('editor:unsaved', value),
   // Menu commands (save, undo, redo, playtest from here, playstart from the beginning) arrive as
   // named events.

@@ -191,27 +191,30 @@ export function worldToGrid(terrain, x, z) {
   return [gx, gz];
 }
 
-// Bilinearly interpolated terrain height at world (x, z).
+// Catmull-Rom weights: a curve through each height, smooth across cells (no creases at their
+// edges as straight-line blending gives).
+const catmullRom = (p0, p1, p2, p3, t) =>
+  p1 + 0.5 * t * (p2 - p0 + t * (2 * p0 - 5 * p1 + 4 * p2 - p3 + t * (3 * (p1 - p2) + p3 - p0)));
+// The ground's height at world (x, z): a smooth surface through each cell's height (taken at its
+// centre). Objects stand on it and the terrain is drawn from it, so they always agree.
 export function terrainHeightAt(terrain, x, z) {
   if (!terrain?.heights) return 0;
   const size = terrain.size || TERRAIN_SIZE;
   const extent = terrain.extent || TERRAIN_EXTENT;
   const cell = extent / size;
-  const fx = x / cell + size / 2 - 0.5;
-  const fz = z / cell + size / 2 - 0.5;
-  const x0 = Math.max(0, Math.min(size - 1, Math.floor(fx)));
-  const z0 = Math.max(0, Math.min(size - 1, Math.floor(fz)));
-  const x1 = Math.max(0, Math.min(size - 1, x0 + 1));
-  const z1 = Math.max(0, Math.min(size - 1, z0 + 1));
-  const tx = Math.max(0, Math.min(1, fx - x0));
-  const tz = Math.max(0, Math.min(1, fz - z0));
-  const h00 = terrain.heights[z0 * size + x0] || 0;
-  const h10 = terrain.heights[z0 * size + x1] || 0;
-  const h01 = terrain.heights[z1 * size + x0] || 0;
-  const h11 = terrain.heights[z1 * size + x1] || 0;
-  const h0 = h00 + (h10 - h00) * tx;
-  const h1 = h01 + (h11 - h01) * tx;
-  return Math.round((h0 + (h1 - h0) * tz) * 1000) / 1000;
+  const fx = Math.max(0, Math.min(size - 1, x / cell + size / 2 - 0.5));
+  const fz = Math.max(0, Math.min(size - 1, z / cell + size / 2 - 0.5));
+  const x1 = Math.min(size - 2, Math.floor(fx)),
+    z1 = Math.min(size - 2, Math.floor(fz));
+  const tx = fx - x1,
+    tz = fz - z1;
+  const at = (gx, gz) =>
+    terrain.heights[
+      Math.max(0, Math.min(size - 1, gz)) * size + Math.max(0, Math.min(size - 1, gx))
+    ] || 0;
+  const row = (gz) => catmullRom(at(x1 - 1, gz), at(x1, gz), at(x1 + 1, gz), at(x1 + 2, gz), tx);
+  const h = catmullRom(row(z1 - 1), row(z1), row(z1 + 1), row(z1 + 2), tz);
+  return Math.round(h * 1000) / 1000;
 }
 
 export function terrainPaintAt(terrain, x, z) {
@@ -419,27 +422,7 @@ export function buildTerrainMeshes(model, terrain) {
     rounded: false,
   });
 
-  // Terrain cells rendered as instanced boxes from baseFloor up to cell height
-  for (let gz = 0; gz < size; gz++) {
-    for (let gx = 0; gx < size; gx++) {
-      const i = gz * size + gx;
-      const h = terrain.heights[i] || 0;
-      const paintKey = terrain.paints[i] || 'grass';
-      const surface = SURFACE_PAINTS[paintKey] || SURFACE_PAINTS.grass;
-      const wx = (gx + 0.5 - size / 2) * cell;
-      const wz = (gz + 0.5 - size / 2) * cell;
-      const totalH = Math.max(0.2, h - baseFloor);
-      const cy = baseFloor + totalH / 2;
-
-      // Subtle checker shade variation so grid cells read clearly
-      model.mesh('box', [wx, cy, wz], [cell + 0.04, totalH, cell + 0.04], surface.color, {
-        roughness: surface.roughness,
-        surface: paintKey,
-        terrainCell: i,
-        rounded: false,
-      });
-    }
-  }
+  // The ground itself is one smooth mesh (terrainSurface), drawn by the viewport.
 
   // Global water level (if above -1.5m, e.g. island or coastal scenes)
   if (typeof terrain.waterLevel === 'number' && terrain.waterLevel > -1.5) {
@@ -478,4 +461,104 @@ export function buildTerrainMeshes(model, terrain) {
       rounded: false,
     });
   }
+}
+
+const rgb = (hex) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255);
+// The ground as one smooth mesh for drawing: `detail` vertices per cell, heights from
+// terrainHeightAt, normals from its slope, and each surface's colour blended into its neighbours.
+// A skirt round the edge reaches down to `floor`, so the land never looks hollow from the side.
+// Arrays as three.js takes them: positions, normals and colours per vertex, triangle indices.
+export function terrainSurface(terrain, { detail = 4, floor = -3 } = {}) {
+  const size = terrain.size || TERRAIN_SIZE;
+  const extent = terrain.extent || TERRAIN_EXTENT;
+  const cell = extent / size;
+  const n = size * detail + 1,
+    step = extent / (n - 1),
+    half = extent / 2;
+  const colours = Object.fromEntries(
+    Object.entries(SURFACE_PAINTS).map(([k, v]) => [k, rgb(v.color)]),
+  );
+  // A surface's colour at a point: its cell's, blended with the next cells' over the cell's width.
+  const colourAt = (x, z) => {
+    const fx = Math.max(0, Math.min(size - 1, x / cell + size / 2 - 0.5)),
+      fz = Math.max(0, Math.min(size - 1, z / cell + size / 2 - 0.5));
+    const x0 = Math.floor(fx),
+      z0 = Math.floor(fz),
+      x1 = Math.min(size - 1, x0 + 1),
+      z1 = Math.min(size - 1, z0 + 1),
+      tx = fx - x0,
+      tz = fz - z0;
+    const c = (gx, gz) => colours[terrain.paints[gz * size + gx]] || colours.grass;
+    const out = [0, 0, 0];
+    for (const [gx, gz, w] of [
+      [x0, z0, (1 - tx) * (1 - tz)],
+      [x1, z0, tx * (1 - tz)],
+      [x0, z1, (1 - tx) * tz],
+      [x1, z1, tx * tz],
+    ])
+      for (let k = 0; k < 3; k++) out[k] += c(gx, gz)[k] * w;
+    return out;
+  };
+  const heights = new Float32Array(n * n);
+  for (let j = 0; j < n; j++)
+    for (let i = 0; i < n; i++)
+      heights[j * n + i] = terrainHeightAt(terrain, i * step - half, j * step - half);
+  const positions = [],
+    normals = [],
+    colors = [],
+    indices = [];
+  for (let j = 0; j < n; j++)
+    for (let i = 0; i < n; i++) {
+      const x = i * step - half,
+        z = j * step - half,
+        h = (a, b) =>
+          heights[Math.max(0, Math.min(n - 1, b)) * n + Math.max(0, Math.min(n - 1, a))];
+      const dx = (h(i + 1, j) - h(i - 1, j)) / (2 * step),
+        dz = (h(i, j + 1) - h(i, j - 1)) / (2 * step),
+        len = Math.hypot(dx, 1, dz);
+      positions.push(x, heights[j * n + i], z);
+      normals.push(-dx / len, 1 / len, -dz / len);
+      colors.push(...colourAt(x, z));
+    }
+  for (let j = 0; j < n - 1; j++)
+    for (let i = 0; i < n - 1; i++) {
+      const a = j * n + i,
+        b = a + 1,
+        c = a + n,
+        d = c + 1;
+      indices.push(a, c, b, b, c, d);
+    }
+  // The skirt: each edge's top row joined to a copy at the floor, facing out.
+  const base = rgb('#5b6659');
+  const edges = [
+    [(t) => t, () => 0, [0, 0, -1]],
+    [() => n - 1, (t) => t, [1, 0, 0]],
+    [(t) => n - 1 - t, () => n - 1, [0, 0, 1]],
+    [() => 0, (t) => n - 1 - t, [-1, 0, 0]],
+  ];
+  for (const [col, row, normal] of edges) {
+    const first = positions.length / 3;
+    for (let t = 0; t < n; t++) {
+      const i = col(t),
+        j = row(t),
+        x = i * step - half,
+        z = j * step - half;
+      positions.push(x, heights[j * n + i], z, x, floor, z);
+      normals.push(...normal, ...normal);
+      colors.push(...base, ...base);
+    }
+    for (let t = 0; t < n - 1; t++) {
+      const top = first + t * 2,
+        bottom = top + 1,
+        nextTop = top + 2,
+        nextBottom = top + 3;
+      indices.push(top, nextTop, bottom, nextTop, nextBottom, bottom);
+    }
+  }
+  return {
+    positions: new Float32Array(positions),
+    normals: new Float32Array(normals),
+    colors: new Float32Array(colors),
+    indices: n * n + 8 * n > 65535 ? new Uint32Array(indices) : new Uint16Array(indices),
+  };
 }

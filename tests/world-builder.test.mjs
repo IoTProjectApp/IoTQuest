@@ -423,7 +423,7 @@ test('The shell saves World Builder models by safe id only, as binary glTF, atom
 });
 
 test('Terrain is one smooth surface that objects stand on exactly', async () => {
-  const { terrainSurface } = await import('../editor/workspaces/world-builder/terrain.js');
+  const { terrainSurface } = await import('../public/world-builder/terrain.js');
   const terrain = createTerrain('mountains', 7);
   const surface = terrainSurface(terrain, { detail: 4 });
   const n = terrain.size * 4 + 1;

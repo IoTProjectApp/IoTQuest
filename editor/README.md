@@ -76,6 +76,7 @@ The game builds its world in code (`public/world-model.js`, `public/regions.js`,
   - **Object** (`O`) opens the catalogue along the bottom, with tabs for Furniture, Garden, Buildings and Street, plus a search box. Click an item, then click in the world to place it. `R` turns it while placing, Shift-click places several, and `Esc` stops.
   - **Delete** (`X`) removes whatever you click.
   - **House** (`H`) edits the house itself: its walls, doorways and room floors (see below).
+  - **Terrain** (`T`), **Trees** (`P`), **Grass** (`L`) and **Water** (`W`) shape the land around the town: hills, painted ground, trees, long grass and flowers, ponds, streams and pools (see [Nature](#nature-terrain-trees-grass-and-water)).
   - **Camera** (`C`) only moves the view, so you cannot change anything by accident.
 - **Inspector** on the right:
   - When an object is selected, it shows the object's name, its id and whether it is as built, changed or added. You can type an exact position, turn, and width, height and depth in metres. **Focus**, **Duplicate**, **Reset** (back to how the code builds it) and **Delete** act on the object.
@@ -94,15 +95,16 @@ Some objects carry a caution in the inspector:
 
 Everything is edited as whole objects (an edit group). For example, moving a sofa moves its cushions, legs, shadow and collision box together.
 
-| Category  | Examples                                                                                                     | Ids                                                   |
-| --------- | ------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------- |
-| Furniture | Each piece of house furniture, each town furnishing (desks, shelves, equipment)                              | `furniture/sofa#1`, `town/furniture/office:desk0`     |
-| Garden    | Trees, beds, tank, pump, greenhouse, lanterns, fence sections, gate, paths, hedges, each city's own features | `garden/tree#4`, `garden/fence#12`, `garden/fountain` |
-| Buildings | Each town lot with what stands on it: shops, residences, the school, the park                                | `town/shop`, `town/residence3`                        |
-| Street    | Street lights and bus stops                                                                                  | `town/street-light#7`, `town/bus-stop#2`              |
-| Added     | Copies placed from the catalogue                                                                             | `added/1`                                             |
+| Category  | Examples                                                                                                     | Ids                                                     |
+| --------- | ------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------- |
+| Furniture | Each piece of house furniture, each town furnishing (desks, shelves, equipment)                              | `furniture/sofa#1`, `town/furniture/office:desk0`       |
+| Garden    | Trees, beds, tank, pump, greenhouse, lanterns, fence sections, gate, paths, hedges, each city's own features | `garden/tree#4`, `garden/fence#12`, `garden/fountain`   |
+| Buildings | Each town lot with what stands on it: shops, residences, the school, the park                                | `town/shop`, `town/residence3`                          |
+| Street    | Street lights and bus stops                                                                                  | `town/street-light#7`, `town/bus-stop#2`                |
+| Nature    | The landscape's trees, the lake (with its bank and shore stones) and the river                               | `landscape/tree#3`, `landscape/lake`, `landscape/river` |
+| Added     | Copies placed from the catalogue                                                                             | `added/1`                                               |
 
-The house's walls and floors are edited with the **House** tool (below). Not editable here: the house's roof, the landscape beyond the property, and moving people and vehicles. Roads, junctions and traffic signals are edited in the **Street Editor**.
+The house's walls and floors are edited with the **House** tool (below), and the land itself with the nature tools. Not editable here: the house's roof, the landscape's mountains, and moving people and vehicles. Roads, junctions and traffic signals are edited in the **Street Editor**.
 
 ### The House tool: walls and rooms
 
@@ -121,6 +123,24 @@ Each change is checked before it is made, and a change that fails is not made (t
 - walls are 0.3–2.5 m high, doorways 0.8–4 m wide, inside their wall and not overlapping.
 
 Furniture, windows and the household stay where they are: if a moved wall now runs through something, the inspector names it so you can move it with **Select**. Some cities rebuild part of the house in their own style (court houses, round houses): there the walls cannot move, but the walls they keep can change height, colour and doorways, and a city with no grid walls shows none.
+
+### Nature: terrain, trees, grass and water
+
+Four tools shape the land. In each, the left button paints or draws, **right-drag turns the view**, scroll zooms, and `[` `]` make the brush smaller and larger. A brush stroke, a drag or a drawn shape is one undo step; the world shows it as you go.
+
+- **Terrain** (`T`): **Raise**, **Lower**, **Flatten** (to the height where the stroke began) and **Smooth** the ground with a round, soft brush (size and strength in the inspector), or **Paint** it: meadow, dirt, sand, gravel or paving, or **Clear** to take paint away. Painted ground follows the hills, with edges as round as the brush.
+  - **Hills only rise on open land.** Anything built or placed keeps flat ground under it (houses, roads, pavements, lots, fences, furniture, added objects) and hills ease back around it over a few metres, so a hill can never bury a sofa or tip a road. Move something onto a hill and the hill makes room for it. Water keeps the ground under it at its own level.
+  - Steep slopes show bare rock; gentle ones, and every hill's foot, stay grassy. Hills go up to 30 m.
+  - The technician, the household, townspeople, devices and the camera all stand and walk on the hills, and the landscape's trees, rocks and mountains rise with them.
+- **Trees** (`P`): **Plant** one where you click, **Scatter** them with a brush (thickness in the inspector; they keep apart and stay off buildings, roads and paths), **Move** one by dragging it (click one to change its size or kind, or remove it), or **Remove** them with a brush. **Kind** offers broadleaf, eucalypt, conifer, palm and fruit trees, starting with the city's own; **Vary kind and size a little** mixes them. Move and Remove work on the trees the city is built with too (its garden and landscape trees), which are also edit groups the **Select** tool can move, turn, resize and delete.
+- **Grass** (`L`): paint **Long grass** or **Flowers**, or **Clear** them. Long grass is drawn as tufts of bending blades in three shades; flowers add heads in four colours. **How it grows here** sets the height, thickness and colour of the city's long grass.
+- **Water** (`W`):
+  - **Pond**: click round its edge, then click the first point (or double-click, or press Enter) to close it. Its outline is rounded, with a stony bank and shore stones.
+  - **Stream**: click along its course, then double-click or press Enter. It runs over the ground, hills included, at the width set in the inspector.
+  - **Pool**: drag from one corner to the other.
+  - **Change**: click water to pick it, then drag its points to reshape it. The inspector sets a stream's width, a pond's or pool's **water level** (blank: worked out from the ground), whether **people can wade in**, or removes it. `Delete` removes the picked water, or the last point while drawing.
+  - **Built with the city** lists the lake and the river: **Move…** picks it with the **Select** tool (move, turn, resize), **Remove** takes it away, and **Bring back** restores it. The river's flow follows it wherever it goes.
+  - Water stops people walking into it unless they may wade in.
 
 ### The saved layout
 
@@ -143,6 +163,19 @@ export default {
         "lines": {"divider-left": -7.6},
         "walls": {"back": {"height": 1.8, "color": "#d9c7a8", "openings": [{"at": -6, "width": 1.2}]}},
         "rooms": {"Kitchen": {"color": "#c9b79a"}}
+      },
+      "nature": {
+        "height": {"-45,0": 5.2, "-45,1": 4.8},
+        "paint": {"dirt": {"-150,40": 1, "-150,41": 0.55}},
+        "grass": {"-140,60": 0.8},
+        "flowers": {"-140,61": 0.6},
+        "lawn": {"height": 0.4, "colour": "#6f9a52", "density": 3},
+        "trees": [["eucalypt", -66.2, 3.1, 1.15]],
+        "water": [
+          {"kind": "pond", "pts": [[-60, 30], [-52, 28], [-49, 35], [-55, 40]]},
+          {"kind": "stream", "pts": [[-96, 20], [-90, 26], [-84, 30]], "width": 2.5},
+          {"kind": "pool", "pts": [[-64, 26], [-58, 31]], "level": 0.2, "walk": true}
+        ]
       }
     }
   }
@@ -153,6 +186,7 @@ export default {
 - `turn` is a turn about the vertical axis, in radians.
 - `scale` is the object's size: one factor (`1.25`) when it is resized evenly, or three (`[1.2, 1, 0.8]`) when it is stretched, for its width, height and depth along its own sides before it is turned.
 - Added objects carry their own parts, measured from their base centre, so they do not depend on the object they were copied from.
+- `nature` holds the hand-made land (`public/world-nature.js` describes it): hill heights on a 2 m grid (`"i,j"` is x = 2i, z = 2j, in metres up), painted ground and long grass and flowers on a half-metre grid (`"i,j"` is x = i / 2, z = j / 2, with a weight from 0.05 to 1; the edge is where it crosses one half), the long grass's height, colour and thickness, planted trees (`[kind, x, z, size]`), and water: a pond's outline, a stream's course and width, or a pool's two opposite corners, each with an optional `level` and `walk`. Nature is applied last, so hills give way around everything as it then stands. Something the game cannot take (an unknown tree kind, say) is left out and listed in `model.layoutWarnings`.
 - `house` holds changes to the house itself (`public/house-shell.js` describes them): where inner wall lines stand (`lines`, in metres on x or z), each wall's `height`, `color` and `openings` (doorways, by their middle and width), and each room floor's `color`. Only what differs is kept. The house is changed before objects are placed, so furniture stands where it was saved. If the house changes have a problem in a city (its code changed, say), the game leaves all of them out and lists why in `model.layoutWarnings`.
 
 With an empty file the game builds every world exactly as before; a test (`tests/world-layout.test.mjs`) checks that. When the game builds a city (`buildWorldModel` in `public/world3d.js`), `applyWorldLayout` in `public/world-layout.js` applies its changes.

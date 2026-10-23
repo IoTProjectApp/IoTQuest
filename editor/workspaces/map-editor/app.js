@@ -3,6 +3,7 @@ import { locations, locationById, continents } from '../../../public/locations.j
 import { WorldSession } from './session.js';
 import { Viewport, dimensions } from './viewport.js';
 import { catalogueItems, Thumbnails } from './catalogue.js';
+import { NatureTools, NATURE_TOOLS, isNatureTool } from './nature-tools.js';
 import { CATEGORIES } from './names.js';
 import { scaleOf } from '../../../public/world-layout.js';
 import {
@@ -30,6 +31,7 @@ const TOOLS = {
   object: { label: 'Object', icon: 'object' },
   erase: { label: 'Delete', icon: 'erase' },
   house: { label: 'House', icon: 'home' },
+  ...NATURE_TOOLS,
   camera: { label: 'Camera', icon: 'camera' },
 };
 const GIZMO = {
@@ -148,6 +150,33 @@ const viewport = new Viewport($('canvas'), {
     }
   },
 });
+// Terrain, Trees, Grass and Water (nature-tools.js).
+const nature = new NatureTools({
+  viewport,
+  session: () => state.session,
+  location: () => locationById(state.session?.locationId),
+  toast: (message, error) => toast(message, error),
+  redraw: () => {
+    renderInspector();
+    hint();
+  },
+});
+// "Move…" on the lake or the river: the Select tool, with it picked.
+nature.onSelectBuilt = (id) => {
+  const group = state.session.groups.get(id);
+  setTool('select');
+  if (group) {
+    select(group);
+    viewport.focus(group);
+  }
+};
+// The nature tool that changes a part of nature in the change list.
+const natureToolFor = (id) =>
+  /^nature:(height|paint)/.test(id)
+    ? 'terrain'
+    : /^nature:(grass|flowers)/.test(id)
+      ? 'grass'
+      : id.slice(7);
 $('canvas').addEventListener('pointermove', (e) => {
   const label = $('hover-label');
   label.style.left = e.offsetX + 'px';
@@ -219,12 +248,14 @@ function changed() {
   if (viewport.selected && !s.groups.has(viewport.selected.id)) viewport.select(null);
   if (viewport.selected?.hidden) viewport.select(null);
   viewport.refresh();
+  nature.refresh();
   renderInspector();
 }
 
 // ---- Tools ----------------------------------------------------------------------------------
 function setTool(tool) {
   state.tool = tool;
+  nature.setTool(tool);
   stopPlacing();
   viewport.setTool(tool);
   for (const b of $('tools').children) b.classList.toggle('active', b.dataset.tool === tool);
@@ -233,6 +264,7 @@ function setTool(tool) {
   if (tool === 'house') viewport.select(null);
   renderInspector();
   $('canvas').style.cursor = tool === 'erase' ? 'crosshair' : 'default';
+  if (isNatureTool(tool)) $('canvas').style.cursor = 'crosshair';
   if (tool === 'object') renderCatalogue();
   hint();
 }
@@ -261,6 +293,7 @@ for (const b of $('gizmo-modes').children)
 $('snap').addEventListener('click', () => setSnap(!viewport.snap));
 
 function hint() {
+  if (isNatureTool(state.tool)) return ($('hint').innerHTML = nature.hint());
   const keys = (...pairs) => pairs.map(([k, what]) => `<b>${k}</b> ${what}`).join(' · ');
   const text = state.placing
     ? keys(
@@ -369,6 +402,7 @@ function renderInspector() {
     el = $('inspector');
   if (!s) return;
   if (state.tool === 'house') return renderHouse(el);
+  if (isNatureTool(state.tool)) return nature.render(el);
   if (!group) {
     const list = s.changeList();
     el.innerHTML = `
@@ -398,6 +432,7 @@ function renderInspector() {
         <h3>Shortcuts</h3>
         <dl class="shortcuts">
           <dt><kbd>V</kbd> <kbd>O</kbd> <kbd>X</kbd> <kbd>C</kbd></dt><dd>Select, Object, Delete, Camera</dd>
+          <dt><kbd>T</kbd> <kbd>P</kbd> <kbd>L</kbd> <kbd>W</kbd></dt><dd>Terrain, Trees, Grass, Water</dd>
           <dt><kbd>G</kbd> <kbd>R</kbd> <kbd>S</kbd></dt><dd>Move, turn, size</dd>
           <dt><kbd>F</kbd></dt><dd>Focus on the selection</dd>
           <dt><kbd>⌘D</kbd></dt><dd>Duplicate</dd>
@@ -412,6 +447,11 @@ function renderInspector() {
         if (id.startsWith('house:')) {
           if (revert) s.resetHouse(id);
           else setTool('house');
+          return;
+        }
+        if (id.startsWith('nature:')) {
+          if (revert) s.resetNature(id);
+          else setTool(natureToolFor(id));
           return;
         }
         if (revert) {
@@ -815,14 +855,31 @@ document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') {
     if (state.placing) stopPlacing();
     else if (state.tool === 'house') onHouseBack();
+    else if (isNatureTool(state.tool)) nature.escape();
     else select(null);
     return;
+  }
+  if (isNatureTool(state.tool)) {
+    if (e.key === 'Enter') return nature.finishDrawing();
+    if (e.key === '[' || e.key === ']') return nature.resize(e.key === ']' ? 1 : -1);
+    if (e.key === 'Delete' || e.key === 'Backspace')
+      return (e.preventDefault(), nature.removePicked());
   }
   if (state.placing && key === 'r')
     return viewport.turnGhost(((e.shiftKey ? -1 : 1) * Math.PI) / 4);
   if ((e.key === 'Delete' || e.key === 'Backspace') && state.tool !== 'house')
     return removeSelected();
-  const tool = { v: 'select', o: 'object', x: 'erase', c: 'camera', h: 'house' }[key];
+  const tool = {
+    v: 'select',
+    o: 'object',
+    x: 'erase',
+    c: 'camera',
+    h: 'house',
+    t: 'terrain',
+    p: 'trees',
+    l: 'grass',
+    w: 'water',
+  }[key];
   if (tool) return setTool(tool);
   if (state.tool === 'select') {
     const mode = { g: 'translate', r: 'rotate', s: 'scale' }[key];

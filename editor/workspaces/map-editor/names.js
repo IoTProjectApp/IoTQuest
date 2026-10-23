@@ -1,7 +1,7 @@
 // Readable names, catalogue categories and cautions for the world's edit groups. Group ids come
 // from the world's builders (see public/world-layout.js): 'furniture/sofa#1', 'house/window#2',
 // 'garden/tree#4',
-// 'town/shop', 'town/furniture/office:desk0', 'town/street-light#12', 'added/3'.
+// 'town/shop', 'town/furniture/office:desk0', 'town/street-light#12', 'landscape/lake', 'added/3'.
 
 export const CATEGORIES = [
   { id: 'furniture', label: 'Furniture' },
@@ -9,6 +9,7 @@ export const CATEGORIES = [
   { id: 'garden', label: 'Garden' },
   { id: 'buildings', label: 'Buildings' },
   { id: 'street', label: 'Street' },
+  { id: 'nature', label: 'Nature' },
 ];
 
 const sentence = (text) => {
@@ -30,6 +31,8 @@ export function categoryOf(id) {
   if (id.startsWith('house/') || id.startsWith('furniture/blinds')) return 'house';
   if (id.startsWith('furniture/') || id.startsWith('town/furniture/')) return 'furniture';
   if (id.startsWith('garden/')) return 'garden';
+  // The landscape around the town: its trees, the lake and the river.
+  if (id.startsWith('landscape/')) return 'nature';
   if (id.startsWith('town/street-light') || id.startsWith('town/bus-stop')) return 'street';
   if (id.startsWith('town/')) return 'buildings';
   return 'garden';

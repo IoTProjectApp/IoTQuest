@@ -1,5 +1,5 @@
 import * as THREE from './vendor/three.module.min.js';
-import { geometry } from './world-geometry.js';
+import { geometry, retiredGeometry } from './world-geometry.js';
 import { ThreeCharacters } from './three-characters.js';
 import {
   VERTEX,
@@ -130,6 +130,14 @@ export class ThreeWorldRenderer {
     if (!this.skySuns.has(skySun)) this.skySuns.set(skySun, ++this.skySunCount);
     return this.skySuns.get(skySun);
   }
+  // Lets go of run-time shapes that have been replaced (see registerGeometry).
+  dropRetired() {
+    const keys = retiredGeometry();
+    for (this.retiredSeen ??= 0; this.retiredSeen < keys.length; this.retiredSeen++) {
+      this.geometries[keys[this.retiredSeen]]?.dispose();
+      delete this.geometries[keys[this.retiredSeen]];
+    }
+  }
   shape(key) {
     let g = this.geometries[key];
     if (!g) {
@@ -182,6 +190,7 @@ export class ThreeWorldRenderer {
     return mesh;
   }
   render(frame) {
+    this.dropRetired();
     const u = this.uniforms,
       { camera } = frame;
     this.three.setSize(frame.pixelWidth, frame.pixelHeight, false);

@@ -12,14 +12,14 @@ import {
   BRUSH_MODES,
   createTerrain,
   terrainHeightAt,
-} from '../editor/workspaces/world-builder/terrain.js';
+} from '../public/world-builder/terrain.js';
 import {
   ASSET_LIBRARY,
   ARCH_STYLES,
   MATERIAL_PRESETS,
   getAssetSpec,
   registerAssetPack,
-} from '../editor/workspaces/world-builder/assets.js';
+} from '../public/world-builder/assets.js';
 import {
   WorldBuilderSession,
   WORLD_PROJECT_FORMAT,

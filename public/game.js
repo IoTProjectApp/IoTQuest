@@ -83,6 +83,7 @@ import {
 import { buildProgressReport, progressFileName } from './progress-report.js';
 import { understandingQuestions, answerQuestion, understandingScore } from './understanding.js';
 import { readPlayTarget, findPerson, besidePerson } from './editor-play.js';
+import { WORLDS, worldSummaries, worldUrl } from './custom-worlds.js';
 const $ = (id) => document.getElementById(id);
 // The test copy at /dev/ (channel.js) saves separately so trying it never changes the main site's
 // progress. It starts from a copy of the main site's progress until it first saves.
@@ -100,7 +101,10 @@ const baseAreas = areas.map((a) => [...a]);
 const PLAY = readPlayTarget(globalThis.location?.search, {
   locationIds: locations.map((l) => l.id),
   questCount: missions.length,
+  worldIds: (WORLDS?.worlds || []).map((w) => String(w.id)),
 });
+// A play-test of a World Builder world: worlds play on their own page, which saves nothing either.
+if (PLAY?.world) globalThis.location.replace(worldUrl(PLAY.world, { editorPlay: true }));
 let saved = {};
 if (!PLAY)
   try {
@@ -4631,6 +4635,41 @@ $('freeExploration').onclick = () => {
   travelController?.refresh();
   save();
 };
+// Worlds built in the World Builder (data/worlds.js): a button beside the destinations lists them,
+// shown only when there are some.
+function setupCustomWorlds() {
+  const worlds = worldSummaries();
+  if (!worlds.length || !$('resumeLegacy')) return;
+  const button = document.createElement('button');
+  button.className = 'outline';
+  button.id = 'customWorlds';
+  button.textContent = 'Custom worlds · ' + worlds.length;
+  button.onclick = () =>
+    modal(
+      'Custom worlds',
+      '<p>Worlds built in the IoT Quest World Builder. Each opens on its own page, with its own ' +
+        'devices to program; progress there is kept for each world.</p><div class="custom-worlds">' +
+        worlds
+          .map(
+            (w) =>
+              '<a class="quest-option" href="' +
+              esc(worldUrl(w.id)) +
+              '"><span>🌍</span><div><strong>' +
+              esc(w.name) +
+              '</strong><small>' +
+              w.objects +
+              ' objects · ' +
+              w.sensors +
+              ' sensors · ' +
+              w.outputs +
+              ' outputs</small></div></a>',
+          )
+          .join('') +
+        '</div>',
+    );
+  $('resumeLegacy').after(button);
+}
+setupCustomWorlds();
 function applyLocalWeather(weather) {
   if (weather.locationId !== state.activeLocation) return;
   state.weatherByLocation[weather.locationId] = weather;

@@ -28,6 +28,7 @@ import { checkPredictions } from '../public/weather-quests.js';
 import { neededNow, situationReason } from '../public/situation.js';
 import { conversationHTML } from '../public/conversation-view.js';
 import { readPlayTarget, findPerson, besidePerson } from '../public/editor-play.js';
+import { WORLDS, worldSummaries, worldUrl } from '../public/custom-worlds.js';
 import { predictionHTML } from '../public/prediction-view.js';
 import { declutterLabels } from '../public/world-labels.js';
 import { attachAssist } from '../public/editor-assist.js';
@@ -432,6 +433,9 @@ function harness(
     readPlayTarget,
     findPerson,
     besidePerson,
+    WORLDS,
+    worldSummaries,
+    worldUrl,
     predictionHTML,
     declutterLabels,
     attachAssist,

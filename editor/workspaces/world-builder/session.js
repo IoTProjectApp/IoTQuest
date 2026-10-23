@@ -4,10 +4,8 @@
 // reusable prefabs, favourites, GLB/GLTF import metadata, and Play Mode IoT simulation.
 // Free of the DOM so it can be tested directly under Node.
 import { Runtime } from '../../../public/runtime.js';
-import { defaults, validate, program } from '../../../public/missions.js';
-import { baseEnv, ADC_SIGNALS, ADC_SCALE, programReading } from '../../../public/signals.js';
-import { prepareWorldMaterials } from '../../../public/world-materials.js';
-import { addSky } from '../../../public/sky.js';
+import { defaults, validate } from '../../../public/missions.js';
+import { ADC_SCALE, programReading } from '../../../public/signals.js';
 import {
   createTerrain,
   terrainHeightAt,
@@ -15,29 +13,29 @@ import {
   paintTerrain,
   flattenFootprint,
   generateScatterItems,
-  buildTerrainMeshes,
-} from './terrain.js';
+} from '../../../public/world-builder/terrain.js';
+import { ASSET_LIBRARY, getAssetSpec } from '../../../public/world-builder/assets.js';
 import {
-  ASSET_LIBRARY,
-  getAssetSpec,
-  getComponentSpec,
-  buildAssetInstance,
-  buildRoadMeshes,
-  sampleRoadPoints,
-} from './assets.js';
+  DEFAULT_LAYERS,
+  defaultEnvironment,
+  layerForKind,
+  normaliseWorld,
+  worldDevices,
+  assignPins,
+  starterCode,
+  runtimeEnv,
+  worldAgents,
+  stepWorldSim,
+  buildWorldScene,
+  prepareWorldScene,
+} from '../../../public/world-builder/world.js';
+
+// The world format, devices, simulation and scene are shared with the game (world.html).
+export { DEFAULT_LAYERS, defaultEnvironment };
 
 export const WORLD_PROJECT_FORMAT = 'iotquest-world-project';
 export const WORLD_PROJECT_VERSION = 1;
 export const COMPLEXITY_WARNING_LIMIT = 200;
-
-export const DEFAULT_LAYERS = [
-  { id: 'terrain', name: 'Terrain & Water', visible: true, locked: false },
-  { id: 'buildings', name: 'Buildings & Structure', visible: true, locked: false },
-  { id: 'furniture', name: 'Furniture & Decor', visible: true, locked: false },
-  { id: 'infrastructure', name: 'Roads & Infrastructure', visible: true, locked: false },
-  { id: 'nature', name: 'Nature & Vegetation', visible: true, locked: false },
-  { id: 'iot', name: 'IoT Components', visible: true, locked: false },
-];
 
 const clone = (v) => JSON.parse(JSON.stringify(v));
 const round = (v, p = 3) => Math.round((Number(v) || 0) * 10 ** p) / 10 ** p;
@@ -47,25 +45,6 @@ const slug = (s) =>
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '')
     .slice(0, 40) || 'world';
-
-export function defaultEnvironment() {
-  return {
-    timeOfDay: 11.5, // 0..24 hours
-    sunlight: 85, // 0..100
-    rain: 0, // 0..100
-    fog: 10, // 0..100
-    wind: 12, // km/h
-    temperature: 24, // °C
-    humidity: 50, // %
-    soilMoisture: 35, // 0..100 (ADC scaled in program)
-    waterLevel: 80, // 0..100
-    motion: 0, // 0 or 1
-    distance: 120, // cm
-    dust: 10, // 0..100 (smoke/gas/dust)
-    pressed: 0, // button/keypad
-    docked: 0, // rfid/dock
-  };
-}
 
 export function createStarterWorld({
   id = 'world-' + Date.now(),
@@ -182,50 +161,7 @@ export class WorldBuilderSession {
   }
 
   ensureWorldDefaults(w) {
-    if (!w) return;
-    w.version ??= 1;
-    w.units ||= 'm';
-    w.terrain ||= createTerrain('flat', 42);
-    w.terrain.waters ||= [];
-    w.objects ||= [];
-    w.roads ||= [];
-    w.groups ||= [];
-    w.importedAssets ||= [];
-    w.layers ||= clone(DEFAULT_LAYERS);
-    // A world can come from a file (Import Project): its numbers and names are made what the panels
-    // expect, so a hand-edited project can neither break them nor put markup in them.
-    const num = (v, fallback = 0) => (Number.isFinite(Number(v)) ? Number(v) : fallback);
-    const environment = defaultEnvironment();
-    for (const [k, v] of Object.entries(w.environment || {}))
-      if (k in environment) environment[k] = num(v, environment[k]);
-    w.environment = environment;
-    if (!['m', 'cm', 'ft'].includes(w.units)) w.units = 'm';
-    w.name = String(w.name ?? 'Imported World');
-    w.terrain.waterLevel = num(w.terrain.waterLevel, -2);
-    w.spawn = Array.isArray(w.spawn)
-      ? [0, 1, 2].map((i) => num(w.spawn[i]))
-      : [0, terrainHeightAt(w.terrain, 0, 12), 12];
-    for (const o of w.objects) {
-      o.id = String(o.id);
-      o.name = String(o.name ?? o.kind);
-      o.kind = String(o.kind ?? '');
-      o.pos = [0, 1, 2].map((i) => num(o.pos?.[i]));
-      o.turn = num(o.turn);
-      o.scale = Array.isArray(o.scale) ? [0, 1, 2].map((i) => num(o.scale[i], 1)) : num(o.scale, 1);
-      o.props ||= {};
-      if (o.props.color !== undefined && !/^#[0-9a-f]{6}$/i.test(o.props.color))
-        delete o.props.color;
-    }
-    for (const r of w.roads) r.width = num(r.width, 8);
-    w.iot ||= { board: 'ESP32', language: 'cpp', code: { cpp: '', python: '' } };
-    w.iot.board ||= 'ESP32';
-    w.iot.language ||= 'cpp';
-    w.iot.code ||= { cpp: '', python: '' };
-    this.assignDefaultPins(w);
-    if (!w.iot.code.cpp && !w.iot.code.python) {
-      w.iot.code.cpp = this.generateStarterCode('cpp', w);
-      w.iot.code.python = this.generateStarterCode('python', w);
-    }
+    normaliseWorld(w);
   }
 
   on(listener) {
@@ -476,12 +412,7 @@ export class WorldBuilderSession {
   }
 
   layerForKind(kind = '') {
-    if (kind.startsWith('building/') || kind.startsWith('modular/')) return 'buildings';
-    if (kind.startsWith('furniture/')) return 'furniture';
-    if (kind.startsWith('infra/')) return 'infrastructure';
-    if (kind.startsWith('nature/')) return 'nature';
-    if (kind.startsWith('iot/')) return 'iot';
-    return 'furniture';
+    return layerForKind(kind);
   }
 
   addObject(
@@ -917,67 +848,11 @@ export class WorldBuilderSession {
 
   // ---- IoT Integration & Programming ----
   iotDevices(w = this.world) {
-    const list = [];
-    for (const obj of w.objects || []) {
-      if (!obj.kind.startsWith('iot/') || obj.kind.startsWith('iot/board-')) continue;
-      const compId = obj.props?.componentId || obj.kind.slice(4);
-      const spec = getComponentSpec(compId);
-      if (!spec) continue;
-      list.push({
-        objectId: obj.id,
-        id: spec.id,
-        name: obj.name || spec.name,
-        signal: spec.signal,
-        output: !!spec.output,
-        analog: !!spec.analog,
-        resistor: spec.resistor,
-        pin: obj.props?.pin,
-        power: obj.props?.power !== false,
-        ground: obj.props?.ground !== false,
-        resistorConnected: obj.props?.resistorConnected !== false,
-        area: 'World Builder',
-      });
-    }
-    return list;
+    return worldDevices(w);
   }
 
   assignDefaultPins(w = this.world) {
-    const board = w.iot?.board || 'ESP32';
-    const analogPins = board === 'ESP32' ? [34, 35, 32, 33, 36, 39] : [26, 27, 28];
-    const digitalPins = board === 'ESP32' ? [27, 14, 13, 4, 16, 17] : [16, 17, 18, 19, 20, 21];
-    const outputPins =
-      board === 'ESP32'
-        ? [26, 25, 18, 19, 21, 22, 23, 5, 2, 15]
-        : [15, 14, 13, 12, 11, 10, 9, 8, 7, 6];
-    const allowed = new Set([...analogPins, ...digitalPins, ...outputPins]);
-    const used = new Set();
-    let a = 0,
-      d = 0,
-      o = 0;
-
-    for (const obj of w.objects || []) {
-      if (!obj.kind.startsWith('iot/') || obj.kind.startsWith('iot/board-')) continue;
-      const compId = obj.props?.componentId || obj.kind.slice(4);
-      const spec = getComponentSpec(compId);
-      if (!spec) continue;
-      obj.props ||= {};
-      const currentPin = Number(obj.props.pin);
-      if (
-        Number.isInteger(currentPin) &&
-        allowed.has(currentPin) &&
-        !used.has(currentPin) &&
-        (!spec.analog || analogPins.includes(currentPin))
-      ) {
-        used.add(currentPin);
-        continue;
-      }
-      const pool = spec.output ? outputPins : spec.analog ? analogPins : digitalPins;
-      let picked = pool.find((p) => !used.has(p));
-      if (picked === undefined)
-        picked = pool[(spec.output ? o++ : spec.analog ? a++ : d++) % pool.length];
-      obj.props.pin = picked;
-      used.add(picked);
-    }
+    assignPins(w);
   }
 
   setControllerBoard(board) {
@@ -1010,52 +885,7 @@ export class WorldBuilderSession {
   }
 
   generateStarterCode(language = this.world.iot.language, w = this.world) {
-    const devices = this.iotDevices(w);
-    const board = w.iot?.board || 'ESP32';
-    if (!devices.length) {
-      return language === 'cpp'
-        ? '// Place IoT sensors and actuators in the world, then program them here.\nvoid setup() {\n  Serial.begin(115200);\n}\n\nvoid loop() {\n  delay(200);\n}\n'
-        : '# Place IoT sensors and actuators in the world, then program them here.\nfrom machine import Pin, ADC\nimport time\n\nwhile True:\n    time.sleep_ms(200)\n';
-    }
-    const sensors = devices.filter((d) => !d.output && d.signal);
-    const outputs = devices.filter((d) => d.output);
-    const conditions = outputs.map((out) => {
-      if (sensors.some((s) => s.signal === 'light') && ['led', 'porch', 'rgb'].includes(out.id)) {
-        return 'light < 1800';
-      }
-      if (sensors.some((s) => s.signal === 'soil') && ['pump', 'valve'].includes(out.id)) {
-        return 'soil < 2400';
-      }
-      if (
-        sensors.some((s) => s.signal === 'motion') &&
-        ['led', 'porch', 'buzzer'].includes(out.id)
-      ) {
-        return 'motion == 1';
-      }
-      if (sensors.some((s) => s.signal === 'temp') && ['fan', 'ac'].includes(out.id)) {
-        return 'temp > 27';
-      }
-      if (sensors.some((s) => s.signal === 'distance') && ['servo', 'gate'].includes(out.id)) {
-        return 'distance < 50';
-      }
-      const s0 = sensors[0];
-      if (!s0) return 'true';
-      return ADC_SIGNALS.includes(s0.signal) ? `${s0.signal} < 2000` : `${s0.signal} == 1`;
-    });
-
-    const syntheticMission = {
-      title: w.name || 'World Builder Mission',
-      conditions,
-    };
-    // Deduplicate by signal for starter code generation while preserving device pins
-    const uniqueDevices = [];
-    const seenSignals = new Set();
-    for (const d of devices) {
-      if (!d.output && seenSignals.has(d.signal)) continue;
-      if (!d.output && d.signal) seenSignals.add(d.signal);
-      uniqueDevices.push(d);
-    }
-    return program(syntheticMission, language, uniqueDevices, true, board);
+    return starterCode(w, language);
   }
 
   // ---- Environment & Play Mode Simulation ----
@@ -1075,29 +905,11 @@ export class WorldBuilderSession {
 
   // Builds the runtime environment readings object expected by Runtime.step(env).
   currentRuntimeEnv() {
-    const envCfg =
+    return runtimeEnv(
       (this.mode === 'play' && this.simEnvironment) ||
-      this.world.environment ||
-      defaultEnvironment();
-    return {
-      ...baseEnv,
-      light: envCfg.sunlight ?? 80,
-      temp: envCfg.temperature ?? 24,
-      outdoorTemp: envCfg.temperature ?? 24,
-      humidity: envCfg.humidity ?? 50,
-      rain: envCfg.rain ?? 0,
-      wind: envCfg.wind ?? 12,
-      cloud: envCfg.fog ?? 10,
-      soil: envCfg.soilMoisture ?? 35,
-      tank: envCfg.waterLevel ?? 80,
-      pond: envCfg.waterLevel ?? 80,
-      motion: envCfg.motion ? 1 : 0,
-      occupied: envCfg.motion ? 1 : 0,
-      distance: envCfg.distance ?? 120,
-      dust: envCfg.dust ?? 10,
-      pressed: envCfg.pressed ? 1 : 0,
-      docked: envCfg.docked ? 1 : 0,
-    };
+        this.world.environment ||
+        defaultEnvironment(),
+    );
   }
 
   // Formatted human-readable simulated readings for the UI, clearly marked as simulated.
@@ -1132,17 +944,7 @@ export class WorldBuilderSession {
     this.simRunning = true;
 
     // Initialize vehicle & pedestrian simulation agents from placed objects
-    this.simAgents = this.world.objects
-      .filter((o) => o.kind === 'infra/vehicle-car' || o.kind === 'infra/pedestrian')
-      .map((o) => ({
-        objectId: o.id,
-        kind: o.kind,
-        pos: [...o.pos],
-        startPos: [...o.pos],
-        turn: o.turn || 0,
-        speed: Number(o.props?.speed) || (o.kind === 'infra/vehicle-car' ? 6 : 1.4),
-        progress: 0,
-      }));
+    this.simAgents = worldAgents(this.world);
 
     this.compileRuntime();
     this.stepSimulation(0.2);
@@ -1170,76 +972,8 @@ export class WorldBuilderSession {
 
   stepSimulation(dtSeconds = 0.2) {
     if (this.mode !== 'play' || !this.simRunning || this.simPaused) return;
-    this.simTime = round(this.simTime + dtSeconds, 2);
-
-    // Step microcontroller program
-    if (this.runtime) {
-      try {
-        const res = this.runtime.step(this.currentRuntimeEnv());
-        this.simOutputs = res.outputs || {};
-        if (res.logs?.length) {
-          this.simLogs.push(...res.logs);
-          if (this.simLogs.length > 40) this.simLogs.splice(0, this.simLogs.length - 40);
-        }
-      } catch (err) {
-        this.simError = err.message || String(err);
-      }
-    }
-
-    // Apply actuator outputs to world objects (e.g. servo/gate opens doors & gates, pump waters soil)
-    const devices = this.iotDevices();
-    const gateActive = devices.some(
-      (d) => ['servo', 'gate', 'motor'].includes(d.id) && (this.simOutputs[d.pin] || 0) > 0,
-    );
-    const pumpActive = devices.some(
-      (d) => ['pump', 'valve', 'valve2'].includes(d.id) && (this.simOutputs[d.pin] || 0) > 0,
-    );
-    const coolingActive = devices.some(
-      (d) => ['fan', 'ac'].includes(d.id) && (this.simOutputs[d.pin] || 0) > 0,
-    );
-
-    if (pumpActive && this.simEnvironment) {
-      this.simEnvironment.soilMoisture = Math.min(
-        100,
-        round(this.simEnvironment.soilMoisture + dtSeconds * 2, 1),
-      );
-    }
-    if (coolingActive && this.simEnvironment) {
-      this.simEnvironment.temperature = Math.max(
-        16,
-        round(this.simEnvironment.temperature - dtSeconds * 0.4, 1),
-      );
-    }
-
-    // Step road/path agents while obeying red traffic signals and avoiding collisions
-    const redSignalActive = devices.some(
-      (d) => ['red', 'red2', 'waitLight'].includes(d.id) && (this.simOutputs[d.pin] || 0) > 0,
-    );
-    const roads = this.world.roads || [];
-    for (const agent of this.simAgents) {
-      if (redSignalActive) continue;
-      if (roads.length) {
-        const road =
-          roads.find((r) =>
-            agent.kind === 'infra/pedestrian' ? r.kind === 'footpath' : r.kind !== 'footpath',
-          ) || roads[0];
-        const pts = sampleRoadPoints(road.points, road.curvature);
-        if (pts.length >= 2) {
-          agent.progress = (agent.progress + dtSeconds * agent.speed * 0.05) % 1;
-          const idx = Math.min(pts.length - 2, Math.floor(agent.progress * (pts.length - 1)));
-          const localT = agent.progress * (pts.length - 1) - idx;
-          const a = pts[idx],
-            b = pts[idx + 1];
-          const nx = a.x + (b.x - a.x) * localT;
-          const nz = a.z + (b.z - a.z) * localT;
-          const ny = terrainHeightAt(this.world.terrain, nx, nz);
-          agent.pos = [round(nx, 2), round(ny, 2), round(nz, 2)];
-          agent.turn = round(Math.atan2(b.x - a.x, b.z - a.z), 3);
-        }
-      }
-    }
-
-    this.rebuildSceneModel({ gateActive });
+    stepWorldSim(this, this.world, dtSeconds);
+    this.rebuildSceneModel();
   }
 
   pausePlayMode() {
@@ -1265,108 +999,20 @@ export class WorldBuilderSession {
   }
 
   // ---- 3D Scene Model Construction (Compatible with ThreeWorldRenderer) ----
-  rebuildSceneModel({ gateActive = false } = {}) {
+  rebuildSceneModel() {
     const w = this.world;
-    const objects = [];
-    const colliders = [];
-    const roofs = [];
-    const lamps = [];
+    const playing = this.mode === 'play';
+    const model = buildWorldScene(w, {
+      playing,
+      outputs: this.simOutputs,
+      agents: this.simAgents,
+      hideRoofs: this.hideRoofs,
+      maxVisibleStory: this.maxVisibleStory,
+    });
+    this.objectParts = model.objectParts;
 
-    const model = {
-      objects,
-      colliders,
-      roofs,
-      rooms: [],
-      lamps,
-      mesh(shape, pos, size, color, extra = {}) {
-        const m = {
-          shape,
-          pos: [...pos],
-          size: [...size],
-          color,
-          rotation: [0, 0, 0],
-          ...extra,
-        };
-        objects.push(m);
-        return m;
-      },
-      cylinder(x, y, z, r, h, color, extra = {}) {
-        return this.mesh('cylinder', [x, y, z], [r * 2, h, r * 2], color, extra);
-      },
-      sphere(x, y, z, r, color, extra = {}) {
-        return this.mesh('sphere', [x, y, z], [r * 2, r * 2, r * 2], color, extra);
-      },
-      floorHeight: (x, z) => terrainHeightAt(w.terrain, x, z),
-    };
-
-    const layerMap = new Map((w.layers || DEFAULT_LAYERS).map((l) => [l.id, l]));
-    const isLayerVisible = (layerId) => layerMap.get(layerId)?.visible !== false;
-
-    // 1. Sky
-    model.sky = addSky(model);
-
-    // 2. Terrain & Water
-    if (isLayerVisible('terrain')) {
-      buildTerrainMeshes(model, w.terrain);
-    }
-
-    // 2. Roads & Footpaths
-    if (isLayerVisible('infrastructure')) {
-      buildRoadMeshes(model, w.roads, w.terrain, terrainHeightAt);
-    }
-
-    // 3. Placed Objects (Buildings, Modular Parts, Furniture, Nature, IoT)
-    this.objectParts = new Map();
-    const activeOutputs = this.mode === 'play' ? this.simOutputs : {};
-    const anyLampOn = this.iotDevices(w).some(
-      (d) => ['led', 'porch', 'rgb', 'lightB'].includes(d.id) && (activeOutputs[d.pin] || 0) > 0,
-    );
-
-    for (const obj of w.objects || []) {
-      if (obj.hidden) continue;
-      if (!isLayerVisible(obj.layer || this.layerForKind(obj.kind))) continue;
-
-      // In Play Mode, sync dynamic agent positions and servo/gate door states
-      let instanceObj = obj;
-      if (this.mode === 'play') {
-        const agent = this.simAgents.find((a) => a.objectId === obj.id);
-        if (agent) {
-          instanceObj = { ...obj, pos: agent.pos, turn: agent.turn };
-        } else if (
-          gateActive &&
-          (obj.kind === 'modular/gate' ||
-            obj.kind === 'modular/door' ||
-            obj.kind === 'building/garage' ||
-            obj.props?.behavior === 'servo')
-        ) {
-          instanceObj = { ...obj, props: { ...(obj.props || {}), doorOpen: true } };
-        }
-      }
-
-      const built = buildAssetInstance(model, instanceObj, {
-        hideRoofs: this.hideRoofs,
-        maxVisibleStory: this.maxVisibleStory,
-        deviceOutputs: activeOutputs,
-      });
-      this.objectParts.set(obj.id, built.parts);
-
-      // Dynamic point lights for active lamps & streetlights in Play Mode
-      if (
-        (anyLampOn && obj.kind === 'furniture/streetlight') ||
-        (obj.kind.startsWith('iot/') &&
-          ['led', 'porch', 'rgb'].includes(obj.props?.componentId || obj.kind.slice(4)) &&
-          (activeOutputs[obj.props?.pin] || 0) > 0)
-      ) {
-        lamps.push({
-          pos: [instanceObj.pos[0], instanceObj.pos[1] + 2.2, instanceObj.pos[2]],
-          color: [1.0, 0.92, 0.72],
-          range: 9.5,
-        });
-      }
-    }
-
-    // 4. Spawn Marker (visible in Edit Mode)
-    if (this.mode === 'edit' && w.spawn) {
+    // Spawn Marker (visible in Edit Mode)
+    if (!playing && w.spawn) {
       const [sx, , sz] = w.spawn;
       const sy = terrainHeightAt(w.terrain, sx, sz);
       w.spawn[1] = sy;
@@ -1376,9 +1022,8 @@ export class WorldBuilderSession {
       });
     }
 
-    prepareWorldMaterials(model);
-    this.model = model;
-    return model;
+    this.model = prepareWorldScene(model);
+    return this.model;
   }
 
   // ---- Serialization & Export / Import ----

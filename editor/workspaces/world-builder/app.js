@@ -8,14 +8,14 @@ import {
   BRUSH_MODES,
   SCATTER_TYPES,
   createTerrain,
-} from './terrain.js';
+} from '../../../public/world-builder/terrain.js';
 import {
   ASSET_CATEGORIES,
   ARCH_STYLES,
   MATERIAL_PRESETS,
   ASSET_LIBRARY,
   getAssetSpec,
-} from './assets.js';
+} from '../../../public/world-builder/assets.js';
 import { WorldBuilderSession, COMPLEXITY_WARNING_LIMIT } from './session.js';
 import { WorldBuilderViewport } from './viewport.js';
 
@@ -1846,8 +1846,8 @@ async function playtestInGame(fromStart = false) {
     if (!confirm('Save changes before opening IoT Quest?')) return;
     if (!(await saveWorlds())) return;
   }
-  // Saved worlds are not played by the game yet: Play-test opens the game at home.
-  shell?.openGame(fromStart ? null : { city: 'legacy' });
+  // The game plays saved worlds on their own page (world.html), this one first.
+  shell?.openGame(fromStart ? null : { world: state.session?.activeWorldId });
 }
 
 function exportProjectFile() {

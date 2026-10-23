@@ -11,7 +11,7 @@ import { worldSunlight } from '../../../public/world-materials.js';
 import { updateSky } from '../../../public/sky.js';
 import { multiply, perspective, lookAt, screenRay } from '../../../public/world-math.js';
 import { partBounds } from '../../../public/world-layout.js';
-import { terrainHeightAt } from './terrain.js';
+import { terrainHeightAt } from '../../../public/world-builder/terrain.js';
 
 const FOV = 0.82;
 const ACCENT = 0x4f9cf9;

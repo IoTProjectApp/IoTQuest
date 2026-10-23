@@ -1,9 +1,10 @@
-// Expandable Asset Library and Procedural 3D Builders for the World Builder workspace.
+// Expandable Asset Library and Procedural 3D Builders for the World Builder workspace
+// (editor/workspaces/world-builder), shared with the game, which plays saved worlds (world.html).
 // Covers Ready-made buildings, Modular construction parts, Furniture & decor, Infrastructure,
 // Nature & vegetation, and IoT components. Free of DOM so it runs under Node.
-import { components } from '../../../public/missions.js';
-import { addDeviceDetails } from '../../../public/device-objects.js';
-import { buildTree, buildCrop } from '../../../public/vegetation.js';
+import { components } from '../missions.js';
+import { addDeviceDetails } from '../device-objects.js';
+import { buildTree, buildCrop } from '../vegetation.js';
 
 export const ARCHITECTURAL_STYLES = {
   contemporary: {

@@ -717,3 +717,15 @@ The **World Builder** (`editor/workspaces/world-builder/`) lets users create, ed
 ### The saved worlds
 
 `public/data/worlds.js` holds the saved worlds, reusable prefabs, and asset favourites (`tests/world-builder.test.mjs` verifies terrain sculpting, modular and footprint building construction, roads, IoT simulation, and project persistence).
+
+### Playing a world in the game
+
+Saved worlds are playable in the game. With any saved, the destination screen gets a **Custom worlds** button listing them; each opens on its own page, `world.html?id=<world id>` (`public/world-play.js`). **Play-test** opens the world being edited there (Shift-click: the game from the beginning).
+
+- **Same world, same code:** the terrain, assets, scene, devices, pins and simulation live in `public/world-builder/` (`terrain.js`, `assets.js`, `world.js`), which the World Builder imports too, so a world plays exactly as its Play Mode shows it.
+- **Walking:** the technician (dressed as in the game) walks with WASD or the arrow keys; drag to look round, scroll to zoom. Buildings and solid objects stop them, and the ground carries them over hills.
+- **What plays:** the devices are wired as the World Builder placed them, on its board. The student writes the program (C++ or MicroPython), starting from one with the pins, readings and outputs written and every decision left false, and runs it: lamps and streetlights light up, servos and gates open doors, pumps raise the soil moisture, fans cool, red signals stop the cars. Walking near a motion sensor is seen by it; **E** beside a button, keypad or card reader presses or scans it, and beside a door or gate opens or closes it. **Conditions** has the time of day, weather and readings to practise with.
+- **The mission:** **Check my program** runs the student's program and the world's own program (the one written in the World Builder's IoT Code tab, in its own language) in every combination of each sensor low and high, and passes when each output switches the same way. If the world's own program never switches anything on (never written after the devices were placed), the rules guessed from the devices are used.
+- **What is decorative:** objects without a device (furniture, buildings, nature), and devices with no effect in the scene beyond their own glow. Imported models are drawn when saved as a `models/….glb` file or packed in the world.
+- **Progress:** each world's program, language and pass are saved in the browser under `iotquest-worlds-v1`, apart from the game's own save, so a world can never change a player's game progress. A play-test from the editor reads and saves nothing.
+- **With no worlds saved, the game is exactly as before:** nothing is added to the page (`tests/world-play.test.mjs`).

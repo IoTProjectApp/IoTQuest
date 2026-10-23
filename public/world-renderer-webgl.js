@@ -1,5 +1,11 @@
 import { SURFACE, MATERIAL_GLSL, surfaceForMesh } from './world-materials.js';
-import { geometry, roundedObject, bevelKey, LOW_DETAIL_SHAPES } from './world-geometry.js';
+import {
+  geometry,
+  roundedObject,
+  bevelKey,
+  LOW_DETAIL_SHAPES,
+  retiredGeometry,
+} from './world-geometry.js';
 import { modelMatrix } from './world-math.js';
 // The world's WebGL 1 renderer: draws the model's objects (boxes, spheres and the other unit
 // shapes from world-geometry.js) with the game's own lighting and material shader. World3D
@@ -89,7 +95,9 @@ void main() {
   }
   float sun = max(0.0, dot(n, lightDir))*uSunStrength;
   float shade = groundShadow(n);
-  float groundContact = smoothstep(0.0, 0.38, vWorld.y);
+  // Near the ground things are a little darker; ground itself (emission -1: hand-made hills,
+  // world-nature.js) keeps the ground's shade however high it rises.
+  float groundContact = uEmission < -0.5 ? 0.0 : smoothstep(0.0, 0.38, vWorld.y);
   float ao = mix(0.76, 1.0, groundContact);
   float hemisphere = n.y * 0.5 + 0.5;
   vec3 skyDome = mix(vec3(0.18, 0.20, 0.25), vec3(0.38, 0.46, 0.56), hemisphere);
@@ -399,6 +407,16 @@ export class WebGLWorldRenderer {
   // (at most 8), objects }.
   render(frame) {
     const gl = this.gl;
+    // Run-time shapes that have been replaced (see registerGeometry) let their buffers go.
+    const retired = retiredGeometry();
+    for (this.retiredSeen ??= 0; this.retiredSeen < retired.length; this.retiredSeen++) {
+      const g = this.geometries[retired[this.retiredSeen]];
+      if (!g) continue;
+      gl.deleteBuffer(g.positions);
+      gl.deleteBuffer(g.normals);
+      delete this.geometries[retired[this.retiredSeen]];
+      if (this.drawState?.geometry === retired[this.retiredSeen]) this.drawState.geometry = null;
+    }
     gl.viewport(0, 0, frame.pixelWidth, frame.pixelHeight);
     gl.clearColor(...frame.fog, 1);
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);

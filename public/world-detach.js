@@ -4,7 +4,7 @@
 // the world is drawn exactly as built.
 //   - town details, walls and paving that stand on a lot join that lot ('town/<lot>');
 //   - trees join a group each ('town/tree#', 'landscape/tree#'), loose garden pieces too;
-//   - roads, traffic lights, the driveway, hills and water, the ground, the house's walls and
+//   - roads, traffic lights, the driveway, the town's hills, the ground, the house's walls and
 //     floors and the roof are locked: `editLock` names why (LOCKS).
 // People, animals, vehicles, the sky and anything hidden until the game shows it are left alone:
 // the game moves them itself.
@@ -25,9 +25,9 @@ export const LOCKS = {
     reason: 'The driveway runs from the garage to the street, so the car can still drive in.',
   },
   terrain: {
-    name: 'Hills and water',
+    name: 'Hills',
     reason:
-      'Hills, mountains, the river and the lake are part of the land, so they are shaped rather than moved.',
+      'Hills and mountains are part of the land: shape the ground with the Terrain tool instead of moving them.',
   },
   ground: {
     name: 'Ground',

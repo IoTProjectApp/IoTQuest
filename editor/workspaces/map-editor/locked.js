@@ -47,6 +47,7 @@ const ACTIONS = {
   wall: ['Edit it in the House tool', 'house'],
   street: ['Open the Street Editor', 'street'],
   traffic: ['Open the Street Editor', 'street'],
+  terrain: ['Open the Terrain tool', 'terrain'],
 };
 // The inspector for a locked part.
 export function lockedInspector(target, { escape, icon }) {

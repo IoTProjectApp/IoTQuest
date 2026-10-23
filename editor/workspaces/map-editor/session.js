@@ -23,6 +23,7 @@ import {
   LINE_NAMES,
 } from '../../../public/house-shell.js';
 import { applyAddedWalls, checkWalls, WALL_DEFAULTS } from '../../../public/added-walls.js';
+import { applyNature, hasNature, checkNature, GROUND } from '../../../public/world-nature.js';
 import { kindOf, nameOf, categoryOf, cautionFor } from './names.js';
 
 const round = (v, places) => Math.round(v * 10 ** places) / 10 ** places || 0;
@@ -218,6 +219,33 @@ export class WorldSession {
     });
     return problems;
   }
+  // ---- Hills, ground, grass, trees and water (see public/world-nature.js) ----
+  // Shows nature while a brush stroke or a drag goes on, without recording it.
+  previewNature(nature) {
+    this.natureProblems = applyNature(this.model, nature);
+  }
+  // Changes nature: `change(nature, changes)` edits a copy (and may change groups too, as
+  // removing a built tree does), as one undo step. Nature with problems is not saved.
+  editNature(label, change) {
+    const problems = [];
+    this.commit(label, (changes) => {
+      const nature = clone(changes.nature || {});
+      change(nature, changes);
+      problems.push(...checkNature(nature));
+      if (problems.length) return;
+      for (const key of ['height', 'grass', 'flowers'])
+        if (nature[key] && !Object.keys(nature[key]).length) delete nature[key];
+      for (const kind of Object.keys(nature.paint || {}))
+        if (!Object.keys(nature.paint[kind]).length) delete nature.paint[kind];
+      if (nature.paint && !Object.keys(nature.paint).length) delete nature.paint;
+      for (const key of ['trees', 'water'])
+        if (nature[key] && !nature[key].length) delete nature[key];
+      if (hasNature(nature) || nature.lawn) changes.nature = nature;
+      else delete changes.nature;
+    });
+    if (problems.length) this.previewNature(this.changes.nature);
+    return problems;
+  }
   // Problems to point out in the house as it now stands: furniture left inside a moved wall.
   houseWarnings() {
     return furnitureInWalls(this.model).map(({ group, wall }) => ({
@@ -286,6 +314,7 @@ export class WorldSession {
     this.changes = { edits: { ...changes.edits }, added: [...(changes.added || [])] };
     if (changes.house) this.changes.house = clone(changes.house);
     if (changes.walls?.length) this.changes.walls = clone(changes.walls);
+    if (changes.nature) this.changes.nature = clone(changes.nature);
     this.undoStack = [];
     this.redoStack = [];
     this.sync();
@@ -329,6 +358,8 @@ export class WorldSession {
       this.setHidden(group, !!edit?.removed);
       if (!same(placement, group.placement) || entry) this.preview(group.id, placement);
     }
+    // Nature last, as the game applies it: hills give way around everything as it now stands.
+    this.natureProblems = applyNature(this.model, this.changes.nature);
   }
   setHidden(group, hidden) {
     if (group.hidden === hidden) return;
@@ -363,7 +394,39 @@ export class WorldSession {
       list.push({ id: 'house:rooms:' + room, name: room + ' floor', what: 'Changed' });
     for (const wall of this.addedWalls())
       list.push({ id: 'wall:' + wall.id, name: wallName(wall.id), what: 'Added' });
+    const nature = this.changes.nature || {},
+      count = (o) => Object.keys(o || {}).length;
+    const natureItems = [
+      ['height', 'Hills', count(nature.height)],
+      ...Object.keys(GROUND).map((kind) => [
+        'paint.' + kind,
+        GROUND[kind].name + ' ground',
+        count(nature.paint?.[kind]),
+      ]),
+      ['grass', 'Long grass', count(nature.grass)],
+      ['flowers', 'Flowers', count(nature.flowers)],
+      ['trees', 'Planted trees', nature.trees?.length || 0],
+      ['water', 'Water', nature.water?.length || 0],
+    ];
+    for (const [part, name, n] of natureItems)
+      if (n)
+        list.push(
+          part === 'trees' || part === 'water'
+            ? { id: 'nature:' + part, name: `${name} (${n})`, what: 'Added' }
+            : { id: 'nature:' + part, name, what: 'Changed' },
+        );
     return list;
+  }
+  // Takes away one part of nature: 'nature:height', 'nature:paint.dirt', 'nature:trees'...
+  resetNature(id) {
+    const part = id.slice('nature:'.length);
+    return this.editNature(
+      'Reset ' + part.replace('paint.', '').replace('height', 'hills'),
+      (nature) => {
+        if (part.startsWith('paint.')) delete nature.paint?.[part.slice(6)];
+        else delete nature[part];
+      },
+    );
   }
   // Puts one house change back as built: 'house:lines:middle', 'house:walls:back'...
   resetHouse(id) {
@@ -374,8 +437,15 @@ export class WorldSession {
   }
   // The changes as saved: null when there are none, so the layout file stays clean.
   saved() {
-    const { edits, added, house, walls } = this.changes;
-    if (!Object.keys(edits).length && !added.length && !house && !walls?.length) return null;
-    return clone({ edits, added, ...(house && { house }), ...(walls?.length && { walls }) });
+    const { edits, added, house, walls, nature } = this.changes;
+    if (!Object.keys(edits).length && !added.length && !house && !walls?.length && !nature)
+      return null;
+    return clone({
+      edits,
+      added,
+      ...(house && { house }),
+      ...(walls?.length && { walls }),
+      ...(nature && { nature }),
+    });
   }
 }

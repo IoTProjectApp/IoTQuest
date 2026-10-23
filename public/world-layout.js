@@ -6,16 +6,19 @@
 //       edits: { [groupId]: { pos: [x, y, z], turn, scale } | { removed: true } },
 //       added: [{ id, name, pos: [x, y, z], turn, scale, parts: [...], colliders: [...] }],
 //       house: { lines, walls, rooms },
-//       walls: [{ id, from: [x, z], to: [x, z], height, thickness, color, openings }] } } }
+//       walls: [{ id, from: [x, z], to: [x, z], height, thickness, color, openings }],
+//       nature: { height, paint, grass, flowers, lawn, trees, water } } } }
 // `pos` is where the group's base centre goes (the middle of its footprint, at its lowest point),
 // `turn` a rotation about the vertical axis in radians, and `scale` its size: one factor, or
 // [across, up, along] factors on the group's own unturned x, y and z (stretching it). Added
 // objects carry their own parts, measured from a base centre at the origin. `house` changes the
-// walls and rooms themselves (see house-shell.js); `walls` are new walls, indoors or out (see
-// added-walls.js). An empty layout leaves the world exactly as built.
+// walls and rooms themselves (see house-shell.js), `walls` are new walls, indoors or out (see
+// added-walls.js), and `nature` the hills, ground, grass, trees and water (see world-nature.js).
+// An empty layout leaves the world exactly as built.
 import WORLD_LAYOUT from './data/world-layout.js';
 import { applyHouseShell } from './house-shell.js';
 import { applyAddedWalls } from './added-walls.js';
+import { applyNature } from './world-nature.js';
 
 export { WORLD_LAYOUT };
 
@@ -220,6 +223,9 @@ export function applyWorldLayout(model, locationId, layout = WORLD_LAYOUT) {
     else transformGroup(group, snapshotGroup(group), edit);
   }
   for (const entry of changes.added || []) addPlaced(model, entry);
+  // Nature last: hills give way around everything as it now stands.
+  for (const problem of applyNature(model, changes.nature))
+    model.layoutWarnings.push(`${locationId}: nature: ${problem}`);
   // Swaying foliage sways about where it now stands.
   for (const item of model.windObjects || [])
     if (item.mesh.editGroup) item.base = [...item.mesh.pos];

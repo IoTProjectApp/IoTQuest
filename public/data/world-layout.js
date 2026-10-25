@@ -136,23 +136,23 @@ export default {
         "furniture/toilet#1": {"pos": [-5.3, 0.23, -10.5], "turn": 0, "scale": 1},
         "furniture/vanity#1": {"pos": [-4.4, 0.238, -10.5], "turn": 0, "scale": 1},
         "furniture/bathroom-mirror#1": {"pos": [-4.4, 1.41, -10.788], "turn": 0, "scale": 1},
-        "furniture/kitchen-cabinets#1": {"pos": [-6.3, 0.2, -5.298], "turn": 0, "scale": [0.864, 1, 1]},
+        "furniture/kitchen-cabinets#1": {"pos": [-6.35, 0.2, -5.298], "turn": 0, "scale": [0.84, 1, 1]},
         "furniture/kitchen-sink#1": {"pos": [-7.2, 1.16, -5.315], "turn": 0, "scale": 1},
         "furniture/cooktop#1": {"pos": [-5.4, 1.131, -5.281], "turn": 0, "scale": 1},
-        "furniture/refrigerator#1": {"pos": [-4.05, 0.2, -5.3], "turn": 0, "scale": 1},
+        "furniture/refrigerator#1": {"pos": [-4.2, 0.2, -5.3], "turn": 0, "scale": 1},
         "garden/left-shrubs": {"pos": [-15.1, -0.2, -0.6], "turn": 0, "scale": 1},
         "garden/tree#2": {"pos": [-14.844, -0.011, -5.742], "turn": 0, "scale": 1},
         "furniture/bed#1": {"pos": [-11.3, 0.23, -8.7], "turn": -3.1416, "scale": 1},
         "furniture/blinds#1": {"pos": [-11.3, 0.805, -10.8], "turn": 0, "scale": 1},
         "furniture/table-lamp#1": {"pos": [-8.95, 0.9, -10.2], "turn": 0, "scale": 1},
         "furniture/nightstand#1": {"pos": [-8.95, 0.23, -10.2], "turn": 0, "scale": 1},
-        "furniture/laundry-machine#1": {"pos": [-1.7, 0.23, -10.1], "turn": 0, "scale": 1},
+        "furniture/laundry-machine#1": {"pos": [-1.6, 0.1, -10.3], "turn": 0, "scale": 1},
         "house/veranda": {"removed": true},
         "furniture/sofa#1": {"pos": [-11, 0.23, -3.5], "turn": 0, "scale": 1},
         "garden/picket-fence": {"removed": true},
         "garden/pump": {"pos": [11.55, 0.125, -1.9], "turn": 0, "scale": 1},
         "garden/flowers#5": {"removed": true},
-        "furniture/coffee-table#1": {"pos": [-9.875, 0.23, -3.82], "turn": -1.5708, "scale": 1},
+        "furniture/coffee-table#1": {"pos": [-10.4, 0.23, -3.82], "turn": -1.5708, "scale": 1},
         "furniture/television#1": {"pos": [-8.675, 0.238, -5.02], "turn": -3.1416, "scale": 1},
         "garden/stepping-stones": {"removed": true},
         "garden/gate": {"pos": [0, 0.1, 11.55], "turn": 0, "scale": 1},
@@ -163,7 +163,7 @@ export default {
         "garden/planting-bed": {"pos": [6, 0, 8.7], "turn": 0, "scale": 1},
         "garden/tree#9": {"pos": [8.978, -0.1, 10.452], "turn": 0, "scale": 1},
         "garden/tree#5": {"pos": [14.03, 0, 8.183], "turn": 0, "scale": 1},
-        "garden/greenhouse": {"pos": [9.9, -2.4, -7.5], "turn": 0, "scale": 1},
+        "garden/greenhouse": {"pos": [10.1, -2.4, -7.5], "turn": 0, "scale": 1},
         "garden/tree#3": {"pos": [-13.032, -0.1, 7.763], "turn": 0, "scale": 1},
         "garden/tree#4": {"pos": [-8.275, -0.1, 10.099], "turn": 0, "scale": 1},
         "town/furniture/residence1:bed": {"pos": [-11.6, 0.201, -48.281], "turn": 1.5604, "scale": 1},
@@ -175,10 +175,16 @@ export default {
         "town/furniture/residence1:garden-chair--1": {"removed": true},
         "furniture/storage-shelf#1": {"pos": [0.9, 0.23, -9.512], "turn": 0, "scale": 1},
         "town/detail#4": {"pos": [-11.5, 0.06, 1.2], "turn": 0, "scale": [0.583, 1, 0.792]},
-        "town/tree#1": {"pos": [-11.3, 0.1, 0.9], "turn": 0, "scale": 1},
+        "town/tree#1": {"pos": [-11.5, 0.1, 0.9], "turn": 0, "scale": 1},
         "garden/fence#25": {"pos": [-15.5, -0.5, -2.7], "turn": 0, "scale": 1},
         "garden/greenhouse-bed#1": {"pos": [8.7, 0, -7.2], "turn": 0, "scale": 1},
-        "landscape/river": {"pos": [-39.1, 0.5, 0.6], "turn": 0, "scale": [0.918, 0.987, 0.987]}
+        "landscape/river": {"pos": [-39.1, 0.5, 0.6], "turn": 0, "scale": [0.918, 0.987, 0.987]},
+        "house/window#3": {"pos": [-1.6, 0.8, -10.836], "turn": 0, "scale": 1},
+        "town/furniture/residence2:wardrobe": {"pos": [3.9, 0.2, -50.7], "turn": 1.5708, "scale": 1},
+        "town/furniture/residence2:bed": {"pos": [4.4, 0.201, -48.3], "turn": 1.5708, "scale": 1},
+        "town/furniture/residence2:sofa": {"pos": [7.7, -0.2, -49.5], "turn": 1.5708, "scale": 1},
+        "town/furniture/residence2:kitchen": {"pos": [10.2, 0.3, -53.231], "turn": 0, "scale": [0.735, 1, 1]},
+        "town/furniture/residence2:fridge": {"pos": [12.2, 0.2, -53.3], "turn": 0, "scale": 1}
       },
       "added": [
         {
@@ -500,10 +506,198 @@ export default {
             {"shape": "box", "color": "#849a89", "roughness": 1, "rounded": true, "material": "fabric", "pos": [1, 0.579, 0], "size": [0.21, 0.58, 1.25], "rotation": [0, 0, 0]}
           ],
           "colliders": []
+        },
+        {
+          "id": "added/11",
+          "name": "Dining table",
+          "kind": "furniture/dining-table",
+          "pos": [9.1, 0.2, -51.5],
+          "turn": 0,
+          "scale": 1,
+          "parts": [
+            {"shape": "sphere", "color": "#394641", "opacity": 0.12, "roughness": 1, "pos": [0, 0.012, 0], "size": [1.56, 0.008, 1.248], "rotation": [0, 0, 0]},
+            {"shape": "cylinder", "color": "#917252", "roughness": 0.55, "pos": [-0.615, 0.47, -0.48], "size": [0.09, 0.94, 0.09], "rotation": [0, 0, 0]},
+            {"shape": "cylinder", "color": "#917252", "roughness": 0.55, "pos": [-0.615, 0.47, 0.48], "size": [0.09, 0.94, 0.09], "rotation": [0, 0, 0]},
+            {"shape": "cylinder", "color": "#917252", "roughness": 0.55, "pos": [0.615, 0.47, -0.48], "size": [0.09, 0.94, 0.09], "rotation": [0, 0, 0]},
+            {"shape": "cylinder", "color": "#917252", "roughness": 0.55, "pos": [0.615, 0.47, 0.48], "size": [0.09, 0.94, 0.09], "rotation": [0, 0, 0]},
+            {"shape": "box", "color": "#937358", "rounded": true, "pos": [0, 1, 0], "size": [1.66, 0.12, 1.3], "rotation": [0, 0, 0]},
+            {"shape": "vase", "color": "#809b91", "roughness": 0.4, "pos": [0, 1.19, 0], "size": [0.2, 0.26, 0.2], "rotation": [0, 0, 0]}
+          ],
+          "colliders": [
+            {"x": 0, "z": 0, "w": 1.5, "d": 1.2}
+          ]
+        },
+        {
+          "id": "added/12",
+          "name": "Dining chair",
+          "kind": "furniture/dining-chair",
+          "pos": [8.3, 0.2, -51.7],
+          "turn": 0,
+          "scale": 1,
+          "parts": [
+            {"shape": "cylinder", "color": "#806750", "roughness": 0.55, "pos": [-0.18, 0.265, -0.18], "size": [0.09, 0.53, 0.09], "rotation": [0, 0, 0]},
+            {"shape": "cylinder", "color": "#806750", "roughness": 0.55, "pos": [-0.18, 0.265, 0.18], "size": [0.09, 0.53, 0.09], "rotation": [0, 0, 0]},
+            {"shape": "cylinder", "color": "#806750", "roughness": 0.55, "pos": [0.18, 0.265, -0.18], "size": [0.09, 0.53, 0.09], "rotation": [0, 0, 0]},
+            {"shape": "cylinder", "color": "#806750", "roughness": 0.55, "pos": [0.18, 0.265, 0.18], "size": [0.09, 0.53, 0.09], "rotation": [0, 0, 0]},
+            {"shape": "box", "color": "#ceb997", "rounded": true, "pos": [0, 0.57, 0], "size": [0.62, 0.1, 0.62], "rotation": [0, 0, 0]},
+            {"shape": "cylinder", "color": "#806750", "pos": [-0.27, 0.79, -0.23], "size": [0.052, 0.53, 0.052], "rotation": [0, 0, 0]},
+            {"shape": "cylinder", "color": "#806750", "pos": [-0.27, 0.79, 0.23], "size": [0.052, 0.53, 0.052], "rotation": [0, 0, 0]},
+            {"shape": "box", "color": "#bca488", "rounded": true, "pos": [-0.27, 0.92, 0], "size": [0.075, 0.31, 0.58], "rotation": [0, 0, 0]},
+            {"shape": "box", "color": "#8b8e75", "roughness": 1, "rounded": true, "pos": [0, 0.636, 0], "size": [0.53, 0.055, 0.53], "rotation": [0, 0, 0]}
+          ],
+          "colliders": []
+        },
+        {
+          "id": "added/13",
+          "name": "Dining chair",
+          "kind": "furniture/dining-chair",
+          "pos": [10.1, 0.2, -51.7],
+          "turn": -3.1416,
+          "scale": 1,
+          "parts": [
+            {"shape": "cylinder", "color": "#806750", "roughness": 0.55, "pos": [-0.18, 0.265, -0.18], "size": [0.09, 0.53, 0.09], "rotation": [0, 0, 0]},
+            {"shape": "cylinder", "color": "#806750", "roughness": 0.55, "pos": [-0.18, 0.265, 0.18], "size": [0.09, 0.53, 0.09], "rotation": [0, 0, 0]},
+            {"shape": "cylinder", "color": "#806750", "roughness": 0.55, "pos": [0.18, 0.265, -0.18], "size": [0.09, 0.53, 0.09], "rotation": [0, 0, 0]},
+            {"shape": "cylinder", "color": "#806750", "roughness": 0.55, "pos": [0.18, 0.265, 0.18], "size": [0.09, 0.53, 0.09], "rotation": [0, 0, 0]},
+            {"shape": "box", "color": "#ceb997", "rounded": true, "pos": [0, 0.57, 0], "size": [0.62, 0.1, 0.62], "rotation": [0, 0, 0]},
+            {"shape": "cylinder", "color": "#806750", "pos": [-0.27, 0.79, -0.23], "size": [0.052, 0.53, 0.052], "rotation": [0, 0, 0]},
+            {"shape": "cylinder", "color": "#806750", "pos": [-0.27, 0.79, 0.23], "size": [0.052, 0.53, 0.052], "rotation": [0, 0, 0]},
+            {"shape": "box", "color": "#bca488", "rounded": true, "pos": [-0.27, 0.92, 0], "size": [0.075, 0.31, 0.58], "rotation": [0, 0, 0]},
+            {"shape": "box", "color": "#8b8e75", "roughness": 1, "rounded": true, "pos": [0, 0.636, 0], "size": [0.53, 0.055, 0.53], "rotation": [0, 0, 0]}
+          ],
+          "colliders": []
+        },
+        {
+          "id": "added/14",
+          "name": "Table lamp",
+          "kind": "furniture/table-lamp",
+          "pos": [3.5, 0.8, -49.7],
+          "turn": 0,
+          "scale": 1,
+          "parts": [
+            {"shape": "cylinder", "color": "#b7a38d", "roughness": 0.25, "pos": [0, 0.02, 0], "size": [0.36, 0.04, 0.36], "rotation": [0, 0, 0]},
+            {"shape": "cylinder", "color": "#a4937b", "roughness": 0.25, "pos": [0, 0.25, 0], "size": [0.07, 0.43, 0.07], "rotation": [0, 0, 0]},
+            {"shape": "shade", "color": "#f7ecda", "roughness": 1, "pos": [0, 0.55, 0], "size": [0.52, 0.34, 0.52], "rotation": [0, 0, 0]}
+          ],
+          "colliders": []
+        },
+        {
+          "id": "added/15",
+          "name": "Nightstand",
+          "kind": "furniture/nightstand",
+          "pos": [3.6, 0.2, -49.6],
+          "turn": 1.5708,
+          "scale": 1,
+          "parts": [
+            {"shape": "sphere", "color": "#394641", "opacity": 0.12, "roughness": 1, "pos": [0, 0.012, -0.0192], "size": [0.676, 0.008, 0.728], "rotation": [0, 0, 0]},
+            {"shape": "cylinder", "color": "#615349", "roughness": 0.55, "pos": [-0.25, 0.1, -0.2892], "size": [0.09, 0.2, 0.09], "rotation": [0, 0, 0]},
+            {"shape": "cylinder", "color": "#615349", "roughness": 0.55, "pos": [-0.25, 0.1, 0.2508], "size": [0.09, 0.2, 0.09], "rotation": [0, 0, 0]},
+            {"shape": "cylinder", "color": "#615349", "roughness": 0.55, "pos": [0.25, 0.1, -0.2892], "size": [0.09, 0.2, 0.09], "rotation": [0, 0, 0]},
+            {"shape": "cylinder", "color": "#615349", "roughness": 0.55, "pos": [0.25, 0.1, 0.2508], "size": [0.09, 0.2, 0.09], "rotation": [0, 0, 0]},
+            {"shape": "box", "color": "#937358", "rounded": true, "pos": [0, 0.41, -0.0192], "size": [0.65, 0.43, 0.7], "rotation": [0, 0, 0]},
+            {"shape": "box", "color": "#c7ab8e", "rounded": true, "pos": [0, 0.33, 0.3408], "size": [0.58, 0.15, 0.035], "rotation": [0, 0, 0]},
+            {"shape": "box", "color": "#5b635f", "roughness": 0.25, "pos": [0, 0.33, 0.3708], "size": [0.16, 0.02, 0.025], "rotation": [0, 0, 0]},
+            {"shape": "box", "color": "#c7ab8e", "rounded": true, "pos": [0, 0.51, 0.3408], "size": [0.58, 0.15, 0.035], "rotation": [0, 0, 0]},
+            {"shape": "box", "color": "#5b635f", "roughness": 0.25, "pos": [0, 0.51, 0.3708], "size": [0.16, 0.02, 0.025], "rotation": [0, 0, 0]}
+          ],
+          "colliders": [
+            {"x": 0, "z": -0.0192, "w": 0.65, "d": 0.7}
+          ]
+        },
+        {
+          "id": "added/16",
+          "name": "Bathtub",
+          "kind": "furniture/bathtub",
+          "pos": [4.3, 0.1, -52.9],
+          "turn": 1.5708,
+          "scale": [0.814, 1, 0.827],
+          "parts": [
+            {"shape": "sphere", "color": "#394641", "opacity": 0.12, "roughness": 1, "pos": [0, 0.004, 0], "size": [1.352, 0.008, 2.236], "rotation": [0, 0, 0]},
+            {"shape": "box", "color": "#e8ede8", "roughness": 0.3, "rounded": true, "pos": [0, 0.132, 0], "size": [1.23, 0.22, 2.06], "rotation": [0, 0, 0]},
+            {"shape": "box", "color": "#f1f2e7", "roughness": 0.28, "rounded": true, "pos": [-0.57, 0.392, 0], "size": [0.17, 0.57, 2.06], "rotation": [0, 0, 0]},
+            {"shape": "box", "color": "#f1f2e7", "roughness": 0.28, "rounded": true, "pos": [0.57, 0.392, 0], "size": [0.17, 0.57, 2.06], "rotation": [0, 0, 0]},
+            {"shape": "box", "color": "#f1f2e7", "roughness": 0.28, "rounded": true, "pos": [0, 0.392, -0.98], "size": [1.3, 0.57, 0.19], "rotation": [0, 0, 0]},
+            {"shape": "box", "color": "#f1f2e7", "roughness": 0.28, "rounded": true, "pos": [0, 0.392, 0.98], "size": [1.3, 0.57, 0.19], "rotation": [0, 0, 0]},
+            {"shape": "box", "color": "#a6cfd2", "opacity": 0.7, "roughness": 0.2, "rounded": true, "pos": [0, 0.482, 0], "size": [0.99, 0.022, 1.77], "rotation": [0, 0, 0]},
+            {"shape": "cylinder", "color": "#b9c7ca", "roughness": 0.25, "pos": [0, 0.782, -1], "size": [0.052, 0.3, 0.052], "rotation": [0, 0, 0]},
+            {"shape": "cylinder", "color": "#b9c7ca", "roughness": 0.25, "pos": [0, 0.922, -0.925], "size": [0.05, 0.15, 0.05], "rotation": [1.5708, 0, 0]},
+            {"shape": "cylinder", "color": "#b9c7ca", "roughness": 0.25, "pos": [0, 0.882, -0.85], "size": [0.052, 0.08, 0.052], "rotation": [0, 0, 0]},
+            {"shape": "box", "color": "#ced7d8", "roughness": 0.25, "pos": [0.085, 0.802, -1], "size": [0.11, 0.025, 0.04], "rotation": [0, 0, 0]}
+          ],
+          "colliders": [
+            {"x": 0, "z": 0, "w": 1.3, "d": 2.15}
+          ]
+        },
+        {
+          "id": "added/17",
+          "name": "Bathroom mirror",
+          "kind": "furniture/bathroom-mirror",
+          "pos": [6.6, 1.5, -53.25],
+          "turn": 0,
+          "scale": 1,
+          "parts": [
+            {"shape": "box", "color": "#c0b5a1", "rounded": true, "pos": [0, 0.41, -0.0125], "size": [0.9, 0.82, 0.065], "rotation": [0, 0, 0]},
+            {"shape": "box", "color": "#adc6c9", "roughness": 0.15, "rounded": true, "pos": [0, 0.41, 0.0325], "size": [0.8, 0.72, 0.025], "rotation": [0, 0, 0]}
+          ],
+          "colliders": []
+        },
+        {
+          "id": "added/18",
+          "name": "Vanity",
+          "kind": "furniture/vanity",
+          "pos": [6.5, 0.2, -53.1],
+          "turn": 0,
+          "scale": 1,
+          "parts": [
+            {"shape": "sphere", "color": "#394641", "opacity": 0.12, "roughness": 1, "pos": [0, 0.004, -0.0213], "size": [0.78, 0.008, 0.78], "rotation": [0, 0, 0]},
+            {"shape": "box", "color": "#bba68c", "rounded": true, "pos": [0, 0.542, -0.0213], "size": [0.75, 0.95, 0.75], "rotation": [0, 0, 0]},
+            {"shape": "box", "color": "#d3c3ad", "pos": [0, 0.382, 0.3687], "size": [0.67, 0.28, 0.025], "rotation": [0, 0, 0]},
+            {"shape": "box", "color": "#7e8b87", "roughness": 0.25, "pos": [0, 0.382, 0.3937], "size": [0.2, 0.02, 0.035], "rotation": [0, 0, 0]},
+            {"shape": "box", "color": "#d3c3ad", "pos": [0, 0.702, 0.3687], "size": [0.67, 0.28, 0.025], "rotation": [0, 0, 0]},
+            {"shape": "box", "color": "#7e8b87", "roughness": 0.25, "pos": [0, 0.702, 0.3937], "size": [0.2, 0.02, 0.035], "rotation": [0, 0, 0]},
+            {"shape": "bowl", "color": "#f7f6ed", "roughness": 0.2, "pos": [0, 1.072, -0.0213], "size": [0.7, 0.24, 0.6], "rotation": [0, 0, 0]},
+            {"shape": "cylinder", "color": "#b9c7ca", "roughness": 0.25, "pos": [0, 1.222, -0.3013], "size": [0.052, 0.3, 0.052], "rotation": [0, 0, 0]},
+            {"shape": "cylinder", "color": "#b9c7ca", "roughness": 0.25, "pos": [0, 1.362, -0.2263], "size": [0.05, 0.15, 0.05], "rotation": [1.5708, 0, 0]},
+            {"shape": "cylinder", "color": "#b9c7ca", "roughness": 0.25, "pos": [0, 1.322, -0.1513], "size": [0.052, 0.08, 0.052], "rotation": [0, 0, 0]},
+            {"shape": "box", "color": "#ced7d8", "roughness": 0.25, "pos": [0.085, 1.242, -0.3013], "size": [0.11, 0.025, 0.04], "rotation": [0, 0, 0]}
+          ],
+          "colliders": [
+            {"x": 0, "z": -0.0213, "w": 0.75, "d": 0.75}
+          ]
+        },
+        {
+          "id": "added/19",
+          "name": "Television",
+          "kind": "furniture/television",
+          "pos": [12.25, 0.2, -49],
+          "turn": -3.1416,
+          "scale": 1,
+          "parts": [
+            {"shape": "sphere", "color": "#394641", "opacity": 0.12, "roughness": 1, "pos": [0, 0.004, 0], "size": [0.572, 0.008, 1.352], "rotation": [0, 0, 0]},
+            {"shape": "cylinder", "color": "#615349", "roughness": 0.55, "pos": [-0.18, 0.097, -0.55], "size": [0.09, 0.19, 0.09], "rotation": [0, 0, 0]},
+            {"shape": "cylinder", "color": "#615349", "roughness": 0.55, "pos": [-0.18, 0.097, 0.55], "size": [0.09, 0.19, 0.09], "rotation": [0, 0, 0]},
+            {"shape": "cylinder", "color": "#615349", "roughness": 0.55, "pos": [0.18, 0.097, -0.55], "size": [0.09, 0.19, 0.09], "rotation": [0, 0, 0]},
+            {"shape": "cylinder", "color": "#615349", "roughness": 0.55, "pos": [0.18, 0.097, 0.55], "size": [0.09, 0.19, 0.09], "rotation": [0, 0, 0]},
+            {"shape": "box", "color": "#937358", "rounded": true, "pos": [0, 0.362, 0], "size": [0.55, 0.34, 1.3], "rotation": [0, 0, 0]},
+            {"shape": "box", "color": "#333d40", "roughness": 0.25, "pos": [0, 0.552, 0], "size": [0.35, 0.035, 0.6], "rotation": [0, 0, 0]},
+            {"shape": "box", "color": "#333d40", "roughness": 0.25, "pos": [0, 0.742, 0], "size": [0.045, 0.35, 0.045], "rotation": [0, 0, 0]},
+            {"shape": "box", "color": "#222b30", "rounded": true, "pos": [0.02, 1.182, 0], "size": [0.055, 0.76, 1.28], "rotation": [0, 0, 0]},
+            {"shape": "box", "color": "#52727a", "roughness": 0.18, "pos": [0.053, 1.202, 0], "size": [0.01, 0.66, 1.17], "rotation": [0, 0, 0]},
+            {"shape": "box", "color": "#6d8990", "pos": [0.062, 1.322, -0.14], "size": [0.005, 0.18, 0.5], "rotation": [0.08, 0, 0]}
+          ],
+          "colliders": [
+            {"x": 0, "z": 0, "w": 0.55, "d": 1.3}
+          ]
         }
       ],
+      "house": {
+        "lines": {"divider-right": -3.7}
+      },
       "walls": [
-        {"id": "wall/1", "from": [-3.4, -6], "to": [-8.2, -6]}
+        {"id": "wall/1", "from": [-3.4, -6], "to": [-8.2, -6], "height": 0.95},
+        {"id": "wall/2", "from": [-3.7, -6.55], "to": [-3.7, -9.65], "height": 0.95},
+        {"id": "wall/4", "from": [7.4, -54.8], "to": [7.4, -51.9]},
+        {"id": "wall/5", "from": [5.45, -51.9], "to": [3.15, -51.9]}
       ],
       "nature": {
         "trees": [["broadleaf", -14.44, -0.65, 0.83]],

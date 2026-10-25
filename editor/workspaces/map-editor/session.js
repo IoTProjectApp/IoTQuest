@@ -1,0 +1,451 @@
+// One destination open in the editor: the world as the game builds it, the changes made to it
+// (in the saved layout's format, see public/world-layout.js) and their undo history. Free of the
+// DOM so it runs under Node in the tests.
+import { createRegionalModel } from '../../../public/regions.js';
+import { addCommunityWorld } from '../../../public/community-world.js';
+import { locationById } from '../../../public/locations.js';
+import { prepareWorldMaterials } from '../../../public/world-materials.js';
+import {
+  editGroups,
+  snapshotGroup,
+  transformGroup,
+  groupTemplate,
+  partBounds,
+  scaleOf,
+} from '../../../public/world-layout.js';
+import {
+  applyHouseShell,
+  checkHouse,
+  shellInfo,
+  wallSpecs,
+  furnitureInWalls,
+  WALL_NAMES,
+  LINE_NAMES,
+} from '../../../public/house-shell.js';
+import { applyAddedWalls, checkWalls, WALL_DEFAULTS } from '../../../public/added-walls.js';
+import { applyNature, hasNature, checkNature, GROUND } from '../../../public/world-nature.js';
+import { kindOf, nameOf, categoryOf, cautionFor } from './names.js';
+
+const round = (v, places) => Math.round(v * 10 ** places) / 10 ** places || 0;
+// Placements are stored to the millimetre and a hundredth of a degree, so saved files stay tidy. A
+// size the same every way is stored as one factor, a stretch as [across, up, along].
+export const tidy = ({ pos, turn = 0, scale = 1 }) => {
+  const size = scaleOf(scale).map((v) => round(v, 3));
+  return {
+    pos: pos.map((v) => round(v, 3)),
+    turn: round(turn, 4),
+    scale: size.every((v) => v === size[0]) ? size[0] : size,
+  };
+};
+// Within what tidy() rounds away: half a millimetre, half a ten-thousandth of a radian or factor.
+const same = (a, b) =>
+  a.pos.every((v, i) => Math.abs(v - b.pos[i]) <= 5e-4 + 1e-9) &&
+  Math.abs((a.turn || 0) - (b.turn || 0)) <= 5e-5 + 1e-9 &&
+  scaleOf(a.scale).every((v, i) => Math.abs(v - scaleOf(b.scale)[i]) <= 5e-4 + 1e-9);
+const clone = (value) => JSON.parse(JSON.stringify(value));
+const emptyChanges = () => ({ edits: {}, added: [] });
+// House changes without anything empty in them (a wall with no changes, no walls...), or null.
+export function tidyHouse(house) {
+  if (!house) return null;
+  const out = {};
+  const lines = Object.fromEntries(
+    Object.entries(house.lines || {}).map(([id, at]) => [id, round(at, 3)]),
+  );
+  if (Object.keys(lines).length) out.lines = lines;
+  for (const key of ['walls', 'rooms']) {
+    const entries = Object.entries(house[key] || {})
+      .map(([id, edit]) => [
+        id,
+        Object.fromEntries(Object.entries(edit).filter(([, v]) => v !== undefined && v !== null)),
+      ])
+      .filter(([, edit]) => Object.keys(edit).length);
+    if (entries.length) out[key] = Object.fromEntries(entries);
+  }
+  return Object.keys(out).length ? out : null;
+}
+
+// 'wall/3' → 'Added wall 3'.
+export const wallName = (id) => 'Added wall ' + id.split('/')[1];
+// A wall as saved: places to the millimetre, defaults left out, openings in order.
+export function tidyWall(wall) {
+  const out = {
+    id: wall.id,
+    from: wall.from.map((v) => round(v, 3)),
+    to: wall.to.map((v) => round(v, 3)),
+  };
+  for (const key of ['height', 'thickness'])
+    if (wall[key] !== undefined && round(wall[key], 3) !== WALL_DEFAULTS[key])
+      out[key] = round(wall[key], 3);
+  if (wall.color && wall.color.toLowerCase() !== WALL_DEFAULTS.color) out.color = wall.color;
+  if (wall.openings?.length)
+    out.openings = [...wall.openings]
+      .sort((a, b) => a.at - b.at)
+      .map((o) => ({ at: round(o.at, 3), width: round(o.width, 3), kind: o.kind || 'door' }));
+  return out;
+}
+
+export class WorldSession {
+  // `changes`: this destination's entry from the saved layout (or none).
+  constructor(locationId, changes) {
+    this.locationId = locationId || 'legacy';
+    this.model = createRegionalModel(this.locationId);
+    addCommunityWorld(this.model, locationById(this.locationId));
+    prepareWorldMaterials(this.model);
+    this.groups = new Map();
+    const built = editGroups(this.model),
+      counts = {};
+    for (const id of built.keys()) counts[kindOf(id)] = (counts[kindOf(id)] || 0) + 1;
+    for (const [id, group] of built) this.register(group, nameOf(id, counts[kindOf(id)]), id);
+    this.changes = emptyChanges();
+    this.undoStack = [];
+    this.redoStack = [];
+    this.listeners = new Set();
+    this.restore(changes ? clone(changes) : emptyChanges());
+  }
+  // Keeps a group with its original placement, from which every edit is applied.
+  register(group, name, kind, snapshot = snapshotGroup(group)) {
+    const { min, max } = partBounds(group.parts),
+      [px, py, pz] = snapshot.pivot;
+    Object.assign(group, {
+      name,
+      kind: kindOf(kind),
+      category: categoryOf(kind),
+      caution: cautionFor(kind),
+      snapshot,
+      // The group's box measured from its base centre, before any turn or scale.
+      box: {
+        min: [min[0] - px, min[1] - py, min[2] - pz],
+        max: [max[0] - px, max[1] - py, max[2] - pz],
+      },
+      original: { pos: [...snapshot.pivot], turn: 0, scale: 1 },
+      placement: { pos: [...snapshot.pivot], turn: 0, scale: 1 },
+      hidden: false,
+    });
+    this.groups.set(group.id, group);
+    return group;
+  }
+  on(listener) {
+    this.listeners.add(listener);
+    return () => this.listeners.delete(listener);
+  }
+  emit() {
+    for (const listener of this.listeners) listener(this);
+  }
+
+  // Shows a placement while it is being dragged, without recording it.
+  preview(id, placement) {
+    const group = this.groups.get(id);
+    transformGroup(group, group.snapshot, placement);
+    group.placement = { ...placement, pos: [...placement.pos] };
+  }
+  move(id, placement, label = 'Move') {
+    const group = this.groups.get(id),
+      tidied = tidy(placement);
+    this.commit(label + ' ' + group.name, (changes) => {
+      const added = changes.added.find((a) => a.id === id);
+      if (added) Object.assign(added, tidied);
+      else if (same(tidied, group.original)) delete changes.edits[id];
+      else changes.edits[id] = tidied;
+    });
+  }
+  remove(id) {
+    const group = this.groups.get(id);
+    this.commit('Remove ' + group.name, (changes) => {
+      if (id.startsWith('added/')) changes.added = changes.added.filter((a) => a.id !== id);
+      else changes.edits[id] = { removed: true };
+    });
+  }
+  // ---- The house's walls and rooms (see public/house-shell.js) ----
+  // What the House tool can change here: { whole, walls, rooms }.
+  houseInfo() {
+    return shellInfo(this.model);
+  }
+  // Every wall as the house now stands.
+  walls() {
+    return wallSpecs(this.model, this.changes.house || {});
+  }
+  // Shows house changes while a wall is dragged, without recording them.
+  previewHouse(house) {
+    applyHouseShell(this.model, house);
+  }
+  // Changes the house: `change(house)` edits a copy. Changes with problems are not made; their
+  // problems are returned instead.
+  editHouse(label, change) {
+    const house = clone(this.changes.house || {});
+    change(house);
+    const tidied = tidyHouse(house),
+      problems = checkHouse(this.model, tidied).filter((p) => p.error);
+    if (problems.length) {
+      // Put back what a drag may have shown.
+      applyHouseShell(this.model, this.changes.house);
+      return problems;
+    }
+    this.commit(label, (changes) => {
+      if (tidied) changes.house = tidied;
+      else delete changes.house;
+    });
+    return [];
+  }
+  // ---- Walls added by hand (see public/added-walls.js) ----
+  addedWalls() {
+    return this.changes.walls || [];
+  }
+  addedWall(id) {
+    return this.addedWalls().find((w) => w.id === id);
+  }
+  nextWallId() {
+    let n = 1;
+    for (const w of this.addedWalls()) n = Math.max(n, Number(w.id.split('/')[1]) + 1 || n);
+    return 'wall/' + n;
+  }
+  // Shows walls as they are drawn or dragged, without checking or recording them.
+  previewWalls(walls) {
+    applyAddedWalls(this.model, walls, { check: false });
+  }
+  // Changes the added walls: `change(walls)` edits a copy (a list). Changes with problems are not
+  // made; their problems are returned instead (warnings are returned with a change that is made).
+  editWalls(label, change) {
+    const walls = clone(this.addedWalls());
+    change(walls);
+    const tidied = walls.map(tidyWall),
+      problems = checkWalls(this.model, tidied);
+    if (problems.some((p) => p.error)) {
+      applyAddedWalls(this.model, this.changes.walls);
+      return problems.filter((p) => p.error);
+    }
+    this.commit(label, (changes) => {
+      if (tidied.length) changes.walls = tidied;
+      else delete changes.walls;
+    });
+    return problems;
+  }
+  // ---- Hills, ground, grass, trees and water (see public/world-nature.js) ----
+  // Shows nature while a brush stroke or a drag goes on, without recording it.
+  previewNature(nature) {
+    this.natureProblems = applyNature(this.model, nature);
+  }
+  // Changes nature: `change(nature, changes)` edits a copy (and may change groups too, as
+  // removing a built tree does), as one undo step. Nature with problems is not saved.
+  editNature(label, change) {
+    const problems = [];
+    this.commit(label, (changes) => {
+      const nature = clone(changes.nature || {});
+      change(nature, changes);
+      problems.push(...checkNature(nature));
+      if (problems.length) return;
+      for (const key of ['height', 'grass', 'flowers'])
+        if (nature[key] && !Object.keys(nature[key]).length) delete nature[key];
+      for (const kind of Object.keys(nature.paint || {}))
+        if (!Object.keys(nature.paint[kind]).length) delete nature.paint[kind];
+      if (nature.paint && !Object.keys(nature.paint).length) delete nature.paint;
+      for (const key of ['trees', 'water'])
+        if (nature[key] && !nature[key].length) delete nature[key];
+      if (hasNature(nature) || nature.lawn) changes.nature = nature;
+      else delete changes.nature;
+    });
+    if (problems.length) this.previewNature(this.changes.nature);
+    return problems;
+  }
+  // Problems to point out in the house as it now stands: furniture left inside a moved wall.
+  houseWarnings() {
+    return furnitureInWalls(this.model).map(({ group, wall }) => ({
+      group,
+      text: `${this.groups.get(group)?.name || group} is inside the ${WALL_NAMES[wall].toLowerCase()}. Move it with Select.`,
+    }));
+  }
+  // Back to how the code builds it.
+  reset(id) {
+    const group = this.groups.get(id);
+    this.commit('Reset ' + group.name, (changes) => delete changes.edits[id]);
+  }
+  // Adds a copy of `source` (a group) at `placement`; returns the new group's id.
+  add(source, placement) {
+    const id = 'added/' + this.nextAddedId(),
+      { parts, colliders } = groupTemplate(source, source.snapshot);
+    this.commit('Add ' + nameOf(source.kind, 1), (changes) =>
+      changes.added.push({
+        id,
+        name: nameOf(source.kind, 1),
+        kind: source.kind,
+        ...tidy(placement),
+        parts,
+        colliders,
+      }),
+    );
+    return id;
+  }
+  nextAddedId() {
+    let n = 1;
+    for (const a of this.changes.added) n = Math.max(n, Number(a.id.split('/')[1]) + 1 || n);
+    for (const id of this.groups.keys())
+      if (id.startsWith('added/')) n = Math.max(n, Number(id.split('/')[1]) + 1 || n);
+    return n;
+  }
+
+  commit(label, change) {
+    const before = clone(this.changes);
+    change(this.changes);
+    if (JSON.stringify(before) === JSON.stringify(this.changes)) return;
+    this.undoStack.push({ label, changes: before });
+    this.redoStack = [];
+    this.sync();
+    this.emit();
+  }
+  undo() {
+    const step = this.undoStack.pop();
+    if (!step) return null;
+    this.redoStack.push({ label: step.label, changes: clone(this.changes) });
+    this.changes = step.changes;
+    this.sync();
+    this.emit();
+    return step.label;
+  }
+  redo() {
+    const step = this.redoStack.pop();
+    if (!step) return null;
+    this.undoStack.push({ label: step.label, changes: clone(this.changes) });
+    this.changes = step.changes;
+    this.sync();
+    this.emit();
+    return step.label;
+  }
+  // Replaces all changes (opening a destination, or discarding edits) without undo history.
+  restore(changes) {
+    this.changes = { edits: { ...changes.edits }, added: [...(changes.added || [])] };
+    if (changes.house) this.changes.house = clone(changes.house);
+    if (changes.walls?.length) this.changes.walls = clone(changes.walls);
+    if (changes.nature) this.changes.nature = clone(changes.nature);
+    this.undoStack = [];
+    this.redoStack = [];
+    this.sync();
+    this.emit();
+  }
+
+  // Brings the model in line with this.changes: placements, removals and added copies.
+  sync() {
+    const { edits, added } = this.changes;
+    // Saved house changes this city cannot take (a problem found on opening) are listed.
+    this.houseProblems = applyHouseShell(this.model, this.changes.house);
+    this.wallProblems = applyAddedWalls(this.model, this.changes.walls);
+    this.missing = Object.keys(edits).filter((id) => !this.groups.has(id));
+    const wanted = new Map(added.map((a) => [a.id, a]));
+    for (const [id, group] of [...this.groups]) {
+      if (!id.startsWith('added/')) continue;
+      const entry = wanted.get(id);
+      // A copy whose parts changed (re-added after undo) is rebuilt.
+      if (!entry || group.entry !== entry.parts) {
+        this.setHidden(group, true);
+        this.groups.delete(id);
+      }
+    }
+    for (const entry of added)
+      if (!this.groups.has(entry.id)) {
+        const parts = entry.parts.map(({ shape, pos, size, color, rotation, ...looks }) =>
+            this.model.mesh(shape, pos, size, color, {
+              ...looks,
+              rotation: [...rotation],
+              editGroup: entry.id,
+              added: true,
+            }),
+          ),
+          group = { id: entry.id, parts, colliders: [], pivot: [0, 0, 0] };
+        this.register(group, entry.name, entry.kind || entry.id).entry = entry.parts;
+      }
+    for (const group of this.groups.values()) {
+      const entry = wanted.get(group.id),
+        edit = entry || edits[group.id],
+        placement = edit && !edit.removed ? edit : group.original;
+      this.setHidden(group, !!edit?.removed);
+      if (!same(placement, group.placement) || entry) this.preview(group.id, placement);
+    }
+    // Nature last, as the game applies it: hills give way around everything as it now stands.
+    this.natureProblems = applyNature(this.model, this.changes.nature);
+  }
+  setHidden(group, hidden) {
+    if (group.hidden === hidden) return;
+    group.hidden = hidden;
+    const objects = this.model.objects;
+    if (hidden) {
+      const gone = new Set(group.parts);
+      objects.splice(0, objects.length, ...objects.filter((m) => !gone.has(m)));
+    } else objects.push(...group.parts);
+  }
+
+  isChanged(id) {
+    return id.startsWith('added/') || id in this.changes.edits;
+  }
+  // Every change in this destination, for the inspector's list.
+  changeList() {
+    const list = [];
+    for (const [id, edit] of Object.entries(this.changes.edits))
+      list.push({
+        id,
+        name: this.groups.get(id)?.name || id,
+        what: edit.removed ? 'Removed' : 'Changed',
+        missing: !this.groups.has(id),
+      });
+    for (const a of this.changes.added) list.push({ id: a.id, name: a.name, what: 'Added' });
+    const house = this.changes.house || {};
+    for (const line of Object.keys(house.lines || {}))
+      list.push({ id: 'house:lines:' + line, name: 'Moved ' + LINE_NAMES[line], what: 'Changed' });
+    for (const wall of Object.keys(house.walls || {}))
+      list.push({ id: 'house:walls:' + wall, name: WALL_NAMES[wall] || wall, what: 'Changed' });
+    for (const room of Object.keys(house.rooms || {}))
+      list.push({ id: 'house:rooms:' + room, name: room + ' floor', what: 'Changed' });
+    for (const wall of this.addedWalls())
+      list.push({ id: 'wall:' + wall.id, name: wallName(wall.id), what: 'Added' });
+    const nature = this.changes.nature || {},
+      count = (o) => Object.keys(o || {}).length;
+    const natureItems = [
+      ['height', 'Hills', count(nature.height)],
+      ...Object.keys(GROUND).map((kind) => [
+        'paint.' + kind,
+        GROUND[kind].name + ' ground',
+        count(nature.paint?.[kind]),
+      ]),
+      ['grass', 'Long grass', count(nature.grass)],
+      ['flowers', 'Flowers', count(nature.flowers)],
+      ['trees', 'Planted trees', nature.trees?.length || 0],
+      ['water', 'Water', nature.water?.length || 0],
+    ];
+    for (const [part, name, n] of natureItems)
+      if (n)
+        list.push(
+          part === 'trees' || part === 'water'
+            ? { id: 'nature:' + part, name: `${name} (${n})`, what: 'Added' }
+            : { id: 'nature:' + part, name, what: 'Changed' },
+        );
+    return list;
+  }
+  // Takes away one part of nature: 'nature:height', 'nature:paint.dirt', 'nature:trees'...
+  resetNature(id) {
+    const part = id.slice('nature:'.length);
+    return this.editNature(
+      'Reset ' + part.replace('paint.', '').replace('height', 'hills'),
+      (nature) => {
+        if (part.startsWith('paint.')) delete nature.paint?.[part.slice(6)];
+        else delete nature[part];
+      },
+    );
+  }
+  // Puts one house change back as built: 'house:lines:middle', 'house:walls:back'...
+  resetHouse(id) {
+    const [, key, part] = id.split(':');
+    return this.editHouse('Reset ' + (key === 'lines' ? LINE_NAMES[part] : part), (house) => {
+      delete house[key]?.[part];
+    });
+  }
+  // The changes as saved: null when there are none, so the layout file stays clean.
+  saved() {
+    const { edits, added, house, walls, nature } = this.changes;
+    if (!Object.keys(edits).length && !added.length && !house && !walls?.length && !nature)
+      return null;
+    return clone({
+      edits,
+      added,
+      ...(house && { house }),
+      ...(walls?.length && { walls }),
+      ...(nature && { nature }),
+    });
+  }
+}

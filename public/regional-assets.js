@@ -259,8 +259,11 @@ export function buildDestinationModel(id) {
       box(cx + 0.8, 0.56, cz + 0.4, 0.7, 0.8, 0.7, '#ae9773');
     };
     // Servo-driven woven shutter inside the first room's rear wall replaces the removed blinds.
-    const shutter = (cx, cz, r) =>
-      (m.dynamic.blinds = box(cx, 0.85, cz - r + 0.22, 1.2, 0.83, 0.05, '#c6ad83'));
+    const shutter = (cx, cz, r) => {
+      m.tag('house/shutter');
+      m.dynamic.blinds = box(cx, 0.85, cz - r + 0.22, 1.2, 0.83, 0.05, '#c6ad83');
+      m.tag();
+    };
     if (l.style === 'round') {
       roundRoom(-6, -6, 5.2);
       shutter(-6, -6, 5.2);
@@ -301,6 +304,7 @@ export function buildDestinationModel(id) {
   if (['terrace', 'seasonal'].includes(l.planting)) {
     for (let i = 0; i < 3; i++) {
       const x = 6 + i * 3.25;
+      m.tag('garden/terrace#');
       box(x, 0.25 + i * 0.23, 4.6, 2.55, 0.45 + i * 0.46, 5.8, '#aca68c');
       for (const p of m.plants)
         if (Math.abs(p.stem.pos[0] - x) < 1 && p.stem.pos[2] > 0) {
@@ -312,10 +316,13 @@ export function buildDestinationModel(id) {
     for (const [x, z] of [
       [3.8, 8.1],
       [13.2, -4.2],
-    ])
+    ]) {
+      m.tag('garden/palm#');
       buildTree(m, x, z, 0.85, { style: 'palm', foliage: ['#72915d', '#7f9e64', '#8da674'] });
+    }
   }
   if (l.planting === 'xeric') {
+    m.tag('garden/succulents');
     for (let i = 0; i < 6; i++) {
       const x = 3.5 + i * 0.45;
       mesh('cone', [x, 0.52, 8.7], [0.16, 0.9, 0.16], '#88a58a');
@@ -326,7 +333,8 @@ export function buildDestinationModel(id) {
     for (const [x, z] of [
       [3.8, 8.1],
       [13.2, -4.2],
-    ])
+    ]) {
+      m.tag('garden/bamboo#');
       for (let i = 0; i < 7; i++) {
         const bx = x + Math.sin(i * 2.4) * 0.45,
           bz = z + Math.cos(i * 2.4) * 0.45;
@@ -343,10 +351,12 @@ export function buildDestinationModel(id) {
           );
         }
       }
+    }
   }
   if (['herb', 'flower', 'vegetable', 'mixed'].includes(l.planting)) {
     // A raised bed whose plants follow the layout: low herbs, bright flowers or vegetable rows.
     const kinds = l.planting === 'mixed' ? ['herb', 'flower', 'vegetable'] : [l.planting];
+    m.tag('garden/planting-bed');
     box(4.6, 0.15, 8.7, 3.4, 0.3, 0.9, '#9c8466');
     for (let i = 0; i < 9; i++) {
       const kind = kinds[i % kinds.length],
@@ -369,6 +379,7 @@ export function buildDestinationModel(id) {
       } else mesh('leaf', [x, 0.4, 8.7], [0.5, 0.24, 0.28], i % 2 ? '#6f9a52' : '#88ad5e');
     }
   }
+  m.tag();
   buildMelbourneStyle(l, m);
   if (l.farm) {
     buildFarm(l, m);
@@ -381,10 +392,12 @@ export function buildDestinationModel(id) {
     m.skyDistance = 16;
   }
   if (l.planting === 'pond') {
+    m.tag('garden/pond');
     cylinder(3.5, 0.12, 6.8, 1.5, 0.2, '#a9bba5');
     m.pondWater = cylinder(3.5, 0.25, 6.8, 1.3, 0.04, '#7eb6bd');
     m.colliders.push({ x: 3.5, z: 6.8, w: 3, d: 3 });
     m.areaOverrides['Water tank'] = [61, 76];
+    m.tag();
   }
   m.windObjects = m.objects
     .filter(
@@ -427,9 +440,11 @@ function buildMelbourneStyle(l, m) {
       across(-12.4, 0.8, 1.6, (x) =>
         roof('sphere', [x, 2.38, front - 0.05], [0.28, 0.28, 0.28], l.wall),
       );
+      m.tag('house/veranda');
       veranda(1.5, 1.6, '#76828a', '#2f3a40', 2.4, 0.08);
       across(-12.8, 1.2, 0.3, (x) => box(x, 1.45, front + 1.5, 0.05, 0.18, 0.05, '#2f3a40'));
       box(-5.85, 1.53, front + 1.5, 14.6, 0.04, 0.05, '#2f3a40');
+      m.tag();
       break;
     case 'federation':
       // Terracotta hipped roof, projecting front gable, roughcast band and fretwork veranda.
@@ -441,16 +456,21 @@ function buildMelbourneStyle(l, m) {
           side * -0.6,
         ]);
       box(-10.55, 1.5, front + 0.04, 4.6, 0.3, 0.06, '#e6d8bd');
+      m.tag('house/veranda');
       veranda(1.3, 1.5, '#a9573b', '#f1ece0', 2.2);
       across(-8, 1.2, 0.45, (x) => box(x, 1.32, front + 1.3, 0.06, 0.22, 0.05, '#f1ece0'));
+      m.tag();
       break;
     case 'cottage-wb':
       // Weatherboards, corrugated-iron gable, skillion veranda and a white picket fence.
       weatherboards('#d6cfba');
       pitchedRoof('#9aa4a8', { pitch: 0.5, ridge: '#7f898d' });
+      m.tag('house/veranda');
       veranda(1.4, 1.45, '#a7b0b3', '#efece2', 3.2, 0.18);
+      m.tag('garden/picket-fence');
       across(-13, 1.3, 0.35, (x) => box(x, 0.32, 3.2, 0.08, 0.55, 0.05, '#f4f2ea'));
       box(-5.85, 0.45, 3.2, 14.5, 0.06, 0.05, '#f4f2ea');
+      m.tag();
       break;
     case 'townhouse':
       // Flat roof, a timber-battened upper storey and a glass balcony.
@@ -458,14 +478,18 @@ function buildMelbourneStyle(l, m) {
       roof('box', [-3.5, 2.45, -6.2], [9.6, 1.3, 9.2], l.wall);
       roof('box', [-3.5, 3.14, -6.2], [9.9, 0.1, 9.5], '#2f3438');
       across(-8.1, 1.1, 0.35, (x) => roof('box', [x, 2.45, -1.55], [0.1, 1.2, 0.06], l.accent));
+      m.tag('house/balcony');
       roof('box', [-3.5, 2.0, -0.95], [6.5, 0.55, 0.05], '#bfdbe6');
+      m.tag();
       break;
     case 'creambrick':
       // Cream brick, a low hipped terracotta roof and a wrought-iron porch.
       pitchedRoof(l.accent, { pitch: 0.32, overhang: 0.5, ridge: '#8b4a31' });
+      m.tag('house/porch');
       roof('box', [-1.1, 1.45, front + 0.8], [3.6, 0.08, 1.8], l.accent);
       for (const x of [-2.7, 0.5]) cylinder(x, 0.72, front + 1.6, 0.05, 1.4, '#2e3134');
       across(-2.6, 0.4, 0.3, (x) => box(x, 0.55, front + 1.6, 0.04, 0.5, 0.04, '#2e3134'));
+      m.tag();
       break;
     case 'artdeco':
       // Flat roof with a stepped parapet, speed-line bands and a rounded front corner.
@@ -479,7 +503,9 @@ function buildMelbourneStyle(l, m) {
       // Weatherboards, a low corrugated gable, a small porch and a rotary clothesline.
       weatherboards('#c4ccb1');
       pitchedRoof('#868e90', { pitch: 0.36, ridge: '#6f7779' });
+      m.tag('house/porch');
       roof('box', [-5.8, 1.4, front + 0.7], [3, 0.07, 1.4], '#969ea0', [0.15, 0, 0]);
+      m.tag('garden/clothesline');
       const [cx, cz] = [-9, 6];
       cylinder(cx, 1.0, cz, 0.05, 2.0, '#9aa0a2');
       for (const angle of [0, Math.PI / 2])
@@ -498,16 +524,19 @@ function buildMelbourneStyle(l, m) {
               rotation: [0, angle, 0],
             },
           );
+      m.tag();
       break;
     }
     case 'beachhouse':
       // Weatherboards, a skillion roof and a raised timber deck with a balustrade.
       weatherboards('#a7bcc6');
       roof('box', [-5.85, 2.05, -6], [15.2, 0.12, 11], '#d9d6cc', [0.14, 0, 0]);
+      m.tag('house/deck');
       box(-5.85, 0.3, front + 1.5, 14.6, 0.12, 2.8, '#b28b62');
       for (const x of [-13, -5.85, 1.3]) box(x, 0.15, front + 2.8, 0.15, 0.3, 0.15, '#8f6e4c');
       across(-13, 1.3, 0.4, (x) => box(x, 0.65, front + 2.85, 0.05, 0.6, 0.05, l.accent));
       box(-5.85, 0.97, front + 2.85, 14.6, 0.06, 0.08, l.accent);
+      m.tag();
       break;
   }
 }

@@ -1,0 +1,231 @@
+/* What only the City Editor has (the rest is in /editor/ui/workspace.css). */
+.workspace.cities {
+  grid-template-columns: 260px 1fr 380px;
+}
+body > .toast {
+  position: fixed;
+  top: 64px;
+}
+
+/* The cities */
+.city-list {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  border-right: 1px solid var(--line);
+  background: var(--panel);
+}
+.city-list .search {
+  position: relative;
+  padding: 12px 12px 8px;
+}
+.city-list .search .input {
+  width: 100%;
+  padding-left: 30px;
+}
+.city-list .search-icon {
+  position: absolute;
+  left: 21px;
+  top: 18px;
+  color: var(--faint);
+}
+.list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0 8px 12px;
+}
+.list .empty {
+  margin: 4px 8px;
+  color: var(--faint);
+  font-size: 12px;
+}
+.entry {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 7px 8px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+}
+.entry:hover {
+  background: var(--hover);
+}
+.entry.active {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.entry .label {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.entry .meta {
+  color: var(--faint);
+  font-size: 11px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 90px;
+}
+.state {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex: none;
+}
+.state.ok {
+  background: var(--accent);
+}
+.state.bad {
+  background: var(--danger);
+}
+
+/* The quests */
+.quests-view {
+  overflow-y: auto;
+  padding: 22px 28px 60px;
+  min-width: 0;
+}
+.city-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  max-width: 900px;
+  margin: 0 auto;
+}
+.city-head > div:first-child {
+  flex: 1;
+}
+.city-head h1 {
+  margin: 0;
+  font-size: 22px;
+}
+.city-head p {
+  margin: 2px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+.household {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.household .chip {
+  padding: 3px 10px;
+  font-size: 12px;
+}
+.note {
+  max-width: 900px;
+  margin: 14px auto 12px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.quest-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 12px;
+  max-width: 900px;
+  margin: 0 auto;
+}
+.quest-card {
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--panel);
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+}
+.quest-card:hover {
+  border-color: var(--line-strong);
+}
+.quest-card.active {
+  border-color: var(--accent);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+.quest-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.quest-top strong {
+  flex: 1;
+}
+.number {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--panel-raised);
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 600;
+}
+.who {
+  margin: 6px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+.quote {
+  margin: 8px 0 0;
+  line-height: 1.5;
+}
+
+/* Fields */
+.inspector .field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 12px;
+}
+.inspector .field small {
+  color: var(--faint);
+  font-size: 11px;
+  font-weight: 400;
+}
+.inspector textarea {
+  width: 100%;
+  padding: 7px 8px;
+  border: 1px solid var(--line-strong);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+  resize: vertical;
+}
+.inspector textarea::placeholder,
+.inspector .input::placeholder {
+  color: var(--faint);
+}
+.inspector textarea:focus {
+  border-color: var(--accent);
+  outline: none;
+}
+.problem {
+  display: flex;
+  gap: 6px;
+  margin: 2px 0 0;
+  font-size: 12px;
+}
+.problem.error {
+  color: var(--danger);
+}
+.problem.warning {
+  color: var(--warn);
+}
+.problem span {
+  color: var(--text);
+}
+.blank {
+  margin: 80px auto;
+  max-width: 420px;
+  text-align: center;
+  color: var(--muted);
+}

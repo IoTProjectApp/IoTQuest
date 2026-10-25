@@ -1,0 +1,491 @@
+/* What only the Character Editor has (the rest is in /editor/ui/workspace.css). */
+.workspace.characters {
+  grid-template-columns: 260px 1fr 340px;
+}
+#stage {
+  display: block;
+  width: 100%;
+  height: 100%;
+  outline: none;
+}
+
+/* The people list */
+.people {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  border-right: 1px solid var(--line);
+  background: var(--panel);
+}
+.people .search {
+  position: relative;
+  padding: 12px 12px 8px;
+}
+.people .search .input {
+  width: 100%;
+  padding-left: 30px;
+}
+.people .search-icon {
+  position: absolute;
+  left: 21px;
+  top: 18px;
+  color: var(--faint);
+}
+.people-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0 8px 12px;
+}
+.people-list h3 {
+  margin: 14px 8px 4px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.person {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 7px 8px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  text-align: left;
+  cursor: pointer;
+}
+.person:hover {
+  background: var(--hover);
+}
+.person.active {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.person .label {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.person .model {
+  color: var(--faint);
+  font-size: 11px;
+}
+.person .dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent);
+  flex: none;
+}
+.person.defaults {
+  margin-top: 4px;
+  font-weight: 600;
+}
+
+/* Inspector rows: a label, its control(s), and a reset when the value is set here. */
+.row {
+  display: grid;
+  grid-template-columns: 88px 1fr 24px;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.row > span {
+  color: var(--muted);
+  font-size: 12px;
+}
+.row .controls {
+  display: flex;
+  gap: 6px;
+  min-width: 0;
+}
+.row .controls .select,
+.row .controls .input {
+  flex: 1;
+  min-width: 0;
+}
+.row input[type='color'] {
+  width: 34px;
+  height: 30px;
+  padding: 2px;
+  border: 1px solid var(--line-strong);
+  border-radius: 6px;
+  background: var(--bg);
+  flex: none;
+}
+.row input[type='range'] {
+  flex: 1;
+  accent-color: var(--accent);
+}
+.row .value {
+  width: 44px;
+  font: 12px var(--mono);
+  color: var(--text);
+  text-align: right;
+}
+.row.set > span {
+  color: var(--accent);
+}
+.reset-one {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: var(--faint);
+  cursor: pointer;
+}
+.reset-one:hover {
+  background: var(--panel-raised);
+  color: var(--text);
+}
+.reset-one[hidden] {
+  visibility: hidden;
+  display: grid;
+}
+.section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+.section-head h3 {
+  margin: 0;
+}
+.link {
+  border: 0;
+  background: none;
+  color: var(--accent);
+  font-size: 12px;
+  cursor: pointer;
+  padding: 0;
+}
+.link:disabled {
+  color: var(--faint);
+  cursor: default;
+}
+.note {
+  margin: 4px 0 0;
+  color: var(--faint);
+  font-size: 12px;
+}
+
+/* Imported clips */
+.imported {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.imported li {
+  display: grid;
+  grid-template-columns: 1fr auto 24px;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+}
+.imported .note {
+  margin: 0;
+}
+.clip-panel {
+  position: absolute;
+  left: 16px;
+  bottom: 48px;
+  width: 340px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid var(--line-strong);
+  border-radius: 12px;
+  background: var(--panel);
+  box-shadow: 0 10px 32px rgb(0 0 0 / 40%);
+}
+.clip-panel[hidden] {
+  display: none;
+}
+.clip-panel .panel-head {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.clip-panel .panel-head .note {
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.clip-panel .field small {
+  color: var(--faint);
+  font-size: 11px;
+}
+.clip-panel .bad {
+  color: var(--danger);
+}
+.clip-panel .actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+/* Reactions */
+.reaction {
+  margin-bottom: 4px;
+}
+.reaction.set > .row > span {
+  color: var(--accent);
+}
+.reaction .row {
+  grid-template-columns: 120px 1fr;
+}
+.reaction .icon-only {
+  flex: none;
+  width: 30px;
+  height: 30px;
+}
+.reaction-details {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+  margin: -2px 0 10px 128px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.reaction-details label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.reaction-details .select {
+  width: auto;
+}
+.reaction-details .input {
+  width: 64px;
+}
+
+/* Clips: made ones can be opened again */
+.imported li {
+  display: flex;
+}
+.imported li > span:first-child {
+  flex: 1;
+}
+.section-head .button + .button {
+  margin-left: 6px;
+}
+
+/* The pose editor (pose-editor.js), along the bottom of the stage */
+.pose-panel {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 14px;
+  border: 1px solid var(--line-strong);
+  border-radius: 12px;
+  background: var(--panel);
+  box-shadow: 0 10px 32px rgb(0 0 0 / 40%);
+}
+.pose-panel[hidden] {
+  display: none;
+}
+.pose-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 8px 12px;
+}
+.pose-row.pose-tools,
+.pose-row.end {
+  align-items: center;
+}
+.pose-row.end {
+  justify-content: flex-end;
+}
+.pose-row.end > .note {
+  flex: 1;
+  margin: 0;
+}
+.pose-panel .field {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.pose-panel .field span {
+  color: var(--muted);
+  font-size: 11px;
+}
+.pose-panel .field.name .input {
+  width: 170px;
+}
+.pose-panel .field.short .input {
+  width: 72px;
+}
+.pose-panel .input.tiny {
+  width: 64px;
+}
+.pose-panel .field small {
+  color: var(--faint);
+  font-size: 11px;
+}
+.pose-panel .bad,
+.pose-panel .field small.bad {
+  color: var(--danger);
+}
+.pose-panel .check {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  color: var(--muted);
+}
+.pose-panel .divider {
+  width: 1px;
+  height: 22px;
+  background: var(--line-strong);
+}
+.pose-panel .pose-tools .note {
+  margin: 0;
+}
+.timeline {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.timeline .time {
+  min-width: 96px;
+  color: var(--muted);
+  font: 12px var(--mono);
+  text-align: right;
+}
+.timeline .track {
+  position: relative;
+  flex: 1;
+  height: 40px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--bg);
+  cursor: ew-resize;
+  touch-action: none;
+}
+.timeline .ruler {
+  position: absolute;
+  inset: 0 10px;
+}
+.timeline .tick {
+  position: absolute;
+  bottom: 2px;
+  transform: translateX(-50%);
+  color: var(--faint);
+  font: 10px var(--mono);
+  pointer-events: none;
+}
+.timeline .tick::before {
+  content: '';
+  position: absolute;
+  left: 50%;
+  bottom: 14px;
+  width: 1px;
+  height: 6px;
+  background: var(--line-strong);
+}
+.timeline .key {
+  position: absolute;
+  top: 6px;
+  width: 14px;
+  height: 14px;
+  margin-left: -7px;
+  padding: 0;
+  border: 2px solid var(--warn);
+  border-radius: 2px;
+  background: var(--panel-raised);
+  transform: rotate(45deg);
+  cursor: grab;
+}
+.timeline .key.active {
+  border-color: var(--accent);
+  background: var(--accent);
+}
+.timeline .playhead {
+  position: absolute;
+  top: -4px;
+  bottom: -4px;
+  width: 2px;
+  margin-left: -1px;
+  background: var(--accent);
+  pointer-events: none;
+}
+.clip-panel .controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.clip-panel .controls input[type='range'] {
+  flex: 1;
+}
+
+/* The Look section (look-panel.js) */
+.look-actions {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.look-actions .select {
+  flex: 1;
+}
+.row.sub > span {
+  color: var(--muted);
+  font-size: 12px;
+}
+.swatches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+}
+.swatch {
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border: 1px solid var(--line-strong);
+  border-radius: 50%;
+  cursor: pointer;
+}
+.swatch.on {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+/* Their own clothes (wardrobe-panel.js) */
+.wardrobe .note {
+  margin: 0 0 10px;
+}
+.wardrobe .actions {
+  margin: 6px 0 4px;
+}
+.base-layer {
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px dashed var(--line);
+}
+.base-layer h4 {
+  margin: 0 0 6px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.base-layer .swatches input[type='color'] {
+  width: 22px;
+  height: 18px;
+  padding: 0;
+  border: 0;
+  background: none;
+}

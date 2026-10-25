@@ -4,7 +4,11 @@ import { addCommunityWorld, updateCommunityWorld, STREET_LIGHT_LEVEL } from './c
 import { updateLandscape } from './landscape.js';
 import { isHousehold } from './section-residents.js';
 import { castFor, isWoman, TECHNICIAN } from './people-cast.js';
+import { knownModel } from './character-models.js';
 import { CLIPS, walkTime } from './character-clips.js';
+import { settingsFor, dressed, knownClip } from './character-settings.js';
+import { Reactions, conditionsFrom } from './character-reactions.js';
+import { strideScale } from './character-appearance.js';
 import { outfitFor, TECHNICIAN_OUTFIT } from './character-outfits.js';
 import { addDeviceDetails } from './device-objects.js';
 import { catalogueLamps } from './catalogue-devices.js';
@@ -28,6 +32,8 @@ import {
 } from './world-math.js';
 import { createWorldModel } from './world-model.js';
 import { createRegionalModel } from './regions.js';
+import { applyWorldLayout } from './world-layout.js';
+import { addOwnPeople, routineFor, routinePose } from './people-settings.js';
 import { updateClouds } from './clouds.js';
 // Left-right flip used to draw mirrored homes.
 const MIRROR = new Float32Array([-1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]);
@@ -50,6 +56,19 @@ const LAMP_COLOURS = {
 };
 // Re-exported for the tests and tools that import them from here.
 export { frustumTest, isSoftwareRenderer } from './world-renderer-webgl.js';
+// A destination's world: built by code, with the town around it and the hand-placed changes saved by
+// the world editor (data/world-layout.js).
+export function buildWorldModel(id) {
+  const model = createRegionalModel(id || 'legacy');
+  addCommunityWorld(model, locationById(id));
+  // People added in the Character Editor (data/people.js) join after the hand-placed changes.
+  return addOwnPeople(applyWorldLayout(model, id || 'legacy'), id || 'legacy');
+}
+// A walk clip stepped by the distance walked, so feet keep pace with the ground; a clip that is
+// not a walk (set in the Character Editor) plays as a loop instead.
+function stepped(name, distance, loop) {
+  return CLIPS[name]?.stride ? { name, time: walkTime(name, distance) } : loop(name);
+}
 // Most simulated seconds one frame advances the community; 360× at 60 fps is about 6 s.
 const MAX_SIM_STEP = 10;
 export class World3D {
@@ -67,8 +86,7 @@ export class World3D {
     this.onRecover = onRecover;
     this.renderer = createRenderer?.(canvas) ?? new WebGLWorldRenderer(canvas);
     this.gl = this.renderer.gl;
-    this.model = createRegionalModel(getState?.().locationId || 'legacy');
-    addCommunityWorld(this.model, locationById(getState?.().locationId));
+    this.model = buildWorldModel(getState?.().locationId);
     prepareWorldMaterials(this.model);
     this.yaw = 0.32;
     this.pitch = 0.85;
@@ -93,6 +111,8 @@ export class World3D {
     this.disposed = false;
     this.controlListeners = [];
     this.visualClock = 0;
+    // Clips people play when something happens (character-reactions.js).
+    this.reactions = new Reactions();
     this.drag = null;
     this.matrix = null;
     this.day = 1;
@@ -379,8 +399,7 @@ export class World3D {
     this.upgradeSignature = null;
     this.lastSimClockMs = undefined;
     this.surfaceTime = 0;
-    this.model = createRegionalModel(id);
-    addCommunityWorld(this.model, locationById(id));
+    this.model = buildWorldModel(id);
     prepareWorldMaterials(this.model);
     this.communityView = false;
     this.streetLights = null;
@@ -628,7 +647,8 @@ export class World3D {
       let ax = actor.x,
         az = actor.z,
         angle = actor.heading ?? 0,
-        phase = 0;
+        phase = 0,
+        routine = null;
       if (actor.id === 'player') {
         ax = p[0];
         az = p[2];
@@ -649,18 +669,33 @@ export class World3D {
           phase = reduced ? 0 : t * 8;
         } else angle = Math.atan2(p[0] - ax, p[2] - az);
       } else if (state.routine?.actors?.[actor.id]) {
-        const target = state.routine.actors[actor.id];
+        const target = state.routine.actors[actor.id],
+          // How briskly they walk over: the Character Editor's speed for them, if set.
+          pace = settingsFor(actor.id).speed;
         actor.x +=
-          (target[0] - actor.x) * (reduced ? 1 : Math.min(1, dt * Math.max(1, state.speed) * 0.8));
+          (target[0] - actor.x) *
+          (reduced ? 1 : Math.min(1, dt * Math.max(1, state.speed) * 0.8 * pace));
         actor.z +=
-          (target[1] - actor.z) * (reduced ? 1 : Math.min(1, dt * Math.max(1, state.speed) * 0.8));
+          (target[1] - actor.z) *
+          (reduced ? 1 : Math.min(1, dt * Math.max(1, state.speed) * 0.8 * pace));
         ax = actor.x;
         az = actor.z;
         phase = reduced ? 0 : t * 8;
+      } else if ((routine = routineFor(actor.id, state.locationId))) {
+        // A routine from the Character Editor: walking stop to stop, then staying a while.
+        const pose = routinePose(routine, reduced ? 0 : t, settingsFor(actor.id).speed);
+        actor.x = ax = pose.x;
+        actor.z = az = pose.z;
+        angle = pose.angle;
+        phase = pose.walking && !reduced ? t * 8 : 0;
+        actor.routineClip = pose.clip;
+        actor.routineWalking = pose.walking;
       } else if (actor.id === 'Maya' && motion) {
-        ax = -4.3 + Math.sin(t * 0.8) * 1.1;
-        az = 0.5 + Math.cos(t * 0.8) * 0.6;
-        angle = Math.atan2(Math.cos(t * 0.8), -Math.sin(t * 0.8));
+        // Maya strolls round the garden, as briskly as her set speed.
+        const w = t * 0.8 * settingsFor('Maya').speed;
+        ax = -4.3 + Math.sin(w) * 1.1;
+        az = 0.5 + Math.cos(w) * 0.6;
+        angle = Math.atan2(Math.cos(w), -Math.sin(w));
         phase = t * 9;
       }
       if (state.talkingNpc !== actor.id) delete actor.talkPosition;
@@ -966,30 +1001,36 @@ export class World3D {
     const speed = dt > 0 && moved < 1 ? moved / dt : 0;
     entry.pace =
       (entry.pace || 0) + (Math.min(1, speed / 1.5) - (entry.pace || 0)) * Math.min(1, dt * 6);
-    const loop = (name, rate = 1) => ({
-      name,
-      time: reduced ? 0 : (t * rate + key.length) % CLIPS[name].duration,
-    });
-    const still = typeof entry.still === 'function' ? entry.still() : entry.still || 'Idle',
-      walk = woman ? 'FemaleWalk' : 'Walking';
+    // Hand-set clips, clip speed, model and clothes from the Character Editor (character-settings.js).
+    const set = settingsFor(key);
+    const loop = (name) => {
+      name = knownClip(name);
+      return { name, time: reduced ? 0 : (t * set.rate + key.length) % CLIPS[name].duration };
+    };
+    const still =
+        set.idle ?? (typeof entry.still === 'function' ? entry.still() : entry.still || 'Idle'),
+      activity = set.activity ?? entry.clip,
+      walk = set.walk ? knownClip(set.walk) : woman ? 'FemaleWalk' : 'Walking';
     let clips;
-    if (reduced) clips = [{ ...loop(entry.clip && !entry.place ? 'Idle' : still), weight: 1 }];
-    else if (entry.clip) clips = [{ ...loop(entry.clip), weight: 1 }];
-    else if (entry.onTheSpot) clips = [{ name: walk, time: walkTime(walk, t * 0.9), weight: 1 }];
+    if (reduced) clips = [{ ...loop(activity && !entry.place ? 'Idle' : still), weight: 1 }];
+    else if (activity) clips = [{ ...loop(activity), weight: 1 }];
+    else if (entry.onTheSpot) clips = [{ ...stepped(walk, t * 0.9, loop), weight: 1 }];
     else {
-      const moving = entry.moving || walk,
+      const moving = set.walk ? walk : entry.moving || walk,
         pace = entry.pace < 0.05 ? 0 : entry.pace;
       clips = pace
         ? [
-            { name: moving, time: walkTime(moving, entry.walked), weight: pace },
+            // A taller person's longer stride: their feet keep pace with the ground.
+            { ...stepped(moving, entry.walked / strideScale(set.appearance), loop), weight: pace },
             { ...loop(still), weight: 1 - pace },
           ]
         : [{ ...loop(still), weight: 1 }];
     }
     return {
       key,
-      model: castFor(key, '', woman),
-      outfit: outfitFor(key),
+      model: knownModel(set.model) ? set.model : castFor(key, '', woman),
+      outfit: dressed(outfitFor(key), set.outfit),
+      appearance: set.appearance,
       ...at,
       clips,
       standIn,
@@ -1001,23 +1042,44 @@ export class World3D {
   residentCharacter(actor, x, z, heading, floor, t, dt, names, state) {
     const moved = actor.lastAt ? Math.hypot(x - actor.lastAt[0], z - actor.lastAt[1]) : 0;
     actor.lastAt = [x, z];
-    const technician = actor.id === 'player';
-    // Feet keep pace with the ground: residents up to a brisk walk, the technician (who moves at a
-    // jog and jogs) up to a run.
-    actor.walked = (actor.walked || 0) + Math.min(moved, (technician ? 3.5 : 1.6) * dt);
+    const technician = actor.id === 'player',
+      set = settingsFor(actor.id);
+    // Feet keep pace with the ground: residents up to a brisk walk (or as fast as their set speed),
+    // the technician (who moves at a jog and jogs) up to a run.
+    actor.walked = (actor.walked || 0) + Math.min(moved, (technician ? 3.5 : 1.6 * set.speed) * dt);
     // A jump (a visit, a new routine spot) is not walking.
     const speed = dt > 0 && moved < 1 ? moved / dt : 0;
     actor.pace = (actor.pace || 0) + (Math.min(1, speed) - (actor.pace || 0)) * Math.min(1, dt * 6);
     const name = actor.name || names[actor.id] || actor.id,
       woman = technician ? state.appearance === '👩🏽‍🔧' : isWoman(actor.id, name),
-      walk = technician ? 'Jogging' : woman ? 'FemaleWalk' : 'Walking',
-      // Someone in conversation talks with their hands; reduced motion holds everyone still.
-      gesture = state.talkingNpc === actor.id ? 'Talking' : 'Idle',
-      idle = { name: gesture, time: state.reduced ? 0 : t % CLIPS[gesture].duration },
-      pace = actor.pace < 0.05 || state.reduced ? 0 : actor.pace;
+      walk = set.walk
+        ? knownClip(set.walk)
+        : technician
+          ? 'Jogging'
+          : woman
+            ? 'FemaleWalk'
+            : 'Walking',
+      // Someone in conversation talks with their hands; reduced motion holds everyone still. A
+      // hand-set activity replaces standing and walking alike.
+      // A routine's stop plays its own clip.
+      gesture =
+        state.talkingNpc === actor.id
+          ? 'Talking'
+          : knownClip(actor.routineClip || set.activity || set.idle || 'Idle'),
+      loop = (name) => ({
+        name,
+        time: state.reduced ? 0 : (t * set.rate) % CLIPS[name].duration,
+      }),
+      idle = loop(gesture),
+      pace =
+        actor.pace < 0.05 || state.reduced || (set.activity && !actor.routineWalking)
+          ? 0
+          : actor.pace;
     return {
       key: actor.id,
-      model: technician ? TECHNICIAN[state.appearance] || 'Adam' : castFor(actor.id, name),
+      model:
+        (knownModel(set.model) && set.model) ||
+        (technician ? TECHNICIAN[state.appearance] || 'Adam' : castFor(actor.id, name)),
       x,
       y: floor,
       // The technician carries their toolbox, in the colour chosen in the settings, and is drawn a
@@ -1026,23 +1088,40 @@ export class World3D {
       scale: technician ? 1.15 : 1,
       // Work wear for the technician (a hi-vis vest and a hard hat); everyone else dressed as their
       // own.
-      outfit: technician ? TECHNICIAN_OUTFIT : outfitFor(actor.id),
+      outfit: dressed(technician ? TECHNICIAN_OUTFIT : outfitFor(actor.id), set.outfit),
+      appearance: set.appearance,
       z,
       // Actors face (sin, cos) of their heading; characters face (cos, sin) of their angle.
       angle: Math.atan2(Math.cos(heading), Math.sin(heading)),
       clips: pace
         ? [
-            { name: walk, time: walkTime(walk, actor.walked), weight: pace },
+            { ...stepped(walk, actor.walked / strideScale(set.appearance), loop), weight: pace },
             { ...idle, weight: 1 - pace },
           ]
         : [{ ...idle, weight: 1 }],
       standIn: actor.parts,
     };
   }
+  // Plays someone's reaction to a trigger (see character-reactions.js): 'chat', 'thanks', 'fail'.
+  reactTo(id, trigger) {
+    return this.reactions.fire(id, trigger, this.visualClock);
+  }
+  // Lays this frame's reactions over the characters: to the technician coming near, to the
+  // weather, and to whatever reactTo() started. Reduced motion keeps everyone as they are.
+  react(state) {
+    const characters = this.model.characters;
+    if (!characters?.length || state.reduced) return;
+    const technician = characters.find((c) => c.key === 'player'),
+      player = technician ? { x: technician.x, z: technician.z } : null,
+      conditions = conditionsFrom(state.env);
+    for (const character of characters)
+      this.reactions.apply(character, this.visualClock, { player, conditions });
+  }
   // Works out what this frame shows (camera, sun, fog, the nearest lamps and shadow casters) and
   // has the renderer draw it.
   render(t, dt, s = this.getState()) {
     this.animate(s, t, dt);
+    this.react(s);
     const width = Math.max(1, this.canvas.clientWidth),
       height = Math.max(1, this.canvas.clientHeight),
       dpr = Math.min(this.renderer.maxPixelRatio || 2, globalThis.devicePixelRatio || 1);

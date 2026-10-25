@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Quest Editor · IoT Quest Editor</title>
+    <link rel="stylesheet" href="/editor/ui/shell.css" />
+    <link rel="stylesheet" href="/editor/ui/workspace.css" />
+    <link rel="stylesheet" href="quest-editor.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <a class="button icon-only" id="home" href="/editor/ui/" title="Back to workspaces"></a>
+      <div class="title">
+        <strong>Quest Editor</strong>
+        <span>IoT Quest Editor</span>
+      </div>
+      <div class="divider"></div>
+      <button class="button" id="new" title="Start a new quest (N)"></button>
+      <div class="spacer"></div>
+      <button class="button icon-only" id="undo" title="Undo (⌘Z)"></button>
+      <button class="button icon-only" id="redo" title="Redo (⇧⌘Z)"></button>
+      <span class="save-state" id="save-state"></span>
+      <button
+        class="button"
+        id="playtest"
+        title="Play-test what you are editing (⌘P). Shift-click: from the beginning (⇧⌘P)"
+      ></button>
+      <button class="button primary" id="save" title="Save your quests (⌘S)"></button>
+    </header>
+
+    <div class="workspace quests">
+      <nav class="quest-list" aria-label="Quests">
+        <label class="search">
+          <span class="search-icon" id="search-icon"></span>
+          <input class="input" id="search" type="search" placeholder="Search quests" />
+        </label>
+        <div class="list" id="list"></div>
+      </nav>
+      <main class="form" id="form" aria-label="Quest"></main>
+      <aside class="inspector" id="check" aria-label="Check"></aside>
+    </div>
+    <div class="toast" id="toast" role="status" hidden></div>
+    <script src="/editor/ui/load-check.js"></script>
+    <script type="module" src="app.js"></script>
+  </body>
+</html>

@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Street Editor · IoT Quest Editor</title>
+    <link rel="stylesheet" href="/editor/ui/shell.css" />
+    <link rel="stylesheet" href="/editor/ui/workspace.css" />
+    <link rel="stylesheet" href="street-editor.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <a class="button icon-only" id="home" href="/editor/ui/" title="Back to workspaces"></a>
+      <div class="title">
+        <strong>Street Editor</strong>
+        <span>IoT Quest Editor</span>
+      </div>
+      <div class="divider"></div>
+      <label class="city">
+        <span>Layout</span>
+        <select class="select" id="target" title="Which layout to edit"></select>
+      </label>
+      <label class="city" id="preview-city-field">
+        <span>Preview as</span>
+        <select
+          class="select"
+          id="preview-city"
+          title="The city whose driving side and names the preview uses"
+        ></select>
+      </label>
+      <div class="segmented" id="views" role="group" aria-label="View">
+        <button data-view="plan" title="The town from above, for editing (1)"></button>
+        <button data-view="3d" title="The town in 3D, as the game draws it (2)"></button>
+      </div>
+      <div class="spacer"></div>
+      <button class="button" id="run" title="Run the town's traffic on this layout (T)"></button>
+      <button class="button icon-only" id="undo" title="Undo (⌘Z)"></button>
+      <button class="button icon-only" id="redo" title="Redo (⇧⌘Z)"></button>
+      <span class="save-state" id="save-state"></span>
+      <button class="button primary" id="save" title="Save the street layout (⌘S)"></button>
+    </header>
+
+    <div class="workspace">
+      <nav class="tools" id="tools" aria-label="Tools">
+        <button
+          data-tool="select"
+          data-key="V"
+          title="Select and drag junctions and roads (V)"
+        ></button>
+        <button
+          data-tool="road"
+          data-key="R"
+          title="Draw a road from a junction, a road or empty ground (R)"
+        ></button>
+        <button data-tool="junction" data-key="J" title="Add a junction on a road (J)"></button>
+        <button
+          data-tool="crossing"
+          data-key="C"
+          title="Add or remove a zebra crossing (C)"
+        ></button>
+        <button data-tool="erase" data-key="X" title="Remove junctions and roads (X)"></button>
+        <button data-tool="pan" data-key="H" title="Move the view around (H)"></button>
+      </nav>
+
+      <main class="stage">
+        <div class="view">
+          <canvas id="plan" tabindex="0" aria-label="Street plan"></canvas>
+          <canvas id="world" aria-label="3D preview" hidden></canvas>
+          <div class="view-tools" id="view-tools">
+            <button
+              class="toggle"
+              id="snap"
+              title="Snap to whole metres and line up with other junctions"
+            ></button>
+            <button class="toggle" id="fit" title="Fit the whole town in view (F)"></button>
+          </div>
+          <div class="hint" id="hint"></div>
+          <div class="toast" id="toast" role="status" hidden></div>
+          <div class="loading" id="loading">Opening…</div>
+        </div>
+      </main>
+
+      <aside class="inspector" id="inspector" aria-label="Inspector"></aside>
+    </div>
+    <script src="/editor/ui/load-check.js"></script>
+    <script type="module" src="app.js"></script>
+  </body>
+</html>

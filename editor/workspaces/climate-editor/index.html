@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Climate &amp; Soundscape Studio · IoT Quest Editor</title>
+    <link rel="stylesheet" href="/editor/ui/shell.css" />
+    <link rel="stylesheet" href="/editor/ui/workspace.css" />
+    <link rel="stylesheet" href="climate-editor.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <a class="button icon-only" id="home" href="/editor/ui/" title="Back to workspaces"></a>
+      <div class="title">
+        <strong>Climate &amp; Soundscape Studio</strong>
+        <span>IoT Quest Editor</span>
+      </div>
+      <div class="divider"></div>
+      <button
+        class="button"
+        id="save-preset-btn"
+        title="Save current city's weather as a reusable preset"
+      >
+        + Save Weather Preset
+      </button>
+      <div class="spacer"></div>
+      <button class="button icon-only" id="undo" title="Undo (⌘Z)"></button>
+      <button class="button icon-only" id="redo" title="Redo (⇧⌘Z)"></button>
+      <span class="save-state" id="save-state"></span>
+      <button
+        class="button"
+        id="playtest"
+        title="Play-test this city (⌘P). Shift-click: from the beginning (⇧⌘P)"
+      ></button>
+      <button class="button primary" id="save" title="Save climate &amp; soundscape (⌘S)"></button>
+    </header>
+
+    <div class="workspace clim-workspace">
+      <nav class="clim-list-pane" aria-label="Cities">
+        <label
+          class="search"
+          style="
+            padding: 10px;
+            border-bottom: 1px solid var(--line);
+            display: flex;
+            align-items: center;
+            position: relative;
+          "
+        >
+          <span
+            class="search-icon"
+            id="search-icon"
+            style="position: absolute; left: 18px; color: var(--faint)"
+          ></span>
+          <input
+            class="input"
+            id="search"
+            type="search"
+            placeholder="Search cities…"
+            style="width: 100%; padding-left: 28px"
+          />
+        </label>
+        <div class="list" id="city-list"></div>
+      </nav>
+
+      <main
+        class="clim-stage"
+        id="clim-stage"
+        aria-label="Climate Curves and Soundscape Synth"
+      ></main>
+
+      <aside class="inspector" id="inspector" aria-label="Climate and Soundscape Controls"></aside>
+    </div>
+    <div class="toast" id="toast" role="status" hidden></div>
+    <script type="module" src="app.js"></script>
+  </body>
+</html>

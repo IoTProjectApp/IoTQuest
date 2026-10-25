@@ -1,3 +1,16 @@
+import {
+  pavement,
+  alongRoad,
+  acrossRoad,
+  ROAD_SIZES,
+  ROUNDABOUT,
+  LANE_OFFSET,
+  LANE_SPACING,
+  linePart,
+  linePieces,
+  lineLength,
+  offsetLine,
+} from './street-network.js';
 import { connectFarmHomeCars } from './farm-home-access.js';
 import { connectHomeDriveway, drawHomeStreetDriveway } from './home-driveway.js';
 import { recreationLots, buildRecreationAreas, updateFountain } from './community-recreation.js';
@@ -16,6 +29,7 @@ import { applyNativeCommunityOutputs } from './community-quests.js';
 import { CommunitySimulation } from './community-sim.js';
 import { residentialLots } from './community-residences.js';
 import { fromWorld } from './world-math.js';
+import { tagLooseParts } from './world-detach.js';
 
 // Place the original home in the town’s residential block.
 export const COMMUNITY_ORIGIN = { x: 24, z: 24 };
@@ -55,8 +69,9 @@ export const communityStations = {
   ),
   ...Object.fromEntries(residentialLots.map((b) => [b.type, [b.name, b.x, b.z]])),
 };
-export function addCommunityWorld(model, location) {
-  const sim = new CommunitySimulation(location),
+// `streets` is a street layout to build instead of the saved one (the Street Editor's preview).
+export function addCommunityWorld(model, location, { streets } = {}) {
+  const sim = new CommunitySimulation(location, streets),
     origin = { ...COMMUNITY_ORIGIN, x: model.farm ? 96 : COMMUNITY_ORIGIN.x };
   const neighbourAreas = integrateRegionalNeighbours(model, sim, origin);
   if (model.farm) connectFarmDriveway(sim, origin);
@@ -84,7 +99,7 @@ export function addCommunityWorld(model, location) {
   for (const [a, b] of [
     [home.node, gate],
     [gate, street],
-    [street, '0:1/1/-1'],
+    [street, pavement(walks, '0:1/1/-1')],
   ]) {
     walks.edge(a, b, { originalProperty: true });
     walks.edge(b, a, { originalProperty: true });
@@ -165,46 +180,97 @@ export function addCommunityWorld(model, location) {
         ? '#8ba982'
         : '#a1af8a';
   box(72, -0.55, 0, 266, 1, 218, ground, { surface: arid ? 'soil' : 'grass' });
-  for (const [a, b] of sim.map.segments) {
-    const horizontal = a.z === b.z,
+  // Roads, at any angle (street-network.js): verge, asphalt, centre dashes and a street light.
+  const piece = (x, y, z, dir, length, height, width, color, extra = {}) => {
+    const { size, rotation } = alongRoad(dir, length, height, width);
+    return box(x, y, z, ...size, color, { ...extra, rotation });
+  };
+  // Everything from here to the buildings is the street (see markStreet below).
+  const streetFrom = objects.length;
+  for (const segment of sim.map.segments) {
+    const [a, b] = segment,
+      size = ROAD_SIZES[segment.lanes || 1];
+    let length = Math.hypot(b.x - a.x, b.z - a.z),
+      dir = [(b.x - a.x) / length, (b.z - a.z) / length],
       x = (a.x + b.x) / 2,
       z = (a.z + b.z) / 2;
-    box(x, 0.025, z, horizontal ? 48 : 17, 0.1, horizontal ? 17 : 48, '#c8c5b5');
-    box(x, 0.09, z, horizontal ? 48 : 12, 0.05, horizontal ? 12 : 48, '#414950');
-    for (let t = 2; t < 48; t += 5)
-      box(
-        a.x + ((b.x - a.x) * t) / 48,
-        0.13,
-        a.z + ((b.z - a.z) * t) / 48,
-        horizontal ? 2 : 0.15,
-        0.015,
-        horizontal ? 0.15 : 2,
-        '#eee7c8',
-      );
-    const lx = x + (horizontal ? 0 : 7),
-      lz = z + (horizontal ? 7 : 0);
+    if (segment.line) {
+      // A curved road: short straight pieces along its curve, overlapping so it has no gaps.
+      for (const p of linePieces(segment.line)) {
+        piece(p.x, 0.025, p.z, p.dir, p.length + 0.6, 0.1, size.verge, '#c8c5b5');
+        piece(p.x, 0.09, p.z, p.dir, p.length + 0.6, 0.05, size.asphalt, '#414950');
+      }
+      length = lineLength(segment.line);
+      for (let t = 2; t < length; t += 5) {
+        const at = linePart(segment.line, t, t);
+        piece(at.points[0].x, 0.13, at.points[0].z, at.startDir, 2, 0.015, 0.15, '#eee7c8');
+      }
+      const middle = linePart(segment.line, length / 2, length / 2);
+      [x, z, dir] = [middle.points[0].x, middle.points[0].z, middle.startDir];
+    } else {
+      piece(x, 0.025, z, dir, length, 0.1, size.verge, '#c8c5b5');
+      piece(x, 0.09, z, dir, length, 0.05, size.asphalt, '#414950');
+      for (let t = 2; t < length; t += 5)
+        piece(a.x + dir[0] * t, 0.13, a.z + dir[1] * t, dir, 2, 0.015, 0.15, '#eee7c8');
+    }
+    // Two lanes each way: a white dashed line between each pair.
+    if (segment.lanes === 2) {
+      const line = segment.line || [a, b];
+      for (const side of [-1, 1]) {
+        const lane = offsetLine(line, side * (LANE_OFFSET + LANE_SPACING / 2)),
+          total = lineLength(lane);
+        for (let t = 12; t < total - 12; t += 6) {
+          const at = linePart(lane, t, t);
+          piece(at.points[0].x, 0.13, at.points[0].z, at.startDir, 2.5, 0.015, 0.12, '#f4f1e6');
+        }
+      }
+    }
+    // The light stands on the verge to the south or east of the road.
+    const across = acrossRoad(dir),
+      lx = x + across[0] * (size.verge / 2 - 1.5),
+      lz = z + across[1] * (size.verge / 2 - 1.5);
+    model.tag?.('town/street-light#');
     box(lx, 2, lz, 0.15, 4, 0.15, '#526466');
     lights.push(box(lx, 4, lz, 0.7, 0.25, 0.7, '#e5d69e', { streetLamp: true }));
     lightPools.push(...streetLightPool(box, lx, lz, 4.5));
+    model.tag?.();
   }
-  for (const j of sim.map.junctions.filter((j) => j.id !== 'yard'))
-    box(j.x, 0.09, j.z, 12, 0.05, 12, '#414950');
+  // Junctions: a square where roads meet square-on, a round apron where any road comes in at an
+  // angle or along a curve, as wide as the widest road; a roundabout has its circle and island.
+  for (const j of sim.map.junctions.filter((j) => j.id !== 'yard')) {
+    const arms = sim.map.segments.filter(([a, b]) => a === j || b === j),
+      angled = arms.some(([a, b]) => a.x !== b.x && a.z !== b.z),
+      curved = arms.some((s) => s.line),
+      asphalt = Math.max(12, ...arms.map((s) => ROAD_SIZES[s.lanes || 1].asphalt));
+    const disc = (y, r, h, colour, extra = {}) =>
+      objects.push(
+        model.cylinder(j.x + origin.x, y, j.z + origin.z, r, h, colour, {
+          community: true,
+          ...extra,
+        }),
+      );
+    if (j.roundabout) {
+      disc(0.025, ROUNDABOUT.apron + 2, 0.1, '#c8c5b5');
+      disc(0.09, ROUNDABOUT.apron, 0.05, '#414950');
+      disc(0.16, ROUNDABOUT.island + 0.3, 0.18, '#adafa6');
+      disc(0.2, ROUNDABOUT.island, 0.22, '#7f9c6b', { surface: 'grass' });
+    } else if (!angled && !curved) box(j.x, 0.09, j.z, asphalt, 0.05, asphalt, '#414950');
+    else
+      for (const [y, r, h, colour] of [
+        [0.025, asphalt / 2 + 3.5, 0.1, '#c8c5b5'],
+        [0.09, asphalt / 2 + 1.5, 0.05, '#414950'],
+      ])
+        disc(y, r, h, colour);
+  }
   if (model.farm) model.farm.driveway = drawFarmDriveway({ box, origin, sim });
   for (const c of sim.map.crossings) {
     const a = sim.map.walks.nodes[c.a],
       b = sim.map.walks.nodes[c.b],
       length = Math.hypot(b.x - a.x, b.z - a.z),
-      horizontal = a.z === b.z;
+      dir = [(b.x - a.x) / length, (b.z - a.z) / length];
+    // Zebra stripes: short along the crossing, 2 m across it.
     for (let t = 0.5; t < length; t += 1.5)
-      box(
-        a.x + ((b.x - a.x) * t) / length,
-        0.14,
-        a.z + ((b.z - a.z) * t) / length,
-        horizontal ? 0.7 : 2,
-        0.025,
-        horizontal ? 2 : 0.7,
-        '#f5efe0',
-      );
+      piece(a.x + dir[0] * t, 0.14, a.z + dir[1] * t, dir, 0.7, 0.025, 2, '#f5efe0');
   }
   for (const [id, edges] of Object.entries(sim.map.walks.edges))
     for (const edge of edges) {
@@ -225,6 +291,9 @@ export function addCommunityWorld(model, location) {
         rotation: [0, -Math.atan2(b.z - a.z, b.x - a.x), 0],
       });
     }
+  // Roads, junctions, crossings and footpaths are laid out in the Street Editor, not moved as
+  // objects: the world editor shows them locked (world-detach.js).
+  for (const m of objects.slice(streetFrom)) if (!m.editGroup) m.editLock = 'street';
   for (const b of sim.map.buildings) {
     if (b.type === 'parking') {
       // Drawn from the simulation's footprint, which is also what a click on the lot selects.
@@ -300,7 +369,7 @@ export function addCommunityWorld(model, location) {
   walks.node('road-control-approach', 11, 8);
   walks.node('road-control-station', 11, 11);
   for (const [a, b] of [
-    ['1:1/1/1', 'road-control-approach'],
+    [pavement(walks, '1:1/1/1'), 'road-control-approach'],
     ['road-control-approach', 'road-control-station'],
   ]) {
     walks.edge(a, b);
@@ -681,6 +750,7 @@ export function addCommunityWorld(model, location) {
     people,
     workers,
   };
+  tagTownGroups(model, { sim, origin, furnishings, busStops });
   // A high cloud layer and flocks of birds over the whole world.
   const placed = objects.filter((m) => m.pos[1] > -5);
   model.community.sky = addWorldSky(model, {
@@ -692,7 +762,45 @@ export function addCommunityWorld(model, location) {
       maxZ: Math.max(...placed.map((m) => m.pos[2])),
     },
   });
+  // Whatever is still loose becomes an edit group of its own, or is marked as locked (and why).
+  tagLooseParts(model);
   return model.community;
+}
+// Edit groups for the world editor (see world-layout.js): each piece of furnishing, each bus stop,
+// and each town lot (a shop, a residence, the park...) with everything else standing on it. People
+// are left out (their animation places them every frame), as are roads and traffic signals.
+function tagTownGroups(model, { sim, origin, furnishings, busStops }) {
+  const people = new Set(
+    (model.extraPeople || []).flatMap((p) => [...(p.person?.meshes || []), ...(p.standIn || [])]),
+  );
+  for (const group of furnishings.groups) {
+    const id = 'town/furniture/' + group.id;
+    for (const part of group.parts) part.editGroup = id;
+    for (const c of model.colliders) if (c.communityFurnishing === group.id) c.editGroup = id;
+  }
+  busStops.forEach(({ parts, lamp }, i) => {
+    for (const part of [...parts, lamp]) if (part) part.editGroup = 'town/bus-stop#' + (i + 1);
+  });
+  const lots = sim.map.buildings
+    .filter((b) => !b.existingProperty)
+    .map((b) => ({ id: 'town/' + b.id, x: origin.x + b.x, z: origin.z + b.z, w: b.w, d: b.d }))
+    // The smallest lot wins where lots overlap.
+    .sort((a, b) => a.w * a.d - b.w * b.d);
+  // A building's own trim (fences, eaves, driveways) may reach a little past its lot.
+  const lotAt = (x, z, margin = 0) =>
+    lots.find((l) => Math.abs(x - l.x) <= l.w / 2 + margin && Math.abs(z - l.z) <= l.d / 2 + margin)
+      ?.id;
+  for (const m of model.objects) {
+    if (!(m.community || m.regionalStreet) || m.editGroup || m.actor || m.pos[1] < -5) continue;
+    if (people.has(m) || m.trafficSignal || m.busStop) continue;
+    const lot = lotAt(m.pos[0], m.pos[2], m.residence || m.civic || m.recreation ? 3 : 0);
+    if (lot) m.editGroup = lot;
+  }
+  for (const c of model.colliders)
+    if (c.community && !c.editGroup && !c.communityFurnishing) {
+      const lot = lotAt(c.x, c.z);
+      if (lot) c.editGroup = lot;
+    }
 }
 export function updateCommunityWorld(model, state, seconds) {
   const c = model.community;

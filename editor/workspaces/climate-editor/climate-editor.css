@@ -1,0 +1,105 @@
+/* Climate & Soundscape Studio Styles */
+.clim-workspace {
+  grid-template-columns: 260px 1fr 350px;
+}
+
+.clim-list-pane {
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid var(--line);
+  background: var(--panel);
+  min-height: 0;
+}
+
+.clim-list-pane .list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 6px;
+}
+
+.clim-entry {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  text-align: left;
+  cursor: pointer;
+}
+
+.clim-entry:hover {
+  background: var(--hover);
+}
+
+.clim-entry.active {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.clim-stage {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 18px;
+  overflow-y: auto;
+  background: var(--bg);
+}
+
+.clim-card {
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--panel);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.clim-card h3 {
+  margin: 0;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+}
+
+.clim-chart-svg {
+  width: 100%;
+  height: 230px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #10141b;
+}
+
+.clim-preset-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(175px, 1fr));
+  gap: 8px;
+}
+
+.clim-preset-card {
+  padding: 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: 6px;
+  background: var(--panel-raised);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  cursor: pointer;
+  text-align: left;
+}
+
+.clim-preset-card:hover {
+  border-color: var(--accent);
+  background: var(--hover);
+}
+
+.clim-synth-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}

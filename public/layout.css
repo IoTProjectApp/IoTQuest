@@ -168,6 +168,35 @@
   .simulation-column .bench-bar {
     min-height: 46px;
   }
+  /* The bar grows rather than clipping: when the clock and density controls do not fit beside the
+     view tabs, they move to a row of their own instead of wrapping over the tabs. */
+  .world-panel .panel-bar {
+    flex-shrink: 0;
+    height: auto;
+    flex-wrap: wrap;
+    column-gap: 12px;
+    row-gap: 2px;
+    padding-top: 4px;
+    padding-bottom: 4px;
+  }
+  .world-panel .world-tabs {
+    height: auto;
+  }
+  .world-panel .world-status {
+    flex-wrap: nowrap;
+    margin-left: auto;
+    white-space: nowrap;
+  }
+  /* Compact enough to share the tabs' row on a 1440 px screen. */
+  .world-panel .world-status .sep {
+    margin: 0 3px;
+  }
+  .world-panel #clockSpeed {
+    max-width: 110px;
+  }
+  .world-panel .world-density input {
+    width: 52px;
+  }
   .split-handle {
     display: block;
     flex: 0 0 14px;
@@ -414,14 +443,8 @@
     height: 44px;
   }
   #adventureScreen[data-layout='split'] .world-panel .panel-bar {
-    height: auto;
-    flex-wrap: wrap;
-    padding: 8px 12px;
-    gap: 6px;
-  }
-  #adventureScreen[data-layout='split'] .world-status {
-    width: 100%;
-    justify-content: space-between;
+    padding-left: 12px;
+    padding-right: 12px;
   }
   #adventureScreen[data-layout='split'] .editor-layout,
   #adventureScreen[data-layout='split'] .editor-layout.with-coach {

@@ -1,0 +1,196 @@
+/* New people and routines in the Character Editor (people-panel.js). */
+.new-person {
+  margin: 0 12px 8px;
+  justify-content: center;
+}
+
+/* Who they are, and their routine, at the top of the inspector */
+.people-sections .field {
+  margin-bottom: 10px;
+}
+.people-sections textarea {
+  width: 100%;
+  min-height: 52px;
+  padding: 7px 8px;
+  border: 1px solid var(--line-strong);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+  resize: vertical;
+}
+.people-sections textarea:focus {
+  border-color: var(--accent);
+  outline: none;
+}
+.people-sections .controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.people-sections .actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
+.people-sections .muted {
+  margin: 0 0 4px;
+  color: var(--muted);
+}
+.people-sections .issues {
+  list-style: none;
+  margin: 10px 0 0;
+  padding: 0;
+}
+.people-sections .issues li {
+  display: flex;
+  gap: 8px;
+  padding: 3px 0;
+  font-size: 12px;
+}
+.people-sections .issues .error {
+  color: var(--danger);
+}
+.people-sections .issues .warning {
+  color: var(--warn);
+}
+.people-sections .issues li span {
+  color: var(--text);
+}
+
+/* The routine map, over the preview */
+.routine-map {
+  position: absolute;
+  inset: 12px;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--line-strong);
+  border-radius: 12px;
+  background: var(--panel);
+  box-shadow: 0 10px 32px rgb(0 0 0 / 40%);
+  overflow: hidden;
+  z-index: 5;
+}
+.routine-map[hidden] {
+  display: none;
+}
+.map-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--line);
+}
+.map-head > div:first-child {
+  flex: 1;
+  min-width: 0;
+}
+.map-head span {
+  color: var(--muted);
+}
+.map-tools {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.map-body {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+}
+.map-body canvas {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  cursor: crosshair;
+  outline: none;
+}
+.map-side {
+  width: 270px;
+  padding: 12px;
+  border-left: 1px solid var(--line);
+  overflow-y: auto;
+}
+.map-side .muted {
+  margin: 0 0 10px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.map-hint {
+  padding: 6px 12px;
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 12px;
+}
+.stops {
+  list-style: none;
+  margin: 0 0 10px;
+  padding: 0;
+}
+.stops li {
+  display: grid;
+  gap: 6px;
+  margin-bottom: 8px;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--bg);
+  cursor: pointer;
+}
+.stops li.selected {
+  border-color: var(--accent);
+}
+.stop-head {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.stop-head .num {
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 600;
+}
+.stop-head .where {
+  flex: 1;
+  color: var(--faint);
+  font: 11px var(--mono);
+}
+.stops label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.stops .input {
+  width: 72px;
+}
+.stops .select {
+  width: 100%;
+}
+.stops .remove {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border: 0;
+  border-radius: 50%;
+  background: none;
+  color: var(--faint);
+  cursor: pointer;
+}
+.stops .remove:hover:not(:disabled) {
+  background: var(--hover);
+  color: var(--text);
+}
+.stops .remove:disabled {
+  opacity: 0.3;
+  cursor: default;
+}

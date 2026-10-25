@@ -25,6 +25,7 @@ test('a target goes into the address and comes back out the same', () => {
     ...target,
     at: null,
     place: null,
+    world: null,
   });
   // From the beginning: still a play-test (nothing saved), with nowhere to go.
   assert.deepEqual(readPlayTarget(new URL(playTargetUrl('x', null), 'http://h/').search, known), {
@@ -35,6 +36,7 @@ test('a target goes into the address and comes back out the same', () => {
     chat: false,
     at: null,
     place: null,
+    world: null,
   });
   // Empty parts are left out of the address.
   assert.equal(
@@ -61,6 +63,21 @@ test('anything the game cannot use is dropped, not trusted', () => {
   assert.equal(read({ person: 'x'.repeat(200) }).person.length, 80);
   assert.equal(readPlayTarget('?' + PLAY_PARAM + '=not-json', known).city, null);
   assert.equal(readPlayTarget('?' + PLAY_PARAM + '=[1]', known).quest, null);
+});
+
+test('a target can name a World Builder world, checked against the saved ones', () => {
+  const read = (value, worldIds = null) =>
+    readPlayTarget('?' + PLAY_PARAM + '=' + encodeURIComponent(JSON.stringify(value)), {
+      ...known,
+      worldIds,
+    });
+  assert.equal(read({ world: 'starter-world' }).world, 'starter-world');
+  assert.equal(read({ world: 'starter-world' }, ['starter-world']).world, 'starter-world');
+  assert.equal(read({ world: 'gone' }, ['starter-world']).world, null);
+  assert.equal(read({ world: '../game' }).world, null);
+  assert.equal(read({ world: 7 }).world, null);
+  const url = playTargetUrl('game.html', { world: 'world-1' });
+  assert.equal(readPlayTarget(new URL(url, 'http://h/').search, known).world, 'world-1');
 });
 
 test('the person is found by id, then by their city name, then by their quest name', () => {
@@ -97,6 +114,7 @@ test('the game never loads or saves progress in a play-test, and the editor send
     'quest-editor',
     'conversation-editor',
     'city-editor',
+    'world-builder',
   ]) {
     const app = await readFile(
       new URL(`../editor/workspaces/${workspace}/app.js`, import.meta.url),
@@ -105,7 +123,7 @@ test('the game never loads or saves progress in a play-test, and the editor send
     assert.match(app, /playstart/, workspace + ' offers the beginning too');
     assert.match(
       app,
-      /shell\.openGame\(\s*(fromStart\s*\?\s*null\s*:\s*)?\{/,
+      /shell\??\.openGame\(\s*(fromStart\s*\?\s*null\s*:\s*)?\{/,
       workspace + ' sends a target',
     );
   }

@@ -50,6 +50,38 @@ export const WORKSPACES = [
     icon: 'city',
     writes: 'public/data/cities.js',
   },
+  {
+    id: 'world-builder',
+    name: 'World Builder',
+    summary:
+      'Create, sculpt, build, furnish, wire and explore complete 3D environments for IoT learning missions with terrain, modular buildings, roads and live simulations.',
+    icon: 'world',
+    writes: 'public/data/worlds.js',
+  },
+  {
+    id: 'component-editor',
+    name: 'Component & Circuit Lab',
+    summary:
+      'Design and customize IoT sensors and actuators, inspect breadboard wiring on ESP32 and Raspberry Pi Pico, and test live signal waveforms.',
+    icon: 'device',
+    writes: 'public/data/components.js',
+  },
+  {
+    id: 'curriculum-editor',
+    name: 'Curriculum & Code Coach Editor',
+    summary:
+      'Author programming patterns in C++ and MicroPython, write Check Your Understanding questions, and test live Code Coach diagnostic hints.',
+    icon: 'code',
+    writes: 'public/data/curriculum.js',
+  },
+  {
+    id: 'climate-editor',
+    name: 'Climate & Soundscape Studio',
+    summary:
+      'Tune each city’s regional weather curves, build extreme weather presets, and synthesizer-test procedural WebAudio soundscapes.',
+    icon: 'sun',
+    writes: 'public/data/climate.js',
+  },
 ];
 
 export const workspaceUrl = (workspace) => `../workspaces/${workspace.id}/`;

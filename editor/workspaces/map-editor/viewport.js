@@ -16,6 +16,7 @@ import {
   partBounds,
 } from '../../../public/world-layout.js';
 import { LOCKED_LINES } from '../../../public/house-shell.js';
+import { lockedParts, lockedTarget } from './locked.js';
 
 const FOV = 0.82;
 // A daytime sky with light cloud: what matters here is seeing shapes and colours clearly.
@@ -124,6 +125,7 @@ export class Viewport {
       onHousePick,
       onHouseDrag,
       onHouseEnd,
+      onWallMoved,
     } = {},
   ) {
     this.canvas = canvas;
@@ -137,6 +139,7 @@ export class Viewport {
       onHousePick,
       onHouseDrag,
       onHouseEnd,
+      onWallMoved,
     });
     // The House tool's selection and hover: { kind: 'wall' | 'room', id }.
     this.house = null;
@@ -180,13 +183,32 @@ export class Viewport {
       this.orbit.enabled = !e.value;
       if (this.tool === 'house') {
         if (!e.value && this.dragLine) this.onHouseEnd?.(...this.dragLine);
-        this.dragLine = null;
+        if (!e.value && this.dragWall) this.onWallMoved?.(...this.dragWall);
+        this.dragLine = this.dragWall = null;
         return;
       }
       if (!e.value && this.selected) this.onTransformEnd?.(this.selected.id, this.proxyPlacement());
     });
     this.gizmo.addEventListener('objectChange', () => {
       if (this.tool === 'house') {
+        // An added wall slides as a whole, both ends together.
+        const added = this.house?.kind === 'added' && this.session.addedWall(this.house.id);
+        if (added) {
+          const [mx, mz] = [0, 1].map((i) => (added.from[i] + added.to[i]) / 2),
+            dx = this.proxy.position.x - mx,
+            dz = this.proxy.position.z - mz,
+            moved = {
+              ...added,
+              from: [added.from[0] + dx, added.from[1] + dz],
+              to: [added.to[0] + dx, added.to[1] + dz],
+            };
+          this.dragWall = [added.id, moved.from, moved.to];
+          this.session.previewWalls(
+            this.session.addedWalls().map((w) => (w.id === added.id ? moved : w)),
+          );
+          this.updateOutlines();
+          return;
+        }
         const wall = this.selectedWall();
         if (!wall) return;
         this.dragLine = [wall.line, this.proxy.position[wall.axis === 'x' ? 'z' : 'x']];
@@ -255,7 +277,8 @@ export class Viewport {
     if (this.tool === 'house') return this.attachWallGizmo();
     this.gizmo.showY = true;
     this.gizmo.showX = this.gizmo.showZ = this.mode !== 'rotate';
-    const editing = this.selected && this.tool === 'select' && !this.selected.hidden;
+    const editing =
+      this.selected && this.tool === 'select' && !this.selected.hidden && !this.selected.locked;
     if (editing && this.mode !== 'scale') {
       this.syncProxy();
       this.gizmo.attach(this.proxy);
@@ -270,7 +293,12 @@ export class Viewport {
     this.proxy.rotation.set(0, p.turn || 0, 0);
   }
   refresh() {
-    if (this.selected && !this.session.groups.has(this.selected.id)) this.selected = null;
+    if (
+      this.selected &&
+      !this.session.groups.has(this.selected.id) &&
+      !(this.selected.locked && this.session.model.objects.includes(this.selected.parts[0]))
+    )
+      this.selected = null;
     if (this.tool === 'house' && !this.gizmo.dragging) this.attachGizmo();
     if (this.selected && !this.gizmo.dragging && !this.resizing) this.attachGizmo();
     this.updateOutlines();
@@ -306,6 +334,8 @@ export class Viewport {
   // The parts that show a wall or room: a wall's, or a room's floor.
   houseParts(target) {
     const shell = this.session?.model.shell;
+    if (target?.kind === 'added')
+      return this.session.model.addedWalls?.find((w) => w.id === target.id)?.parts || [];
     if (!target || !shell) return [];
     if (target.kind === 'wall') return shell.walls.find((w) => w.id === target.id)?.parts || [];
     return shell.rooms.find((r) => r.id === target.id)?.parts.slice(0, 1) || [];
@@ -329,6 +359,23 @@ export class Viewport {
   // A wall on a line that can move gets a handle that slides it across the house.
   attachWallGizmo() {
     this.handles.visible = false;
+    const added = this.house?.kind === 'added' && this.session.addedWall(this.house.id);
+    if (added) {
+      if (!this.gizmo.dragging) {
+        const height = added.height ?? 1.1;
+        this.proxy.position.set(
+          (added.from[0] + added.to[0]) / 2,
+          height + 0.3,
+          (added.from[1] + added.to[1]) / 2,
+        );
+        this.proxy.rotation.set(0, 0, 0);
+      }
+      this.gizmo.setMode('translate');
+      this.gizmo.showY = false;
+      this.gizmo.showX = this.gizmo.showZ = true;
+      this.gizmo.attach(this.proxy);
+      return;
+    }
     const wall = this.selectedWall();
     if (!wall || !this.session.houseInfo().whole || LOCKED_LINES[wall.line]) {
       this.gizmo.detach();
@@ -351,8 +398,8 @@ export class Viewport {
   // The wall or room floor under the cursor.
   pickHouse(event) {
     const ray = this.ray(event),
-      shell = this.session?.model.shell;
-    if (!ray || !shell) return null;
+      shell = this.session?.model.shell || { walls: [], rooms: [] };
+    if (!ray) return null;
     const info = this.session.houseInfo();
     let best = null,
       nearest = Infinity;
@@ -370,6 +417,8 @@ export class Viewport {
     for (const room of shell.rooms)
       if (info.rooms.includes(room.id))
         consider({ kind: 'room', id: room.id }, room.parts.slice(0, 1));
+    for (const wall of this.session.model.addedWalls || [])
+      consider({ kind: 'added', id: wall.id }, wall.parts);
     return best;
   }
   // Fits a wire box around parts (a wall's or a floor's).
@@ -436,7 +485,22 @@ export class Viewport {
         }
       }
     }
-    return best;
+    // Parts that stay put can be clicked too, where nothing movable is under the cursor (a tree on
+    // a hillside is the tree): the inspector says why they do not move.
+    if (best) return best;
+    let locked = null;
+    for (const part of lockedParts(this.session)) {
+      if ((part.opacity ?? 1) < 0.5) continue;
+      const t = rayPart(ray, part);
+      if (t < nearest) {
+        nearest = t;
+        locked = part;
+      }
+    }
+    if (!locked) return best;
+    if (this.hovered?.locked && this.hovered.parts[0] === locked) return this.hovered;
+    if (this.selected?.locked && this.selected.parts[0] === locked) return this.selected;
+    return lockedTarget(locked);
   }
   bindPointer() {
     const c = this.canvas;

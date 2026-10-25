@@ -1275,6 +1275,11 @@ dialog::backdrop {
   padding: 16px 8px;
   border-bottom: 1px solid #e8eddf;
 }
+/* Custom worlds (game.js setupCustomWorlds) are links to their own pages. */
+a.quest-option {
+  color: inherit;
+  text-decoration: none;
+}
 .quest-option > span {
   font: 18px var(--mono);
   color: #a3b18f;

@@ -185,6 +185,9 @@ export function buildHouseObjects({ mesh, tag, colliders, dynamic, design }) {
   }
   part('bowl', [-4.3, 1.31, -9.6], [0.7, 0.24, 0.6], '#f7f6ed', { roughness: 0.2 });
   faucet(-4.3, 1.31, -9.88);
+  // The mirror on the wall above is its own group, so the vanity moves without it (it is still
+  // placed with the vanity's furnishing).
+  tag?.('furniture/bathroom-mirror#');
   round(-4.3, 1.82, -10.8, 0.9, 0.82, 0.065, '#c0b5a1');
   round(-4.3, 1.82, -10.755, 0.8, 0.72, 0.025, '#adc6c9', { roughness: 0.15 });
   use('toilet');

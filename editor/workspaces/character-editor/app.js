@@ -22,6 +22,7 @@ import { createModelImport } from './model-panel.js';
 import { knownModel } from '../../../public/character-models.js';
 import { icon } from '../../ui/icons.js';
 import { appearanceSection, bindAppearance } from './look-panel.js';
+import { wardrobeSection, bindWardrobe } from './wardrobe-panel.js';
 
 const shell = window.editorShell;
 const $ = (id) => document.getElementById(id);
@@ -274,6 +275,7 @@ function renderInspector() {
     </section>`
     }
     ${appearanceSection(own, look)}
+    ${wardrobeSection(own, look, { locked: locked ? 'The judo class keep their gi on for the lesson.' : null })}
     <section>
       <div class="section-head"><h3>Clothes</h3><button class="link" data-section="outfit" ${own.outfit ? '' : 'disabled'}>Reset clothes</button></div>
       ${plain('top', 'Top')}
@@ -497,6 +499,7 @@ function bindInspector(el, target) {
   for (const b of el.querySelectorAll('[data-section]'))
     b.addEventListener('click', () => s.reset(target, b.dataset.section));
   bindAppearance(el, { session: s, target, look, stage });
+  bindWardrobe(el, { session: s, target, look, stage, own: s.own(target) });
   $('reset-all').addEventListener('click', () => s.reset(target));
   bindReactions(el, {
     own: s.own(target),

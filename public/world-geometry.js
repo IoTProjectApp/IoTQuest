@@ -9,9 +9,45 @@ export const LOW_DETAIL_SHAPES = [
   'torus',
   'ridge',
 ];
+// Shapes made at run time (hand-made terrain, water outlines: see world-nature.js), under a key of
+// their own. Given triangles in world metres, it keeps them as a unit shape like the others and
+// returns { key, pos, size } for the mesh that draws them, so culling and lighting work as for any
+// shape (normals are stored times the size: the shader divides by its square). A shape that is
+// replaced is retired, so renderers can let its buffers go.
+const custom = new Map(),
+  retired = [];
+let customCount = 0;
+export function registerGeometry(positions, normals) {
+  const min = [Infinity, Infinity, Infinity],
+    max = [-Infinity, -Infinity, -Infinity];
+  for (let i = 0; i < positions.length; i++) {
+    const axis = i % 3;
+    if (positions[i] < min[axis]) min[axis] = positions[i];
+    if (positions[i] > max[axis]) max[axis] = positions[i];
+  }
+  const pos = min.map((v, i) => (v + max[i]) / 2),
+    size = min.map((v, i) => Math.max(1e-3, max[i] - v)),
+    p = new Float32Array(positions.length),
+    n = new Float32Array(positions.length);
+  for (let i = 0; i < positions.length; i++) {
+    const axis = i % 3;
+    p[i] = (positions[i] - pos[axis]) / size[axis];
+    n[i] = normals[i] * size[axis];
+  }
+  const key = 'custom:' + ++customCount;
+  custom.set(key, { positions: p, normals: n, count: positions.length / 3 });
+  return { key, pos, size };
+}
+export function retireGeometry(key) {
+  if (custom.delete(key)) retired.push(key);
+}
+// Every retired key, in order: each renderer drops those after the last one it has seen.
+export const retiredGeometry = () => retired;
+
 // low: far fewer vertices for objects only a few pixels across. A rounded box far away is
 // drawn as a plain box instead (its bevel is under a pixel).
 export function geometry(shape, { low = false } = {}) {
+  if (custom.has(shape)) return custom.get(shape);
   const p = [],
     n = [];
   const triangle = (a, b, c, normal = null) => {

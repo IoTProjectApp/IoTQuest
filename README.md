@@ -48,11 +48,12 @@ To add or change characters or animations:
 
 `./scripts/world-editor.sh` opens the IoT Quest Editor, a desktop tool (Electron) for correcting the generated world by hand. It has these workspaces:
 
-- **Map Editor** moves, adds and removes furniture, garden features and town buildings per city. It saves to `public/data/world-layout.js`.
+- **Map Editor** moves, adds and removes furniture, garden features and town buildings per city, edits the house's walls, and shapes the land: hills, painted ground, trees, long grass, ponds, streams and pools. It saves to `public/data/world-layout.js`.
 - **Street Editor** lays out the town's roads, junction controls and crossings, and the traffic follows. It saves to `public/data/street-layout.js`.
 - **Character Editor** sets who plays each of the game's people, what they wear and how they move, adds people of your own, and draws routines for them to walk. It saves to `public/data/characters.js` and `public/data/people.js`.
 - **Quest Editor** writes new quests (story, devices, rules and tests), each checked against a worked solution on both boards before it can be saved. It saves to `public/data/quests.js`.
 - **Conversation Editor** writes what the game's people say in chats, for everyone or one person in one city, and how each resident asks for their quests. It saves to `public/data/conversations.js`.
+- **World Builder** builds whole 3D worlds (terrain, buildings, roads, IoT devices). It saves to `public/data/worlds.js`, and saved worlds are playable in the game from **Custom worlds** on the destination screen (`world.html`).
 - **City Editor** words each city: what it calls the household, how residents open their requests, and the home quests' titles and requests. It saves to `public/data/cities.js`.
 
 The game applies both when it builds each city. With no changes saved, every world is built exactly as before. The editor is never built or deployed; see `editor/README.md`.

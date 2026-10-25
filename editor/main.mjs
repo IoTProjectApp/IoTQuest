@@ -8,6 +8,7 @@ import { readFile, writeFile, rename, stat, mkdir, unlink } from 'node:fs/promis
 import { basename, extname, join, normalize, sep } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { playTargetUrl } from '../public/editor-play.js';
+import { storeText } from './store-format.mjs';
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
 const PUBLIC = join(ROOT, 'public');
@@ -77,6 +78,49 @@ const STORES = {
       v?.version === 1 &&
       typeof v.locations === 'object' &&
       (v.town === null || Array.isArray(v.town?.roads)),
+  },
+  worlds: {
+    file: join(PUBLIC, 'data', 'worlds.js'),
+    about: 'Custom 3D worlds created in the World Builder',
+    valid: (v) =>
+      v?.version === 1 &&
+      Array.isArray(v.worlds) &&
+      Array.isArray(v.prefabs) &&
+      Array.isArray(v.favorites),
+  },
+  components: {
+    file: join(PUBLIC, 'data', 'components.js'),
+    about: 'Custom IoT components and circuit definitions, written by the Component & Circuit Lab',
+    valid: (v) =>
+      v?.version === 1 &&
+      v.edits !== null &&
+      typeof v.edits === 'object' &&
+      !Array.isArray(v.edits) &&
+      Array.isArray(v.custom),
+  },
+  curriculum: {
+    file: join(PUBLIC, 'data', 'curriculum.js'),
+    about:
+      'Programming techniques, comprehension questions and Code Coach hints, written by the Curriculum & Code Coach Editor',
+    valid: (v) =>
+      v?.version === 1 &&
+      v.techniques !== null &&
+      typeof v.techniques === 'object' &&
+      v.questions !== null &&
+      typeof v.questions === 'object' &&
+      Array.isArray(v.coachTips),
+  },
+  climate: {
+    file: join(PUBLIC, 'data', 'climate.js'),
+    about:
+      'City climate profiles, weather presets and soundscape settings, written by the Climate & Soundscape Studio',
+    valid: (v) =>
+      v?.version === 1 &&
+      v.cities !== null &&
+      typeof v.cities === 'object' &&
+      Array.isArray(v.presets) &&
+      v.soundscape !== null &&
+      typeof v.soundscape === 'object',
   },
 };
 // three.js add-ons the editor uses (from the game's pinned three in node_modules), pointed at the
@@ -156,47 +200,11 @@ async function readStore(name) {
   const module = await import(pathToFileURL(store.file).href + '?t=' + Date.now());
   return module.default;
 }
-// JSON laid out for reading and diffs: one line per part, collider, placement, junction or road,
-// numbers to a tenth of a millimetre.
-function format(value, indent = '') {
-  const flat = (v) =>
-    v === null ||
-    typeof v !== 'object' ||
-    Object.values(v).every(
-      (x) =>
-        x === null ||
-        typeof x !== 'object' ||
-        (Array.isArray(x) && x.every((y) => typeof y !== 'object')),
-    );
-  const tidy = (v) =>
-    JSON.stringify(v, (_, x) => (typeof x === 'number' ? Math.round(x * 1e4) / 1e4 : x));
-  if (flat(value))
-    return tidy(value)
-      .replace(/,"/g, ', "')
-      .replace(/":/g, '": ')
-      .replace(/,(?=[-\d])/g, ', ');
-  const inner = indent + '  ',
-    lines = Array.isArray(value)
-      ? value.map((v) => inner + format(v, inner))
-      : Object.entries(value).map(([k, v]) => inner + JSON.stringify(k) + ': ' + format(v, inner));
-  return (
-    (Array.isArray(value) ? '[' : '{') +
-    '\n' +
-    lines.join(',\n') +
-    '\n' +
-    indent +
-    (Array.isArray(value) ? ']' : '}')
-  );
-}
 async function writeStore(name, value) {
   const store = STORES[name];
   if (!store) throw Error('No store ' + name);
   if (!store.valid(value)) throw Error('Not a valid ' + name);
-  const text =
-    `// ${store.about}\n// (scripts/world-editor.sh). See editor/README.md for the format.\n` +
-    'export default ' +
-    format(value) +
-    ';\n';
+  const text = storeText(store.about, value);
   // Written beside it and renamed over it, so a failed write never leaves half a file.
   await writeFile(store.file + '.tmp', text);
   await rename(store.file + '.tmp', store.file);
@@ -381,6 +389,21 @@ ipcMain.handle('model:remove', async (_, name) => {
   await unlink(modelFile(name)).catch((error) => {
     if (error.code !== 'ENOENT') throw error;
   });
+});
+// World Builder models: one imported into a world, saved by its id (which the World Builder makes
+// a safe name) as public/models/worlds/<id>.glb. Worlds keep only where it is.
+const WORLD_MODEL_FOLDER = join(PUBLIC, 'models', 'worlds');
+const WORLD_MODEL_ID = /^custom-model-[a-z0-9-]{1,60}$/;
+ipcMain.handle('world-model:save', async (_, id, bytes) => {
+  if (typeof id !== 'string' || !WORLD_MODEL_ID.test(id)) throw Error('Not a model id: ' + id);
+  const file = join(WORLD_MODEL_FOLDER, id + '.glb'),
+    data = Buffer.from(bytes);
+  if (data.length > 64 * MB) throw Error('The model is over 64 MB');
+  if (data.subarray(0, 4).toString('latin1') !== 'glTF') throw Error('Not a binary glTF model');
+  await mkdir(WORLD_MODEL_FOLDER, { recursive: true });
+  await writeFile(file + '.tmp', data);
+  await rename(file + '.tmp', file);
+  return basename(file);
 });
 ipcMain.on('editor:unsaved', (_, value) => {
   unsaved = !!value;

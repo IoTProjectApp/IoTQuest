@@ -110,6 +110,7 @@ function partner(spot, facing, attacking, c) {
 // The class as characters for this frame. origin: the dojo lot's centre in model space.
 // An appearance without its height and build.
 const lookOnly = ({ height, build, ...look } = {}) => look;
+const withoutWardrobe = ({ wardrobe, ...outfit } = {}) => outfit;
 export function judoCharacters(judo, t, reduced) {
   const out = [];
   const add = (person, at, angle, clips) =>
@@ -127,7 +128,8 @@ export function judoCharacters(judo, t, reduced) {
       clips,
       standIn: [...person.meshes, person.belt, person.hair],
       belt: person.actor.belt,
-      outfit: dressed(JUDO_GI, settingsFor(person.actor.id).outfit),
+      // Their gi stays on: the wardrobe (their own clothes changed) is not for the class.
+      outfit: dressed(JUDO_GI, withoutWardrobe(settingsFor(person.actor.id).outfit)),
       // Their skin, hair and face; not their height or build, which the throws are fitted to.
       appearance: lookOnly(settingsFor(person.actor.id).appearance),
     });

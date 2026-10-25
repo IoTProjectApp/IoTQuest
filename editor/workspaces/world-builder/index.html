@@ -1,0 +1,260 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>World Builder · IoT Quest Editor</title>
+    <link rel="stylesheet" href="/editor/ui/shell.css" />
+    <link rel="stylesheet" href="/editor/ui/workspace.css" />
+    <link rel="stylesheet" href="world-builder.css" />
+  </head>
+  <body>
+    <!-- Top Toolbar -->
+    <header class="topbar wb-topbar">
+      <a class="button icon-only" id="home" href="/editor/ui/" title="Back to workspaces"></a>
+      <div class="title">
+        <strong>World Builder</strong>
+        <span>IoT Quest Editor</span>
+      </div>
+      <div class="divider"></div>
+
+      <!-- World Selector & Quick Actions -->
+      <label class="city">
+        <span>World</span>
+        <select class="select" id="world-select" title="Active world project"></select>
+      </label>
+      <button class="button icon-only" id="new-world" title="Create new world project"></button>
+      <button class="button icon-only" id="dup-world" title="Duplicate current world"></button>
+
+      <div class="divider"></div>
+
+      <!-- Transform & Selection Tools -->
+      <div class="segmented" id="transform-tools" role="group" aria-label="Transform tools">
+        <button data-mode="select" class="active" title="Select objects (V)">Select</button>
+        <button data-mode="translate" title="Move selected object (G)">Move</button>
+        <button data-mode="rotate" title="Rotate selected object (R)">Rotate</button>
+        <button data-mode="scale" title="Scale selected object (S)">Scale</button>
+      </div>
+
+      <button class="button" id="duplicate" title="Duplicate selected object (⌘D)">
+        Duplicate
+      </button>
+      <button class="button icon-only" id="undo" title="Undo (⌘Z)"></button>
+      <button class="button icon-only" id="redo" title="Redo (⇧⌘Z)"></button>
+
+      <div class="spacer"></div>
+
+      <span class="save-state" id="save-state">Saved</span>
+      <button
+        class="button"
+        id="mode-play"
+        title="Run the world's program and try it in Play Mode"
+      ></button>
+      <button class="button" id="playtest" title="Open in full IoT Quest Game (⌘P)"></button>
+      <button class="button primary" id="save" title="Save worlds to project (⌘S)"></button>
+    </header>
+
+    <!-- Main 4-Pane Workspace: Left Panel, Centre 3D Viewport, Right Inspector, Bottom Hierarchy & Status -->
+    <div class="wb-layout">
+      <!-- Left Panel: Searchable Asset Library & Building Tools -->
+      <aside class="wb-left" aria-label="Asset library and building tools">
+        <nav class="wb-tool-tabs" id="left-tabs" role="tablist">
+          <button data-tab="assets" class="active" title="Asset library & modular building parts">
+            Assets
+          </button>
+          <button data-tab="terrain" title="Sculpt, paint, water & scatter terrain">Terrain</button>
+          <button data-tab="footprint" title="Draw building footprint & generate walls/floors">
+            Footprint
+          </button>
+          <button data-tab="roads" title="Draw roads, footpaths & intersections">Roads</button>
+          <button data-tab="iot" title="Program Arduino C++ & MicroPython for world devices">
+            IoT Code
+          </button>
+          <button data-tab="project" title="Project settings, GLB/GLTF import & export">
+            Project
+          </button>
+        </nav>
+
+        <!-- Tab 1: Searchable Asset Library -->
+        <div class="wb-tab-body" id="tab-assets">
+          <div class="wb-search-bar">
+            <label class="search">
+              <span class="search-icon" id="search-icon"></span>
+              <input
+                class="input"
+                id="asset-search"
+                type="search"
+                placeholder="Search buildings, parts, furniture, IoT…"
+              />
+            </label>
+            <button
+              class="toggle icon-only"
+              id="fav-filter"
+              aria-pressed="false"
+              title="Show only favourite assets"
+            ></button>
+          </div>
+          <div class="wb-category-pills" id="asset-categories"></div>
+          <div class="wb-place-options">
+            <label class="wb-check">
+              <input type="checkbox" id="flatten-on-place" checked />
+              <span>Flatten terrain under placed buildings</span>
+            </label>
+          </div>
+          <div class="wb-asset-grid" id="asset-grid"></div>
+        </div>
+
+        <!-- Tab 2: Terrain Sculpt, Paint, Water & Scatter -->
+        <div class="wb-tab-body" id="tab-terrain" hidden></div>
+
+        <!-- Tab 3: Building Footprint Constructor -->
+        <div class="wb-tab-body" id="tab-footprint" hidden></div>
+
+        <!-- Tab 4: Roads & Infrastructure -->
+        <div class="wb-tab-body" id="tab-roads" hidden></div>
+
+        <!-- Tab 5: IoT Microcontroller & Code Editor -->
+        <div class="wb-tab-body" id="tab-iot" hidden></div>
+
+        <!-- Tab 6: Project, Import/Export & Recovery -->
+        <div class="wb-tab-body" id="tab-project" hidden></div>
+      </aside>
+
+      <!-- Centre: Interactive 3D Viewport -->
+      <main class="wb-centre">
+        <div class="view wb-viewport-wrap">
+          <canvas id="canvas" tabindex="0" aria-label="3D World Builder Viewport"></canvas>
+
+          <!-- Floating Viewport Controls -->
+          <div class="wb-viewport-bar">
+            <div class="segmented" id="camera-modes" role="group" aria-label="Camera mode">
+              <button data-cam="orbit" class="active" title="Orbit camera (Mouse drag + wheel)">
+                Orbit
+              </button>
+              <button data-cam="first-person" title="First-person / Fly camera (WASD + Mouse)">
+                First-Person
+              </button>
+            </div>
+            <button class="button" id="focus-btn" title="Focus on selected object (F)">
+              Focus
+            </button>
+            <button class="button icon-only" id="zoom-in" title="Zoom in (+)">+</button>
+            <button class="button icon-only" id="zoom-out" title="Zoom out (-)">−</button>
+            <label class="wb-inline-control" title="Camera movement speed">
+              <span>Speed</span>
+              <input type="range" id="cam-speed" min="2" max="36" step="1" value="12" />
+            </label>
+            <button
+              class="toggle"
+              id="toggle-snap"
+              aria-pressed="true"
+              title="Snap transforms to grid & angles"
+            >
+              Snap
+            </button>
+            <button
+              class="toggle"
+              id="toggle-grid"
+              aria-pressed="true"
+              title="Show 3D reference grid"
+            >
+              Grid
+            </button>
+            <button
+              class="toggle"
+              id="toggle-axis"
+              aria-pressed="true"
+              title="Show XYZ axis indicator"
+            >
+              Axes
+            </button>
+            <button
+              class="toggle"
+              id="toggle-roofs"
+              aria-pressed="false"
+              title="Hide roofs to inspect and furnish building interiors"
+            >
+              Hide Roofs
+            </button>
+            <label
+              class="wb-inline-control"
+              title="Filter visible building storeys for interior editing"
+            >
+              <span>Storey ≤</span>
+              <select class="select" id="story-filter">
+                <option value="10">All</option>
+                <option value="1">1F</option>
+                <option value="2">2F</option>
+                <option value="3">3F</option>
+              </select>
+            </label>
+          </div>
+
+          <!-- Play Mode Live Simulation Overlay -->
+          <section class="wb-play-hud" id="play-hud" hidden aria-label="Play Mode Simulation">
+            <div class="wb-play-header">
+              <strong>Play Mode · Live IoT Simulation</strong>
+              <div class="wb-play-actions">
+                <button class="button" id="sim-pause">Pause</button>
+                <button class="button" id="sim-reset">Reset</button>
+                <button class="button danger" id="sim-stop">Return to Edit Mode</button>
+              </div>
+            </div>
+            <div class="wb-play-body" id="play-hud-body"></div>
+          </section>
+
+          <div class="hover-label" id="hover-label" hidden></div>
+          <div class="toast" id="toast" role="status" hidden></div>
+          <div class="loading" id="loading" hidden>Loading World Builder…</div>
+        </div>
+
+        <!-- Bottom Panel: Scene Hierarchy, Layers, Status Messages & Contextual Instructions -->
+        <footer class="wb-bottom" aria-label="Scene hierarchy and status bar">
+          <div class="wb-hierarchy-pane">
+            <div class="wb-hierarchy-header">
+              <strong>Scene Hierarchy</strong>
+              <input
+                class="input wb-hierarchy-search"
+                id="hierarchy-search"
+                type="search"
+                placeholder="Filter scene objects…"
+              />
+              <button class="button" id="group-btn" title="Group selected objects (⌘G)">
+                Group
+              </button>
+              <button class="button" id="ungroup-btn" title="Ungroup selected objects">
+                Ungroup
+              </button>
+              <button class="button" id="unhide-all-btn" title="Unhide all hidden objects">
+                Unhide All
+              </button>
+            </div>
+            <div class="wb-hierarchy-columns">
+              <div class="wb-hierarchy-list" id="hierarchy-list" role="tree"></div>
+              <div class="wb-layers-list" id="layers-list" aria-label="Scene layers"></div>
+            </div>
+          </div>
+          <div class="wb-statusbar">
+            <span id="status-counts">0 objects</span>
+            <span class="wb-complexity-warn" id="complexity-warn" hidden></span>
+            <span class="wb-contextual-hint" id="hint">
+              Select a tool on the left or click an object in the 3D viewport.
+            </span>
+            <span class="wb-autosave-msg" id="autosave-msg">Autosave active</span>
+          </div>
+        </footer>
+      </main>
+
+      <!-- Right Panel: Properties Inspector -->
+      <aside class="inspector wb-inspector" id="inspector" aria-label="Object Properties"></aside>
+    </div>
+
+    <!-- Hidden file inputs for GLB/GLTF model import and JSON project import -->
+    <input type="file" id="glb-file-input" accept=".glb,.gltf" hidden />
+    <input type="file" id="project-file-input" accept=".json" hidden />
+
+    <script src="/editor/ui/load-check.js"></script>
+
+    <script type="module" src="app.js"></script>
+  </body>
+</html>

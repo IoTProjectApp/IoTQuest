@@ -29,6 +29,7 @@ import { applyNativeCommunityOutputs } from './community-quests.js';
 import { CommunitySimulation } from './community-sim.js';
 import { residentialLots } from './community-residences.js';
 import { fromWorld } from './world-math.js';
+import { tagLooseParts } from './world-detach.js';
 
 // Place the original home in the town’s residential block.
 export const COMMUNITY_ORIGIN = { x: 24, z: 24 };
@@ -184,6 +185,8 @@ export function addCommunityWorld(model, location, { streets } = {}) {
     const { size, rotation } = alongRoad(dir, length, height, width);
     return box(x, y, z, ...size, color, { ...extra, rotation });
   };
+  // Everything from here to the buildings is the street (see markStreet below).
+  const streetFrom = objects.length;
   for (const segment of sim.map.segments) {
     const [a, b] = segment,
       size = ROAD_SIZES[segment.lanes || 1];
@@ -288,6 +291,9 @@ export function addCommunityWorld(model, location, { streets } = {}) {
         rotation: [0, -Math.atan2(b.z - a.z, b.x - a.x), 0],
       });
     }
+  // Roads, junctions, crossings and footpaths are laid out in the Street Editor, not moved as
+  // objects: the world editor shows them locked (world-detach.js).
+  for (const m of objects.slice(streetFrom)) if (!m.editGroup) m.editLock = 'street';
   for (const b of sim.map.buildings) {
     if (b.type === 'parking') {
       // Drawn from the simulation's footprint, which is also what a click on the lot selects.
@@ -756,6 +762,8 @@ export function addCommunityWorld(model, location, { streets } = {}) {
       maxZ: Math.max(...placed.map((m) => m.pos[2])),
     },
   });
+  // Whatever is still loose becomes an edit group of its own, or is marked as locked (and why).
+  tagLooseParts(model);
   return model.community;
 }
 // Edit groups for the world editor (see world-layout.js): each piece of furnishing, each bus stop,

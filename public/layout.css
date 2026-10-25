@@ -275,6 +275,63 @@
   .editor-actions button {
     white-space: nowrap;
   }
+  /* Split leaves the workbench a short strip, so the component cards turn compact: the icon sits
+     beside the name and the description and button run the card's full width. */
+  #adventureScreen[data-layout='split'] .inventory-panel {
+    padding: 14px 16px 16px;
+  }
+  #adventureScreen[data-layout='split'] .inventory-panel .bench-heading {
+    margin-bottom: 12px;
+  }
+  #adventureScreen[data-layout='split'] .inventory-panel .bench-heading h3 {
+    font-size: 15px;
+  }
+  #adventureScreen[data-layout='split'] .inventory-panel .bench-heading p {
+    margin-top: 2px;
+  }
+  #adventureScreen[data-layout='split'] .inventory-panel .bench-heading .outline {
+    min-height: 32px;
+    padding: 6px 12px;
+    font-size: 12px;
+  }
+  #adventureScreen[data-layout='split'] .component-grid {
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 220px), 1fr));
+    gap: 10px;
+  }
+  #adventureScreen[data-layout='split'] .component-card {
+    display: grid;
+    grid-template-columns: 36px minmax(0, 1fr);
+    grid-template-rows: auto auto 1fr auto;
+    column-gap: 11px;
+    padding: 12px;
+  }
+  #adventureScreen[data-layout='split'] .component-icon {
+    grid-row: 1 / 3;
+    width: 36px;
+    height: 36px;
+    margin: 0;
+    font-size: 20px;
+    border-radius: 9px;
+  }
+  #adventureScreen[data-layout='split'] .component-card h4 {
+    align-self: end;
+    margin: 0 0 3px;
+  }
+  #adventureScreen[data-layout='split'] .component-card:has(.installed-badge) h4 {
+    padding-right: 64px;
+  }
+  #adventureScreen[data-layout='split'] .component-card .component-label {
+    margin: 0;
+  }
+  #adventureScreen[data-layout='split'] .component-card p {
+    grid-column: 1 / -1;
+    margin: 10px 0;
+  }
+  #adventureScreen[data-layout='split'] .component-card button {
+    grid-column: 1 / -1;
+    min-height: 30px;
+    padding: 5px 7px;
+  }
   .mission-column {
     min-height: 0;
     overflow-y: auto;

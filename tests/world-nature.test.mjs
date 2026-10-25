@@ -2,6 +2,9 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { buildWorldModel } from '../public/world3d.js';
+import { createRegionalModel } from '../public/regions.js';
+import { addCommunityWorld } from '../public/community-world.js';
+import { locationById } from '../public/locations.js';
 import { applyWorldLayout, editGroups } from '../public/world-layout.js';
 import { updateLandscape } from '../public/landscape.js';
 import {
@@ -72,10 +75,17 @@ function disc(cx, cz, radius) {
   return field;
 }
 
+// A city as the code builds it, without the saved layout (which may hold nature of its own).
+function builtAsCoded(id) {
+  const model = createRegionalModel(id);
+  addCommunityWorld(model, locationById(id));
+  return model;
+}
+
 test('with no nature saved every city builds exactly as before', () => {
   for (const id of ['legacy', 'kyoto', 'footscray']) {
-    const plain = buildWorldModel(id),
-      again = buildWorldModel(id);
+    const plain = builtAsCoded(id),
+      again = builtAsCoded(id);
     assert.equal(applyNature(again, {}).length, 0);
     assert.equal(applyNature(again, { trees: [], water: [], height: {} }).length, 0);
     assert.equal(worldHash(again), worldHash(plain), id);

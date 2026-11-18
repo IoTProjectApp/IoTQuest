@@ -2,9 +2,9 @@
 // (editor/workspaces/world-builder), shared with the game, which plays saved worlds (world.html).
 // Covers Ready-made buildings, Modular construction parts, Furniture & decor, Infrastructure,
 // Nature & vegetation, and IoT components. Free of DOM so it runs under Node.
-import { components } from '../missions.js';
-import { addDeviceDetails } from '../device-objects.js';
-import { buildTree, buildCrop } from '../vegetation.js';
+import { components } from '../quests/missions.js';
+import { addDeviceDetails } from '../world/device-objects.js';
+import { buildTree, buildCrop } from '../world/vegetation.js';
 
 export const ARCHITECTURAL_STYLES = {
   contemporary: {

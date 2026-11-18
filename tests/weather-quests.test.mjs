@@ -1,11 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { missions, defaults, validate, program, baseEnv } from '../public/missions.js';
-import { adaptMissions, locations, progressForLocation } from '../public/locations.js';
-import { Runtime } from '../public/runtime.js';
-import { advanceEnvironment, fallbackWeather } from '../public/weather.js';
-import { checkPredictions } from '../public/weather-quests.js';
-import { understandingQuestions } from '../public/understanding.js';
+import { missions, defaults, validate, program, baseEnv } from '../public/quests/missions.js';
+import { adaptMissions, locations, progressForLocation } from '../public/game/locations.js';
+import { Runtime } from '../public/sim/runtime.js';
+import { advanceEnvironment, fallbackWeather } from '../public/game/weather.js';
+import { checkPredictions } from '../public/quests/weather-quests.js';
+import { understandingQuestions } from '../public/quests/understanding.js';
 
 test('five appended weather quests work at both levels on both boards in both languages', () => {
   assert.equal(missions.filter((m) => m.weatherQuest).length, 5);

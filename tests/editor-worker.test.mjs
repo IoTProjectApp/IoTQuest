@@ -2,13 +2,13 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { Worker } from 'node:worker_threads';
 import { once } from 'node:events';
-import { missions, baseEnv, defaults, program } from '../public/missions.js';
-import { createLabState } from '../public/lab.js';
+import { missions, baseEnv, defaults, program } from '../public/quests/missions.js';
+import { createLabState } from '../public/sim/lab.js';
 
 // Browser-worker bridge: load the production worker, retaining asynchronous
 // messages, structured cloning and a separate interpreter execution context.
 async function controller(t) {
-  const moduleURL = new URL('../public/sim-worker.js', import.meta.url).href;
+  const moduleURL = new URL('../public/sim/sim-worker.js', import.meta.url).href;
   const worker = new Worker(
     new URL(
       'data:text/javascript,' +

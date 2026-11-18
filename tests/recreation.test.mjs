@@ -1,10 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createRegionalModel } from '../public/regions.js';
-import { locations } from '../public/locations.js';
-import { addCommunityWorld, updateCommunityWorld } from '../public/community-world.js';
-import { collides } from '../public/world-math.js';
-import { updateJudoClass } from '../public/judo-class.js';
+import { createRegionalModel } from '../public/world/regions.js';
+import { locations } from '../public/game/locations.js';
+import { addCommunityWorld, updateCommunityWorld } from '../public/world/community-world.js';
+import { collides } from '../public/world/world-math.js';
+import { updateJudoClass } from '../public/people/judo-class.js';
 
 test('pool and gym occupy separate connected plots with safe entrances at every destination', () => {
   for (const location of [undefined, ...locations]) {

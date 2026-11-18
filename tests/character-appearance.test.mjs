@@ -10,9 +10,9 @@ import {
   strideScale,
   checkAppearance,
   randomAppearance,
-} from '../public/character-appearance.js';
-import { settingsFor } from '../public/character-settings.js';
-import { Appearance } from '../public/three-appearance.js';
+} from '../public/people/character-appearance.js';
+import { settingsFor } from '../public/people/character-settings.js';
+import { Appearance } from '../public/people/three-appearance.js';
 import { CharacterSession } from '../editor/workspaces/character-editor/session.js';
 
 test('with no appearance set, people are drawn exactly as modelled', () => {

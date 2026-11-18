@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { defaults } from '../public/missions.js';
+import { defaults } from '../public/quests/missions.js';
 import {
   parseReadingLine,
   readingsToEnv,
@@ -9,7 +9,7 @@ import {
   boardProgram,
   BoardLink,
   BAUD,
-} from '../public/hardware.js';
+} from '../public/sim/hardware.js';
 
 test('reading lines become sensor readings; anything else is ignored', () => {
   assert.deepEqual(parseReadingLine('IOTQ light=2310 motion=1 temp=23.5'), {

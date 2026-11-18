@@ -1,14 +1,14 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { defaults } from '../public/missions.js';
-import { Runtime } from '../public/runtime.js';
+import { defaults } from '../public/quests/missions.js';
+import { Runtime } from '../public/sim/runtime.js';
 import {
   completions,
   applyCompletion,
   signatureAt,
   declaredSymbols,
   catalog,
-} from '../public/intellisense.js';
+} from '../public/sim/intellisense.js';
 
 const at = (text) => [text.replace('|', ''), text.indexOf('|')];
 const labels = (text, language = 'cpp', devices = []) =>

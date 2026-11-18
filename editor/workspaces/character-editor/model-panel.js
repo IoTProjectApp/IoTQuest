@@ -4,7 +4,7 @@
 // with each model's file beside the game's in public/models/people). The fitting itself is in
 // model-import.js.
 import * as THREE from '../../../public/vendor/three.module.min.js';
-import { IMPORTED_MODELS } from '../../../public/character-models.js';
+import { IMPORTED_MODELS } from '../../../public/people/character-models.js';
 import {
   ModelError,
   readModelFile,

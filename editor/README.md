@@ -49,7 +49,7 @@ Each workspace:
 - `/editor/workspaces/…` for the workspaces;
 - `/editor/three/…` for the three.js add-ons the editor needs, taken from `node_modules/three/examples/jsm` (by short name, such as `OrbitControls.js`, or by path, such as `loaders/FBXLoader.js`) and pointed at the game's vendored copy.
 
-So a workspace imports the game's code with ordinary relative paths (`../../../public/regions.js`), and the same imports work in Node tests. Nothing is cached, so a reload always shows the files as they are on disk. Editor pages may run only their own scripts (a Content Security Policy is set).
+So a workspace imports the game's code with ordinary relative paths (`../../../public/world/regions.js`), and the same imports work in Node tests. Nothing is cached, so a reload always shows the files as they are on disk. Editor pages may run only their own scripts (a Content Security Policy is set).
 
 ### Publish saved changes
 
@@ -75,11 +75,11 @@ It needs the GitHub CLI (`gh`) signed in. Nothing goes live from the editor: the
 
 **Play-test from the beginning** (`⇧⌘P`, or Shift-click **Play-test**) opens the game on its globe, as a new player sees it. Locked destinations open anyway.
 
-The shell adds the target to the game's address (`game.html?editor-play={…}`, read by `public/editor-play.js`, which drops anything the game cannot use). With that parameter present, the game starts fresh: it neither reads nor saves progress, and its header says "Editor play-test · progress is not saved". The play-test window also uses a fresh, in-memory browser session each time, so nothing from it outlives the window. Someone out of sight cannot be walked up to; Maya, Alex and Sam still chat, as they do when they call the technician over.
+The shell adds the target to the game's address (`game.html?editor-play={…}`, read by `public/game/editor-play.js`, which drops anything the game cannot use). With that parameter present, the game starts fresh: it neither reads nor saves progress, and its header says "Editor play-test · progress is not saved". The play-test window also uses a fresh, in-memory browser session each time, so nothing from it outlives the window. Someone out of sight cannot be walked up to; Maya, Alex and Sam still chat, as they do when they call the technician over.
 
 ## Map Editor
 
-The game builds its world in code (`public/world-model.js`, `public/regions.js`, `public/community-world.js` and others), so each city's house, garden and town come from rules, not from a hand-made map. The Map Editor lets you correct that world by hand. Your changes are saved per city, and the game applies them every time it builds that city.
+The game builds its world in code (`public/world/world-model.js`, `public/world/regions.js`, `public/world/community-world.js` and others), so each city's house, garden and town come from rules, not from a hand-made map. The Map Editor lets you correct that world by hand. Your changes are saved per city, and the game applies them every time it builds that city.
 
 ### Layout
 
@@ -244,11 +244,11 @@ export default {
 - `scale` is the object's size: one factor (`1.25`) when it is resized evenly, or three (`[1.2, 1, 0.8]`) when it is stretched, for its width, height and depth along its own sides before it is turned.
 - `from` is where the object's base centre stood as built (`[x, z]`), recorded when the edit is saved. Objects are named by kind and count, so if the world's code later builds one more of a kind earlier on, a name can pass to a different object. The game then leaves the edit out (rather than moving the wrong object) when the object is now more than 1 m from `from`, and lists it in `model.layoutWarnings`; `tests/world-layout.test.mjs` fails on any such warning. Open the city in the Map Editor and place the object again.
 - Added objects carry their own parts, measured from their base centre, so they do not depend on the object they were copied from.
-- `nature` holds the hand-made land (`public/world-nature.js` describes it): hill heights on a 2 m grid (`"i,j"` is x = 2i, z = 2j, in metres up), painted ground and long grass and flowers on a half-metre grid (`"i,j"` is x = i / 2, z = j / 2, with a weight from 0.05 to 1; the edge is where it crosses one half), the long grass's height, colour and thickness, planted trees (`[kind, x, z, size]`), and water: a pond's outline, a stream's course and width, or a pool's two opposite corners, each with an optional `level` and `walk`. Nature is applied last, so hills give way around everything as it then stands. Something the game cannot take (an unknown tree kind, say) is left out and listed in `model.layoutWarnings`.
-- `house` holds changes to the house itself (`public/house-shell.js` describes them): where inner wall lines stand (`lines`, in metres on x or z), each wall's `height`, `color` and `openings` (doorways, by their middle and width), and each room floor's `color`. Only what differs is kept. The house is changed before objects are placed, so furniture stands where it was saved. If the house changes have a problem in a city (its code changed, say), the game leaves all of them out and lists why in `model.layoutWarnings`.
-- `walls` are new walls (`public/added-walls.js` describes them): each runs straight `from` one place `to` another (`[x, z]` in metres), with `height`, `thickness` and `color` when they differ from 1.1 m, 0.18 m and `#eadbbf`, and `openings` by their middle along the wall from `from`, their width and their `kind` (`door` or `window`). They are built after the house's own changes; if any has a problem, all are left out and listed in `model.layoutWarnings`.
+- `nature` holds the hand-made land (`public/world/world-nature.js` describes it): hill heights on a 2 m grid (`"i,j"` is x = 2i, z = 2j, in metres up), painted ground and long grass and flowers on a half-metre grid (`"i,j"` is x = i / 2, z = j / 2, with a weight from 0.05 to 1; the edge is where it crosses one half), the long grass's height, colour and thickness, planted trees (`[kind, x, z, size]`), and water: a pond's outline, a stream's course and width, or a pool's two opposite corners, each with an optional `level` and `walk`. Nature is applied last, so hills give way around everything as it then stands. Something the game cannot take (an unknown tree kind, say) is left out and listed in `model.layoutWarnings`.
+- `house` holds changes to the house itself (`public/world/house-shell.js` describes them): where inner wall lines stand (`lines`, in metres on x or z), each wall's `height`, `color` and `openings` (doorways, by their middle and width), and each room floor's `color`. Only what differs is kept. The house is changed before objects are placed, so furniture stands where it was saved. If the house changes have a problem in a city (its code changed, say), the game leaves all of them out and lists why in `model.layoutWarnings`.
+- `walls` are new walls (`public/world/added-walls.js` describes them): each runs straight `from` one place `to` another (`[x, z]` in metres), with `height`, `thickness` and `color` when they differ from 1.1 m, 0.18 m and `#eadbbf`, and `openings` by their middle along the wall from `from`, their width and their `kind` (`door` or `window`). They are built after the house's own changes; if any has a problem, all are left out and listed in `model.layoutWarnings`.
 
-With an empty file the game builds every world exactly as before; a test (`tests/world-layout.test.mjs`) checks that. When the game builds a city (`buildWorldModel` in `public/world3d.js`), `applyWorldLayout` in `public/world-layout.js` applies its changes.
+With an empty file the game builds every world exactly as before; a test (`tests/world-layout.test.mjs`) checks that. When the game builds a city (`buildWorldModel` in `public/world/world3d.js`), `applyWorldLayout` in `public/world/world-layout.js` applies its changes.
 
 If a change names an object the code no longer builds (because the world's code changed since it was saved), the game skips it and lists it in `model.layoutWarnings`. The editor marks it **Missing** in the change list, and a test fails if the committed layout names such an object.
 
@@ -264,11 +264,11 @@ tag(); // …until the next tag
 
 An id ending in `#` is numbered in build order (`garden/tree#1`, `garden/tree#2`, …), so keep that order stable. **Changing an existing group's id, or the order of numbered groups, detaches saved edits from their object.** The test above will tell you if a committed edit no longer finds its object. The house's walls and rooms are not edit groups: `createWorldModel` records them in `model.shell` (each wall's lines, doorways, height and parts), so keep the grid's walls built through `shellWall` there. House furniture is tagged per piece in `house-objects.js`. Town lots, furnishings and bus stops are grouped in `tagTownGroups` in `community-world.js`. New builders should tag what a person would want to move as one thing.
 
-Whatever is still untagged when the town is built gets a group or a lock from `tagLooseParts` in `public/world-detach.js`: town pieces join the lot they stand on (paving and kerbs off the lots are street), trees become one group each, farm pieces and other loose pieces become one object per set of touching pieces, and roads, traffic lights, the driveway, hills and water, the ground, the house's walls and floors, house trim and the roof are given an `editLock` naming the reason (`LOCKS`). Numbering follows build order, as with `tag`. Mark what should stay put with an `editLock` of an existing kind (or a new one with its reason in `LOCKS`), so the editor can say why; `tests/map-detach.test.mjs` fails if any part of any city is left with neither.
+Whatever is still untagged when the town is built gets a group or a lock from `tagLooseParts` in `public/world/world-detach.js`: town pieces join the lot they stand on (paving and kerbs off the lots are street), trees become one group each, farm pieces and other loose pieces become one object per set of touching pieces, and roads, traffic lights, the driveway, hills and water, the ground, the house's walls and floors, house trim and the roof are given an `editLock` naming the reason (`LOCKS`). Numbering follows build order, as with `tag`. Mark what should stay put with an `editLock` of an existing kind (or a new one with its reason in `LOCKS`), so the editor can say why; `tests/map-detach.test.mjs` fails if any part of any city is left with neither.
 
 ## Street Editor
 
-The town's roads used to be a fixed grid in the code: six junctions across and five rows down, 48 m apart. They are now a layout (`public/street-network.js`). The simulation works out lanes, pavements, crossings and turns from that layout, so when you change the roads, the cars, buses and pedestrians follow.
+The town's roads used to be a fixed grid in the code: six junctions across and five rows down, 48 m apart. They are now a layout (`public/world/street-network.js`). The simulation works out lanes, pavements, crossings and turns from that layout, so when you change the roads, the cars, buses and pedestrians follow.
 
 ### Layout
 
@@ -392,11 +392,11 @@ export default {
 };
 ```
 
-- **The keys:** `model`, `outfit` (pieces as in `public/character-outfits.js`, with `null` taking a piece off, and `wardrobe` for their own clothes, see below), `walk`, `idle`, `activity` (`false` for none), `speed`, `rate` and `reactions` (see Reactions below).
-- **The keys:** `model`, `outfit` (pieces as in `public/character-outfits.js`, with `null` taking a piece off, and `wardrobe` for their own clothes, see below), `appearance` (as in `public/character-appearance.js`; a person's parts are laid over the defaults' one by one), `walk`, `idle`, `activity` (`false` for none), `speed` and `rate`.
+- **The keys:** `model`, `outfit` (pieces as in `public/people/character-outfits.js`, with `null` taking a piece off, and `wardrobe` for their own clothes, see below), `walk`, `idle`, `activity` (`false` for none), `speed`, `rate` and `reactions` (see Reactions below).
+- **The keys:** `model`, `outfit` (pieces as in `public/people/character-outfits.js`, with `null` taking a piece off, and `wardrobe` for their own clothes, see below), `appearance` (as in `public/people/character-appearance.js`; a person's parts are laid over the defaults' one by one), `walk`, `idle`, `activity` (`false` for none), `speed` and `rate`.
 - **Order:** a person's own settings come before `defaults`, and both before what the code picks.
 - **Ids** are the game's own: `player` is the technician, and others look like `Maya`, `worker:shop-floor:0` or `bus:0:1>1:1:2`.
-- **An empty file** leaves everyone as the code makes them, which `tests/character-settings.test.mjs` checks. `public/character-settings.js` applies the settings.
+- **An empty file** leaves everyone as the code makes them, which `tests/character-settings.test.mjs` checks. `public/people/character-settings.js` applies the settings.
 
 ### Reactions
 
@@ -415,7 +415,7 @@ The inspector's **Reactions** section sets a clip someone plays when something h
 - **For each:** a clip (any played on the spot, imported ones too), **For** (once through, or looped for a number of seconds), **Again after** (the cooldown) and **Turn to the technician**. The play button tries it on the stage, turning them to the camera.
 - **One at a time:** a reaction to the weather or to the technician coming near waits while another plays; a chat, a pass or a failure cuts in.
 - **Everyone and one person:** a person's reaction to something replaces everyone's; **Nothing** on a person keeps them still where everyone else reacts. The judo class does not react, and reduced motion turns reactions off.
-- **Saved** with the other settings, as `reactions: [{ trigger, clip, seconds?, cooldown?, face? }]`, triggers `near`, `chat`, `thanks`, `fail`, `cold`, `hot`, `rain`, `night`; `clip: false` for Nothing. `public/character-reactions.js` plays them; with none saved, everyone is as before (`tests/character-reactions.test.mjs`).
+- **Saved** with the other settings, as `reactions: [{ trigger, clip, seconds?, cooldown?, face? }]`, triggers `near`, `chat`, `thanks`, `fail`, `cold`, `hot`, `rain`, `night`; `clip: false` for Nothing. `public/people/character-reactions.js` plays them; with none saved, everyone is as before (`tests/character-reactions.test.mjs`).
 
 ### Designing a look
 
@@ -430,7 +430,7 @@ The **Look** section changes the person themselves, on whichever model plays the
 | Beard  | The model's own (recoloured), clean-shaven, stubble, a short or full beard, a goatee or a moustache. It takes the hair's colour unless given its own.                                                      |
 | Brows  | The model's own, or bold: thicker brows a shade darker than the hair.                                                                                                                                      |
 
-How the hair and beards are made (`public/three-appearance.js`):
+How the hair and beards are made (`public/people/three-appearance.js`):
 
 - **Fitted to each head.** The skull is measured from the model, so every style sits on any head. The hair runs from a crown (at the top, or further back for hair drawn back into a ponytail or bun) to a hairline round the forehead, temples, ears and nape, thinning towards its edge. Strands are painted along it, and the hair fades out smoothly over its last centimetre or two (blended, lit as from outside on both sides), so the hairline is soft rather than cut. Long hair and the bob part over the forehead.
 - **Long hair** hangs from the widest part of the head and eases out over the neck and back rather than going through them, with no step where it leaves the skull. The bob stops above the shoulders.
@@ -451,7 +451,7 @@ The **Their own clothes** section takes off the clothes the model is made with, 
 | Base layer          | What goes on where clothes come off: a colour, **Sleeves** (short, sleeveless or long) and **Legs** (shorts, to the knee or full length), and socks under borrowed shoes. |
 | Change into a dress | One step: top and bottom off, a sleeveless base layer in the dress's colour, and a dress over it.                                                                         |
 
-**Nobody is ever drawn undressed.** Each model's body is cut away under its clothes, so a top or bottom that comes off is always replaced by the base layer (`public/three-wardrobe.js`), made from the piece's own shape so it covers exactly what the piece did:
+**Nobody is ever drawn undressed.** Each model's body is cut away under its clothes, so a top or bottom that comes off is always replaced by the base layer (`public/people/three-wardrobe.js`), made from the piece's own shape so it covers exactly what the piece did:
 
 - cloth over the torso and hips, cut in a clean line at the sleeves' and legs' hems (sleeveless cuts where a dress's top would, from the chest, back and neck);
 - skin past the hems: arms made afresh as smooth limbs shaped from the body's own arm, legs drawn in to the body's own size, painted with the body's own skin as it shows past the clothes. The body's unfinished bits under the old clothes are trimmed away so they never show through;
@@ -499,7 +499,7 @@ export default {
 };
 ```
 
-- **The game** (`public/character-clips.js`) adds each valid entry to its clips, and the renderer loads each file after the game's own clips. With the file empty the game is exactly as before (`tests/character-clips.test.mjs`).
+- **The game** (`public/people/character-clips.js`) adds each valid entry to its clips, and the renderer loads each file after the game's own clips. With the file empty the game is exactly as before (`tests/character-clips.test.mjs`).
 - **Publishing a clip:** `public/models/` is not committed, because Mixamo's terms keep their files out of this public repository. Commit `public/data/clips.js` here, and add the clip's `.glb` to the private models repository (`IoTProjectApp/iotquest-models`, folder `people/`), then update `COMMIT` in `scripts/fetch-models.mjs`. Until a clip's file is there, anyone set to play it stands in the Idle clip instead.
 
 ### Making clips
@@ -574,7 +574,7 @@ They walk at 1.2 m/s, times their walking speed. A walk that runs through a wall
 
 ### The saved people
 
-`public/data/people.js` holds them; `public/people-settings.js` describes the format and adds them to the game.
+`public/data/people.js` holds them; `public/people/people-settings.js` describes the format and adds them to the game.
 
 ```js
 export default {
@@ -596,7 +596,7 @@ export default {
 };
 ```
 
-- **The game** (`public/character-models.js`) draws an imported model from its one file near and far (the game's own have a light version for distance and software WebGL), scaled by its height. A setting that names a model the game does not have plays that person as built. With the file empty the game is exactly as before (`tests/character-models.test.mjs`).
+- **The game** (`public/people/character-models.js`) draws an imported model from its one file near and far (the game's own have a light version for distance and software WebGL), scaled by its height. A setting that names a model the game does not have plays that person as built. With the file empty the game is exactly as before (`tests/character-models.test.mjs`).
 - **Publishing a model:** as with clips, commit `public/data/models.js` here and add the model's `.glb` to the private models repository, then update `COMMIT` in `scripts/fetch-models.mjs`. Until its file is there, anyone set to it is drawn as their jointed stand-in figure.
 - **Not imported:** a model's own animations (import them as clips), extra rigid parts parented to bones, and models whose skeleton is not Mixamo-style (rig them in Mixamo first).
 - **Ids:** an added person's id is `own:` and the name they were added with as a slug (`own:new-person-1`), and stays put when they are renamed, so their looks (kept under that id in `public/data/characters.js`) stay theirs.
@@ -644,7 +644,7 @@ Some behaviour can't be proved by single readings: a fan that waits for two thre
 - **A step** has a label; the readings it changes (a reading left at – carries on from before); how long it lasts in seconds; and, for each output, what it must be at the end of the step: **ON**, **OFF**, **either**, or a **brightness** from 0 to 255. Click an output to go round those.
 - **Events:** a step can also **restart** the controller (a power cut: variables are lost) or make the **network drop** or **come back**, and it can send an MQTT message (`topic = payload`) at its start.
 - **At the start:** the readings before the first step. **Tick** is how far the program's clock moves on each pass (200 ms unless set).
-- **The worked program** proves the quest can be passed. It is written once in a small C-like form (the one `public/catalogue-program.js` describes) and turned into Arduino C++ and MicroPython for the quest's wiring: its **variables** and their starting values, what runs **at start**, what runs **on every pass** (each sensor is read first into a variable named after its reading, such as `temp`; `write(fan, 1)` switches an output, `pwm(led, 128)` sets a brightness, `print(x)` prints a line), and how long it **waits each pass**.
+- **The worked program** proves the quest can be passed. It is written once in a small C-like form (the one `public/quests/catalogue-program.js` describes) and turned into Arduino C++ and MicroPython for the quest's wiring: its **variables** and their starting values, what runs **at start**, what runs **on every pass** (each sensor is read first into a variable named after its reading, such as `temp`; `write(fan, 1)` switches an output, `pwm(led, 128)` sets a brightness, `print(x)` prints a line), and how long it **waits each pass**.
 
 What stays as coded:
 
@@ -667,7 +667,7 @@ Warnings, which don't stop saving, point out an output never tested both on and 
 
 ### The saved quests
 
-`public/data/quests.js` holds the author's choices; `public/authored-quests.js` describes the format, rebuilds each quest and checks it again when the game loads.
+`public/data/quests.js` holds the author's choices; `public/quests/authored-quests.js` describes the format, rebuilds each quest and checks it again when the game loads.
 
 ```js
 export default {
@@ -740,7 +740,7 @@ A line that uses a placeholder it cannot fill, has `<` or `>`, is longer than 24
 
 ### The saved lines
 
-`public/data/conversations.js` holds them; `public/conversation-settings.js` describes the format and reads them in the game.
+`public/data/conversations.js` holds them; `public/people/conversation-settings.js` describes the format and reads them in the game.
 
 ```js
 export default {
@@ -777,7 +777,7 @@ Each city words the home's eight quests its own way: the household has local nam
 
 ### The saved wording
 
-`public/data/cities.js` holds it; `public/city-settings.js` describes the format and reads it in the game.
+`public/data/cities.js` holds it; `public/game/city-settings.js` describes the format and reads it in the game.
 
 ```js
 export default {

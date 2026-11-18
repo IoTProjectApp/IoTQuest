@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { declutterLabels } from '../public/world-labels.js';
+import { declutterLabels } from '../public/world/world-labels.js';
 
 const tag = (text, offsetWidth, offsetHeight = 20) => ({
   textContent: text,

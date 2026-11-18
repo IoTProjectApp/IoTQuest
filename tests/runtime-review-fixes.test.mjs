@@ -1,13 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { Runtime, pythonToC } from '../public/runtime.js';
-import { diagnose } from '../public/diagnostics.js';
-import { formatCode } from '../public/code-format.js';
-import { tokenize } from '../public/code-tokens.js';
-import { completions } from '../public/intellisense.js';
-import { attachAssist } from '../public/editor-assist.js';
-import { checkOutput } from '../public/code-coach.js';
-import { missions, defaults, program } from '../public/missions.js';
+import { Runtime, pythonToC } from '../public/sim/runtime.js';
+import { diagnose } from '../public/sim/diagnostics.js';
+import { formatCode } from '../public/sim/code-format.js';
+import { tokenize } from '../public/sim/code-tokens.js';
+import { completions } from '../public/sim/intellisense.js';
+import { attachAssist } from '../public/sim/editor-assist.js';
+import { checkOutput } from '../public/sim/code-coach.js';
+import { missions, defaults, program } from '../public/quests/missions.js';
 
 // Regression tests for the simulator and editor-tooling review fixes.
 const led = [{ pin: 2, output: true, name: 'LED' }];

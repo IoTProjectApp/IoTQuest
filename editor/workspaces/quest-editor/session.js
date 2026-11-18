@@ -1,5 +1,5 @@
 // The Quest Editor's model: the quests written here (saved in public/data/quests.js, the format is
-// in public/authored-quests.js), the built-in quests to read and copy from, undo history, and the
+// in public/quests/authored-quests.js), the built-in quests to read and copy from, undo history, and the
 // check that proves a quest can be played. Free of the DOM so it runs under Node in the tests.
 import {
   missions,
@@ -8,11 +8,11 @@ import {
   validate,
   program,
   baseEnv,
-} from '../../../public/missions.js';
-import { Runtime } from '../../../public/runtime.js';
-import { boundaryScenarios } from '../../../public/quest-boundaries.js';
-import { timelineResults } from '../../../public/quest-timeline.js';
-import { ADC_SIGNALS, ADC_SCALE } from '../../../public/signals.js';
+} from '../../../public/quests/missions.js';
+import { Runtime } from '../../../public/sim/runtime.js';
+import { boundaryScenarios } from '../../../public/quests/quest-boundaries.js';
+import { timelineResults } from '../../../public/quests/quest-timeline.js';
+import { ADC_SIGNALS, ADC_SCALE } from '../../../public/sim/signals.js';
 import {
   buildAuthoredQuest,
   AuthoredQuestError,
@@ -26,7 +26,7 @@ import {
   sequencesData,
   timedSequences,
   timedSolution,
-} from '../../../public/authored-quests.js';
+} from '../../../public/quests/authored-quests.js';
 
 export const BOARDS = ['ESP32', 'Raspberry Pi Pico'];
 export const LANGUAGES = [

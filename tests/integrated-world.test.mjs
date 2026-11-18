@@ -1,11 +1,11 @@
-import { updateCivicBuildings } from '../public/community-civic.js';
+import { updateCivicBuildings } from '../public/world/community-civic.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createRegionalModel } from '../public/regions.js';
-import { addCommunityWorld } from '../public/community-world.js';
-import { locations } from '../public/locations.js';
-import { fromWorld, toWorld, collides, modelMatrix } from '../public/world-math.js';
-import { overlaps } from '../public/community-sim.js';
+import { createRegionalModel } from '../public/world/regions.js';
+import { addCommunityWorld } from '../public/world/community-world.js';
+import { locations } from '../public/game/locations.js';
+import { fromWorld, toWorld, collides, modelMatrix } from '../public/world/world-math.js';
+import { overlaps } from '../public/world/community-sim.js';
 
 test('existing regional homes and gardens are preserved and become the residential destination', () => {
   for (const location of [undefined, ...locations]) {
@@ -137,7 +137,7 @@ test('six neighbour homes have gardens, residents, safe door routes and accessib
 });
 
 test('furnished areas have distinct materials and preserve public routes and installation clearances', async () => {
-  const { furnishingMaterials } = await import('../public/community-furnishings.js');
+  const { furnishingMaterials } = await import('../public/world/community-furnishings.js');
   const m = createRegionalModel('legacy'),
     c = addCommunityWorld(m);
   for (const area of c.areas)
@@ -222,7 +222,7 @@ test('new rooms and neighbour lots are furnished inside their parcels at every d
 });
 
 test('furnished equipment indicators respond to actual outputs and reset when execution stops', async () => {
-  const { updateCommunityEquipment } = await import('../public/community-furnishings.js');
+  const { updateCommunityEquipment } = await import('../public/world/community-furnishings.js');
   const c = addCommunityWorld(createRegionalModel('legacy'));
   const state = {
     running: true,

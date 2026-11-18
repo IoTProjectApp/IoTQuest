@@ -1,12 +1,12 @@
 // The Character Editor's preview: one person on a small stage, drawn by the game's own character
-// renderer (public/three-characters.js) so they look exactly as in the game. They stand, playing
+// renderer (public/people/three-characters.js) so they look exactly as in the game. They stand, playing
 // their idle or activity, or walk a circle at their speed; drag orbits, scroll zooms.
 import * as THREE from '../../../public/vendor/three.module.min.js';
 import { OrbitControls } from '/editor/three/OrbitControls.js';
-import { ThreeCharacters } from '../../../public/three-characters.js';
-import { CLIPS, walkTime } from '../../../public/character-clips.js';
-import { Reactions } from '../../../public/character-reactions.js';
-import { strideScale } from '../../../public/character-appearance.js';
+import { ThreeCharacters } from '../../../public/people/three-characters.js';
+import { CLIPS, walkTime } from '../../../public/people/character-clips.js';
+import { Reactions } from '../../../public/people/character-reactions.js';
+import { strideScale } from '../../../public/people/character-appearance.js';
 
 const KEY = 'preview';
 // A resident's ordinary walking pace, in metres a second; their speed setting scales it.

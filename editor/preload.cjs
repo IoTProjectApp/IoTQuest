@@ -7,7 +7,7 @@ contextBridge.exposeInMainWorld('editorShell', {
   // 'conversations' (Conversation Editor), 'cities' (City Editor), 'worlds' (World Builder).
   read: (store) => ipcRenderer.invoke('store:read', store),
   write: (store, value) => ipcRenderer.invoke('store:write', store, value),
-  // The game in a play-test window, at a target (see public/editor-play.js) or the beginning.
+  // The game in a play-test window, at a target (see public/game/editor-play.js) or the beginning.
   openGame: (target = null) => ipcRenderer.invoke('game:open', target),
   // Animation clips: pick a file to import ({ name, ext, bytes } or null), save a converted clip
   // (binary glTF) as public/models/people/clip-<name>.glb, or remove one.

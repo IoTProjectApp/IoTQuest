@@ -1,10 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
-import { locations, adaptMissions, isLocationUnlocked } from '../public/locations.js';
-import { missions, defaults, baseEnv, program, validate } from '../public/missions.js';
-import { Runtime } from '../public/runtime.js';
-import { weatherHTML } from '../public/travel.js';
+import { locations, adaptMissions, isLocationUnlocked } from '../public/game/locations.js';
+import { missions, defaults, baseEnv, program, validate } from '../public/quests/missions.js';
+import { Runtime } from '../public/sim/runtime.js';
+import { weatherHTML } from '../public/ui/travel.js';
 import {
   weatherURL,
   normalizeWeather,
@@ -12,11 +12,11 @@ import {
   WeatherService,
   WEATHER_CACHE_MS,
   advanceEnvironment,
-} from '../public/weather.js';
-import { createRegionalModel } from '../public/regions.js';
-import { createWorldModel } from '../public/world-model.js';
-import { latLonPoint, pointLatLon, countryAt, globePick } from '../public/geography.js';
-import { findFree, toWorld, collides } from '../public/world-math.js';
+} from '../public/game/weather.js';
+import { createRegionalModel } from '../public/world/regions.js';
+import { createWorldModel } from '../public/world/world-model.js';
+import { latLonPoint, pointLatLon, countryAt, globePick } from '../public/game/geography.js';
+import { findFree, toWorld, collides } from '../public/world/world-math.js';
 const features = JSON.parse(await readFile('public/data/countries.json', 'utf8')).features;
 const data = {
   timezone: 'Asia/Tokyo',
@@ -441,7 +441,7 @@ test('weather proxy advertises only the remaining cache lifetime and the entry a
 });
 test('Retry-After accepts only seconds or an HTTP-date and is clamped to one minute..one hour', async () => {
   const { createWeatherProxy } = await import('../scripts/weather-proxy.mjs');
-  const { retryAfterMs } = await import('../public/weather.js');
+  const { retryAfterMs } = await import('../public/game/weather.js');
   const now = Date.parse('2026-01-01T00:00:00Z');
   const cases = [
     ['120', 120000],
@@ -692,7 +692,8 @@ test('the live weather code reaches the simulated environment and Practice clear
   assert.equal(practice.weatherCode, null);
 });
 test('Melbourne has eight playable suburbs with real coordinates, open from the start', async () => {
-  const { melbourneSuburbs, MELBOURNE, MELBOURNE_MAP } = await import('../public/melbourne.js');
+  const { melbourneSuburbs, MELBOURNE, MELBOURNE_MAP } =
+    await import('../public/game/melbourne.js');
   assert.deepEqual(
     melbourneSuburbs.map((l) => l.city),
     [
@@ -737,7 +738,7 @@ test('Melbourne has eight playable suburbs with real coordinates, open from the 
   );
 });
 test('downloaded Melbourne street maps are well-formed and credit OpenStreetMap', async () => {
-  const { melbourneSuburbs } = await import('../public/melbourne.js');
+  const { melbourneSuburbs } = await import('../public/game/melbourne.js');
   const { readdir } = await import('node:fs/promises');
   const files = (await readdir('public/data/melbourne')).filter((f) => f.endsWith('.json'));
   assert.ok(files.length >= 1, 'at least one street map is bundled');

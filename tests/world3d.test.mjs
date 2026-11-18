@@ -1,9 +1,9 @@
-import { Runtime } from '../public/runtime.js';
+import { Runtime } from '../public/sim/runtime.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createWorldModel } from '../public/world-model.js';
-import { World3D, frustumTest, isSoftwareRenderer } from '../public/world3d.js';
-import { locations } from '../public/locations.js';
+import { createWorldModel } from '../public/world/world-model.js';
+import { World3D, frustumTest, isSoftwareRenderer } from '../public/world/world3d.js';
+import { locations } from '../public/game/locations.js';
 import {
   multiply,
   modelMatrix,
@@ -16,8 +16,8 @@ import {
   resolveMove,
   findFree,
   deviceState,
-} from '../public/world-math.js';
-import { defaults, baseEnv, missions, program } from '../public/missions.js';
+} from '../public/world/world-math.js';
+import { defaults, baseEnv, missions, program } from '../public/quests/missions.js';
 const areas = [
   ['Bedroom', 19, 17],
   ['Bathroom', 30, 15],
@@ -180,7 +180,7 @@ test('walking cannot leave the property', () => {
   assert.ok(p.y <= 97);
 });
 test('the front fence stops walking at every destination; only the open gate lets the technician through', async () => {
-  const { createRegionalModel } = await import('../public/regions.js');
+  const { createRegionalModel } = await import('../public/world/regions.js');
   const walk = (x, colliders) => {
     let p = fromWorld(x, 9.5);
     for (let i = 0; i < 40; i++) p = resolveMove(p, 'down', 0.5, 0, colliders);
@@ -658,7 +658,7 @@ test('a 0×0 canvas (hidden Code layout) skips drawing and label projection unti
   }
 });
 test('travel globe pauses while inactive, falls back on context loss, rebuilds on restore and disposes listeners', async () => {
-  const { TravelGlobe } = await import('../public/globe.js');
+  const { TravelGlobe } = await import('../public/ui/globe.js');
   const frames = animationFrames(),
     ctx2d = new Proxy({}, { get: () => () => {} }),
     oldDocument = globalThis.document,
@@ -724,7 +724,7 @@ test('travel globe pauses while inactive, falls back on context loss, rebuilds o
   }
 });
 test('a released globe pauses without losing its context and comes back as the globe', async () => {
-  const { TravelGlobe } = await import('../public/globe.js');
+  const { TravelGlobe } = await import('../public/ui/globe.js');
   const frames = animationFrames(),
     ctx2d = new Proxy({}, { get: () => () => {} }),
     oldDocument = globalThis.document,
@@ -770,7 +770,7 @@ test('a released globe pauses without losing its context and comes back as the g
   }
 });
 test('the travel globe follows only the first finger of a two-finger touch', async () => {
-  const { TravelGlobe } = await import('../public/globe.js');
+  const { TravelGlobe } = await import('../public/ui/globe.js');
   const frames = animationFrames(),
     ctx2d = new Proxy({}, { get: () => () => {} }),
     oldDocument = globalThis.document,
@@ -800,8 +800,8 @@ test('the travel globe follows only the first finger of a two-finger touch', asy
   }
 });
 test('clouds appear with cloud cover, turn grey in storms and never cross the property', async () => {
-  const { addClouds, updateClouds } = await import('../public/clouds.js');
-  const { createWorldModel } = await import('../public/world-model.js');
+  const { addClouds, updateClouds } = await import('../public/world/clouds.js');
+  const { createWorldModel } = await import('../public/world/world-model.js');
   const model = createWorldModel(),
     clouds = addClouds(model),
     visible = () => clouds.filter((c) => c.puffs[0].mesh.opacity > 0).length;
@@ -836,7 +836,7 @@ test('clouds appear with cloud cover, turn grey in storms and never cross the pr
   );
 });
 test('the sky uses astronomical horizons and does not turn with the camera', async () => {
-  const { addSky, updateSky } = await import('../public/sky.js');
+  const { addSky, updateSky } = await import('../public/world/sky.js');
   const sky = addSky(createWorldModel()),
     context = { date: new Date('2024-09-18T12:00Z') };
   updateSky(sky, 0, 0, true, 0.32, {}, 0, context);
@@ -857,8 +857,8 @@ test('the sky uses astronomical horizons and does not turn with the camera', asy
   assert.equal(sky.visibleStars, 0);
 });
 test('weather dims the night sky and storms flash with lightning', async () => {
-  const { addSky, updateSky, lightningFlash } = await import('../public/sky.js');
-  const { createWorldModel } = await import('../public/world-model.js');
+  const { addSky, updateSky, lightningFlash } = await import('../public/world/sky.js');
+  const { createWorldModel } = await import('../public/world/world-model.js');
   const sky = addSky(createWorldModel()),
     stars = () => sky.stars.reduce((sum, s) => sum + s.mesh.opacity, 0);
   const context = { date: new Date('2024-09-18T12:00Z') };
@@ -883,7 +883,7 @@ test('weather dims the night sky and storms flash with lightning', async () => {
   assert.ok(lit > 0 && lit < 30);
 });
 test('live weather types drive rain, snow, fog and lightning in the 3D world', async () => {
-  const { weatherEffects } = await import('../public/weather.js');
+  const { weatherEffects } = await import('../public/game/weather.js');
   assert.deepEqual(weatherEffects({ weatherCode: 95 }), { thunder: true, fog: false, snow: false });
   assert.deepEqual(weatherEffects({ weatherCode: 45 }), { thunder: false, fog: true, snow: false });
   assert.equal(weatherEffects({ weatherCode: 73 }).snow, true);
@@ -1454,7 +1454,7 @@ test('procedural water and reflections share the simulation clock and freeze on 
   assert.equal(world.surfaceTime, 9);
 });
 test('a servo turned toward 180° or set HIGH lowers the 3D blind, matching the room it shades', async () => {
-  const { deviceState } = await import('../public/world-math.js');
+  const { deviceState } = await import('../public/world/world-math.js');
   const servo = { id: 'servo', pin: 18 },
     angle = (value, scales) => deviceState(servo, { 18: value }, { tank: 0 }, scales).angle;
   assert.equal(angle(0), 0);

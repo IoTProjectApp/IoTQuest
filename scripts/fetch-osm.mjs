@@ -4,7 +4,7 @@
 // contacts OpenStreetMap. Data © OpenStreetMap contributors, available under the ODbL.
 import { access, mkdir, writeFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
-import { melbourneSuburbs } from '../public/melbourne.js';
+import { melbourneSuburbs } from '../public/game/melbourne.js';
 
 const RADIUS = 500; // metres around each suburb centre
 // Public Overpass instances, tried in turn when one is busy.

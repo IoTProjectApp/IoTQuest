@@ -1,4 +1,4 @@
-// People added in the Character Editor and routines (public/people-settings.js), the game playing
+// People added in the Character Editor and routines (public/people/people-settings.js), the game playing
 // them, and the editor's model of them (editor/workspaces/character-editor/people-session.js).
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -12,12 +12,12 @@ import {
   routinePose,
   routineLocked,
   ROUTINE_WALK,
-} from '../public/people-settings.js';
-import { World3D, buildWorldModel } from '../public/world3d.js';
-import { createRegionalModel } from '../public/regions.js';
-import { addCommunityWorld } from '../public/community-world.js';
-import { applyWorldLayout } from '../public/world-layout.js';
-import { locationById } from '../public/locations.js';
+} from '../public/people/people-settings.js';
+import { World3D, buildWorldModel } from '../public/world/world3d.js';
+import { createRegionalModel } from '../public/world/regions.js';
+import { addCommunityWorld } from '../public/world/community-world.js';
+import { applyWorldLayout } from '../public/world/world-layout.js';
+import { locationById } from '../public/game/locations.js';
 import { CharacterSession } from '../editor/workspaces/character-editor/session.js';
 import { PeopleSession } from '../editor/workspaces/character-editor/people-session.js';
 import { cityWorld } from '../editor/workspaces/character-editor/city-world.js';

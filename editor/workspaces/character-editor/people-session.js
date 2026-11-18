@@ -1,5 +1,5 @@
 // People added in the Character Editor and the routines drawn for anyone who walks by themselves
-// (saved in public/data/people.js; the format is in public/people-settings.js). It shares the
+// (saved in public/data/people.js; the format is in public/people/people-settings.js). It shares the
 // Character Editor's undo history: changes go through CharacterSession.commit. Free of the DOM so
 // it runs under Node in the tests.
 import {
@@ -9,10 +9,10 @@ import {
   routineLegs,
   MAX_STAY,
   MAX_STOPS,
-} from '../../../public/people-settings.js';
-import { collides, clearPath } from '../../../public/world-math.js';
-import { CLIPS } from '../../../public/character-clips.js';
-import { locations } from '../../../public/locations.js';
+} from '../../../public/people/people-settings.js';
+import { collides, clearPath } from '../../../public/world/world-math.js';
+import { CLIPS } from '../../../public/people/character-clips.js';
+import { locations } from '../../../public/game/locations.js';
 
 const clone = (value) => JSON.parse(JSON.stringify(value));
 const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);

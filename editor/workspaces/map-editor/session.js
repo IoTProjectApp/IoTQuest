@@ -1,10 +1,10 @@
 // One destination open in the editor: the world as the game builds it, the changes made to it
-// (in the saved layout's format, see public/world-layout.js) and their undo history. Free of the
+// (in the saved layout's format, see public/world/world-layout.js) and their undo history. Free of the
 // DOM so it runs under Node in the tests.
-import { createRegionalModel } from '../../../public/regions.js';
-import { addCommunityWorld } from '../../../public/community-world.js';
-import { locationById } from '../../../public/locations.js';
-import { prepareWorldMaterials } from '../../../public/world-materials.js';
+import { createRegionalModel } from '../../../public/world/regions.js';
+import { addCommunityWorld } from '../../../public/world/community-world.js';
+import { locationById } from '../../../public/game/locations.js';
+import { prepareWorldMaterials } from '../../../public/world/world-materials.js';
 import {
   editGroups,
   snapshotGroup,
@@ -12,7 +12,7 @@ import {
   groupTemplate,
   partBounds,
   scaleOf,
-} from '../../../public/world-layout.js';
+} from '../../../public/world/world-layout.js';
 import {
   applyHouseShell,
   checkHouse,
@@ -21,9 +21,9 @@ import {
   furnitureInWalls,
   WALL_NAMES,
   LINE_NAMES,
-} from '../../../public/house-shell.js';
-import { applyAddedWalls, checkWalls, WALL_DEFAULTS } from '../../../public/added-walls.js';
-import { applyNature, hasNature, checkNature, GROUND } from '../../../public/world-nature.js';
+} from '../../../public/world/house-shell.js';
+import { applyAddedWalls, checkWalls, WALL_DEFAULTS } from '../../../public/world/added-walls.js';
+import { applyNature, hasNature, checkNature, GROUND } from '../../../public/world/world-nature.js';
 import { kindOf, nameOf, categoryOf, cautionFor } from './names.js';
 
 const round = (v, places) => Math.round(v * 10 ** places) / 10 ** places || 0;
@@ -43,7 +43,7 @@ const same = (a, b) =>
   Math.abs((a.turn || 0) - (b.turn || 0)) <= 5e-5 + 1e-9 &&
   scaleOf(a.scale).every((v, i) => Math.abs(v - scaleOf(b.scale)[i]) <= 5e-4 + 1e-9);
 const clone = (value) => JSON.parse(JSON.stringify(value));
-// Where a group stood as built, saved with each edit as `from` (see public/world-layout.js), so the
+// Where a group stood as built, saved with each edit as `from` (see public/world/world-layout.js), so the
 // game can tell when the group of that name has since become a different one.
 const originOf = (group) => [round(group.original.pos[0], 2), round(group.original.pos[2], 2)];
 const emptyChanges = () => ({ edits: {}, added: [] });
@@ -158,7 +158,7 @@ export class WorldSession {
       else changes.edits[id] = { removed: true, from: originOf(group) };
     });
   }
-  // ---- The house's walls and rooms (see public/house-shell.js) ----
+  // ---- The house's walls and rooms (see public/world/house-shell.js) ----
   // What the House tool can change here: { whole, walls, rooms }.
   houseInfo() {
     return shellInfo(this.model);
@@ -189,7 +189,7 @@ export class WorldSession {
     });
     return [];
   }
-  // ---- Walls added by hand (see public/added-walls.js) ----
+  // ---- Walls added by hand (see public/world/added-walls.js) ----
   addedWalls() {
     return this.changes.walls || [];
   }
@@ -222,7 +222,7 @@ export class WorldSession {
     });
     return problems;
   }
-  // ---- Hills, ground, grass, trees and water (see public/world-nature.js) ----
+  // ---- Hills, ground, grass, trees and water (see public/world/world-nature.js) ----
   // Shows nature while a brush stroke or a drag goes on, without recording it.
   previewNature(nature) {
     this.natureProblems = applyNature(this.model, nature);

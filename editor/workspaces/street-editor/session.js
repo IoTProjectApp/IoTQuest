@@ -1,6 +1,6 @@
 // The Street Editor's model: one street layout being edited (the town every destination shares, or
 // one destination's own), its undo history and its problems. Free of the DOM so it runs under Node
-// in the tests. The layout format is described in public/street-network.js.
+// in the tests. The layout format is described in public/world/street-network.js.
 import {
   defaultStreetLayout,
   LOCKED,
@@ -10,8 +10,8 @@ import {
   roadDirection,
   lineLength,
   roadSize,
-} from '../../../public/street-network.js';
-import { createCommunity } from '../../../public/community-sim.js';
+} from '../../../public/world/street-network.js';
+import { createCommunity } from '../../../public/world/community-sim.js';
 
 const clone = (value) => JSON.parse(JSON.stringify(value));
 const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);

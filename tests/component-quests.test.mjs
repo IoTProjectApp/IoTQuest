@@ -1,5 +1,5 @@
-import { communityQuests } from '../public/community-quests.js';
-import { catalogueQuests } from '../public/catalogue-quests.js';
+import { communityQuests } from '../public/quests/community-quests.js';
+import { catalogueQuests } from '../public/quests/catalogue-quests.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
@@ -10,11 +10,11 @@ import {
   program,
   baseEnv,
   missionBudget,
-} from '../public/missions.js';
-import { Runtime } from '../public/runtime.js';
-import { createLabState, updateResources } from '../public/lab.js';
-import { HOME_AREAS } from '../public/home-areas.js';
-import { componentQuests } from '../public/component-quests.js';
+} from '../public/quests/missions.js';
+import { Runtime } from '../public/sim/runtime.js';
+import { createLabState, updateResources } from '../public/sim/lab.js';
+import { HOME_AREAS } from '../public/world/home-areas.js';
+import { componentQuests } from '../public/quests/component-quests.js';
 
 // Quests 18–25 (indices 17–24), after the original 17 and before the logic quests.
 const first = 17;

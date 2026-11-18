@@ -2,7 +2,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { CharacterSession, DEFAULTS } from '../editor/workspaces/character-editor/session.js';
-import { settingsFor } from '../public/character-settings.js';
+import { settingsFor } from '../public/people/character-settings.js';
 
 const empty = () => ({ version: 1, defaults: {}, people: {} });
 

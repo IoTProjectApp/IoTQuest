@@ -1,5 +1,5 @@
 // The Character Editor's model: the character settings being edited (the format is described in
-// public/character-settings.js), changes to one person or to the defaults, and their undo
+// public/people/character-settings.js), changes to one person or to the defaults, and their undo
 // history. Free of the DOM so it runs under Node in the tests.
 
 const clone = (value) => JSON.parse(JSON.stringify(value));

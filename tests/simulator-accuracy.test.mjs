@@ -1,13 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { Runtime } from '../public/runtime.js';
-import { outputLevel } from '../public/signals.js';
-import { updateResources, createLabState } from '../public/lab.js';
-import { advanceEnvironment } from '../public/weather.js';
-import { buildLanes } from '../public/plotter.js';
-import { analyzeCode } from '../public/code-analysis.js';
-import { coachSteps } from '../public/code-coach.js';
-import { defaults, missions, program, validate } from '../public/missions.js';
+import { Runtime } from '../public/sim/runtime.js';
+import { outputLevel } from '../public/sim/signals.js';
+import { updateResources, createLabState } from '../public/sim/lab.js';
+import { advanceEnvironment } from '../public/game/weather.js';
+import { buildLanes } from '../public/sim/plotter.js';
+import { analyzeCode } from '../public/sim/code-analysis.js';
+import { coachSteps } from '../public/sim/code-coach.js';
+import { defaults, missions, program, validate } from '../public/quests/missions.js';
 
 const led = [{ pin: 2, output: true, name: 'LED' }];
 const run = (code, language = 'cpp', ticks = 1, devices = led, board = 'ESP32') => {

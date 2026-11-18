@@ -1,14 +1,14 @@
 // The City Editor's model: each city's wording (saved in public/data/cities.js, the format is in
-// public/city-settings.js), undo history, the check, and the city's quests as the game would
+// public/game/city-settings.js), undo history, the check, and the city's quests as the game would
 // word them. Free of the DOM so it runs under Node in the tests.
-import { missions } from '../../../public/missions.js';
-import { locations, locationById, adaptMissions } from '../../../public/locations.js';
+import { missions } from '../../../public/quests/missions.js';
+import { locations, locationById, adaptMissions } from '../../../public/game/locations.js';
 import {
   HOUSEHOLD,
   HOME_QUESTS,
   DEFAULT_OPENING,
   ORIGINAL_NAMES,
-} from '../../../public/city-settings.js';
+} from '../../../public/game/city-settings.js';
 
 export { HOUSEHOLD, HOME_QUESTS, DEFAULT_OPENING, locations };
 export const LEVELS = ['beginner', 'advanced'];

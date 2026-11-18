@@ -1,5 +1,5 @@
 // The Character Editor's Look section: height, build, skin, hair, beard and brows (the
-// `appearance` setting, see public/character-appearance.js), with ready-made looks and a random one.
+// `appearance` setting, see public/people/character-appearance.js), with ready-made looks and a random one.
 import {
   HAIR_STYLES,
   BEARDS,
@@ -9,8 +9,8 @@ import {
   HAIR_COLOURS,
   PRESETS,
   randomAppearance,
-} from '../../../public/character-appearance.js';
-import { WOMEN } from '../../../public/people-cast.js';
+} from '../../../public/people/character-appearance.js';
+import { WOMEN } from '../../../public/people/people-cast.js';
 import { icon } from '../../ui/icons.js';
 
 const escape = (s) =>

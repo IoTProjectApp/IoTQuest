@@ -1,9 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createRegionalModel } from '../public/regions.js';
-import { addCommunityWorld } from '../public/community-world.js';
-import { locationById } from '../public/locations.js';
-import { applyWorldLayout } from '../public/world-layout.js';
+import { createRegionalModel } from '../public/world/regions.js';
+import { addCommunityWorld } from '../public/world/community-world.js';
+import { locationById } from '../public/game/locations.js';
+import { applyWorldLayout } from '../public/world/world-layout.js';
 import {
   applyHouseShell,
   checkHouse,
@@ -11,7 +11,7 @@ import {
   wallSpecs,
   segments,
   furnitureInWalls,
-} from '../public/house-shell.js';
+} from '../public/world/house-shell.js';
 import { WorldSession } from '../editor/workspaces/map-editor/session.js';
 
 const build = (id) => {

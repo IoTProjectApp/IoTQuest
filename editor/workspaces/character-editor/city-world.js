@@ -1,10 +1,10 @@
 // A city as the Character Editor's routine map and checks need it: what is in the way (colliders),
 // who the game moves as an actor and where they stand, and the names already used there (actors'
 // and quest residents'). Built as the game builds it, without the people added here.
-import { buildWorldModel } from '../../../public/world3d.js';
-import { PEOPLE_SETTINGS, isOwn } from '../../../public/people-settings.js';
-import { missions } from '../../../public/missions.js';
-import { locationById, adaptMissions } from '../../../public/locations.js';
+import { buildWorldModel } from '../../../public/world/world3d.js';
+import { PEOPLE_SETTINGS, isOwn } from '../../../public/people/people-settings.js';
+import { missions } from '../../../public/quests/missions.js';
+import { locationById, adaptMissions } from '../../../public/game/locations.js';
 
 const cache = new Map();
 export function cityWorld(city = 'legacy') {

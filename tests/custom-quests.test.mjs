@@ -1,13 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { defaults, program, baseEnv } from '../public/missions.js';
-import { Runtime } from '../public/runtime.js';
-import { readingRange } from '../public/diagnostics.js';
+import { defaults, program, baseEnv } from '../public/quests/missions.js';
+import { Runtime } from '../public/sim/runtime.js';
+import { readingRange } from '../public/sim/diagnostics.js';
 import {
   buildProgressReport,
   parseProgressReport,
   reportViews,
-} from '../public/progress-report.js';
+} from '../public/game/progress-report.js';
 import {
   buildCustomQuest,
   parseQuestFile,
@@ -17,7 +17,7 @@ import {
   questOperators,
   loadCustomQuests,
   QuestError,
-} from '../public/custom-quests.js';
+} from '../public/quests/custom-quests.js';
 
 const night = {
   title: 'Night light',

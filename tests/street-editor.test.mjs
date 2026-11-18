@@ -12,10 +12,10 @@ import {
   buildStreetNetwork,
   armPhases,
   LOCKED,
-} from '../public/street-network.js';
-import { CommunitySimulation, Network } from '../public/community-sim.js';
-import { createRegionalModel } from '../public/regions.js';
-import { addCommunityWorld } from '../public/community-world.js';
+} from '../public/world/street-network.js';
+import { CommunitySimulation, Network } from '../public/world/community-sim.js';
+import { createRegionalModel } from '../public/world/regions.js';
+import { addCommunityWorld } from '../public/world/community-world.js';
 
 const empty = { version: 1, town: null, locations: {} };
 const eastLoop = (s) => {

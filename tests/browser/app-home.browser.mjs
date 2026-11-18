@@ -2,7 +2,7 @@
 // (see game-harness.mjs). Run with `npm run test:browser`.
 import { spawn, execFileSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
-import { missions, defaults, program } from '../../public/missions.js';
+import { missions, defaults, program } from '../../public/quests/missions.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
@@ -309,7 +309,7 @@ test('a teacher builds a quest, sees its tests, and downloads a file students ca
   assert.equal(await page.locator('#qDownload').isDisabled(), true);
   await page.fill('#qThreshold', '2');
   const [download] = await Promise.all([page.waitForEvent('download'), page.click('#qDownload')]);
-  const { parseQuestFile } = await import('../../public/custom-quests.js');
+  const { parseQuestFile } = await import('../../public/quests/custom-quests.js');
   const { readFile } = await import('node:fs/promises');
   const quest = parseQuestFile(await readFile(await download.path(), 'utf8'));
   assert.equal(quest.title, 'Frost guard');
@@ -321,8 +321,8 @@ test('the dashboard switch controls a running program and shows what it reports'
   const { page, errors } = await openHome();
   await page.click('[data-tab="dashboard"]');
   await page.click('[data-dashboard-quest="remote-fan"]');
-  const { dashboardQuests } = await import('../../public/challenges.js');
-  const { defaults } = await import('../../public/missions.js');
+  const { dashboardQuests } = await import('../../public/quests/challenges.js');
+  const { defaults } = await import('../../public/quests/missions.js');
   await page.click('[data-tab="code"]');
   await page.fill('#codeInput', dashboardQuests[1].solution('cpp', defaults(['fan'], 'ESP32')));
   await page.dispatchEvent('#codeInput', 'input');

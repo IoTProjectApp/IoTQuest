@@ -1,9 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { diagnose, readingRange } from '../public/diagnostics.js';
-import { analyzeCode } from '../public/code-analysis.js';
-import { highlight } from '../public/syntax-highlight.js';
-import { missions, defaults, program, components } from '../public/missions.js';
+import { diagnose, readingRange } from '../public/sim/diagnostics.js';
+import { analyzeCode } from '../public/sim/code-analysis.js';
+import { highlight } from '../public/sim/syntax-highlight.js';
+import { missions, defaults, program, components } from '../public/quests/missions.js';
 
 const devices = defaults(['ldr', 'led', 'pir', 'temp'], 'ESP32'),
   [ldr, led, pir, temp] = devices,

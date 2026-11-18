@@ -7,9 +7,9 @@ import {
   needsReview,
   progressCSV,
   PROGRESS_LIMITS,
-} from './progress-report.js';
-import { highlight } from './syntax-highlight.js';
-import { esc } from './html.js';
+} from './game/progress-report.js';
+import { highlight } from './sim/syntax-highlight.js';
+import { esc } from './game/html.js';
 // Class progress view: loads handed-in progress reports (in memory only) and shows a grid of
 // students and quests, who needs help, each student's code, and a CSV for the gradebook.
 

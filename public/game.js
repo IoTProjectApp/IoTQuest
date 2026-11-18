@@ -1,17 +1,21 @@
-import { settingsFor } from './character-settings.js';
-import { recreationLots } from './community-recreation.js';
-import { migrateNeighbourAreas } from './neighbour-profiles.js';
-import { civicLots } from './community-civic.js';
-import { residentialLots } from './community-residences.js';
-import { communityStations, COMMUNITY_ORIGIN } from './community-world.js';
-import { residentsForSections, createGreetingTracker, isHousehold } from './section-residents.js';
-import { HOME_AREAS } from './home-areas.js';
+import { settingsFor } from './people/character-settings.js';
+import { recreationLots } from './world/community-recreation.js';
+import { migrateNeighbourAreas } from './people/neighbour-profiles.js';
+import { civicLots } from './world/community-civic.js';
+import { residentialLots } from './world/community-residences.js';
+import { communityStations, COMMUNITY_ORIGIN } from './world/community-world.js';
+import {
+  residentsForSections,
+  createGreetingTracker,
+  isHousehold,
+} from './people/section-residents.js';
+import { HOME_AREAS } from './world/home-areas.js';
 import {
   createConversation,
   chooseRequest,
   sendConversationMessage,
   nearestCharacter,
-} from './conversations.js';
+} from './people/conversations.js';
 import {
   components,
   missions,
@@ -20,17 +24,17 @@ import {
   validate,
   program,
   missionBudget,
-} from './missions.js';
-import { localSkyDate, DEFAULT_OBSERVER } from './astronomy.js';
-import { Runtime } from './runtime.js';
-import { World3D } from './world3d.js';
-import { toWorld, fromWorld } from './world-math.js';
-import { visitRequest, visitEntry, stepToward } from './household-visits.js';
-import { ADC_SIGNALS, ADC_SCALE, outputLevel } from './signals.js';
-import { catalogueEnvMeta, catalogueToggles } from './catalogue-devices.js';
-import { locations, locationById, adaptMissions, progressForLocation } from './locations.js';
-import { WeatherService, advanceEnvironment, servoLevel } from './weather.js';
-import { advancedMenu } from './advanced-tools.js';
+} from './quests/missions.js';
+import { localSkyDate, DEFAULT_OBSERVER } from './world/astronomy.js';
+import { Runtime } from './sim/runtime.js';
+import { World3D } from './world/world3d.js';
+import { toWorld, fromWorld } from './world/world-math.js';
+import { visitRequest, visitEntry, stepToward } from './people/household-visits.js';
+import { ADC_SIGNALS, ADC_SCALE, outputLevel } from './sim/signals.js';
+import { catalogueEnvMeta, catalogueToggles } from './quests/catalogue-devices.js';
+import { locations, locationById, adaptMissions, progressForLocation } from './game/locations.js';
+import { WeatherService, advanceEnvironment, servoLevel } from './game/weather.js';
+import { advancedMenu } from './sim/advanced-tools.js';
 import {
   createLabState,
   simulateBatch,
@@ -38,52 +42,56 @@ import {
   updateResources,
   faultCases,
   scenarios,
-} from './lab.js';
+} from './sim/lab.js';
 import {
   renderLabPanel,
   updateCircuit,
   updateResourcesPanel,
   scenarioOptions,
-} from './lab-panels.js';
-import { projectFiles, zipFiles } from './project-package.js';
-import { isLocationUnlocked, completedQuestCount } from './locations.js';
-import { setupTravel, weatherHTML } from './travel.js';
-import { esc, setHTML } from './html.js';
-import { sanitizeSaved } from './persistence.js';
-import { highlight } from './syntax-highlight.js';
-import { SerialPlotter, findThresholds, PLOT_LIMIT } from './plotter.js';
-import { timelineResults } from './quest-timeline.js';
-import { expeditionResults } from './expedition.js';
-import { diagnose } from './diagnostics.js';
-import { createBugHunt, scoreBugHunt } from './bug-hunt.js';
-import { explainCode, removeExplanations, hasExplanations } from './code-explain.js';
-import { readProject, ImportError, IMPORT_LIMITS, PROJECT_FORMAT } from './project-import.js';
-import { formatCode as formatSource, FormatError, INDENT } from './code-format.js';
-import { coachSteps, readingText } from './code-coach.js';
-import { checkPredictions } from './weather-quests.js';
-import { neededNow, situationReason } from './situation.js';
-import { boundaryScenarios } from './quest-boundaries.js';
-import { conversationHTML } from './conversation-view.js';
-import { predictionHTML } from './prediction-view.js';
-import { declutterLabels } from './world-labels.js';
-import { attachAssist } from './editor-assist.js';
-import { simulateDay, dayLogQuestions, dayLogCSV } from './day-log.js';
-import { dayLogHTML } from './day-log-view.js';
-import { securityCases, dashboardQuests } from './challenges.js';
-import { dashboardHTML, dashboardLiveHTML } from './dashboard-view.js';
-import { BoardLink, readingsToEnv, outputLine, boardProgram } from './hardware.js';
-import { boardPanelHTML } from './board-view.js';
+} from './sim/lab-panels.js';
+import { projectFiles, zipFiles } from './game/project-package.js';
+import { isLocationUnlocked, completedQuestCount } from './game/locations.js';
+import { setupTravel, weatherHTML } from './ui/travel.js';
+import { esc, setHTML } from './game/html.js';
+import { sanitizeSaved } from './game/persistence.js';
+import { highlight } from './sim/syntax-highlight.js';
+import { SerialPlotter, findThresholds, PLOT_LIMIT } from './sim/plotter.js';
+import { timelineResults } from './quests/quest-timeline.js';
+import { expeditionResults } from './quests/expedition.js';
+import { diagnose } from './sim/diagnostics.js';
+import { createBugHunt, scoreBugHunt } from './quests/bug-hunt.js';
+import { explainCode, removeExplanations, hasExplanations } from './sim/code-explain.js';
+import { readProject, ImportError, IMPORT_LIMITS, PROJECT_FORMAT } from './game/project-import.js';
+import { formatCode as formatSource, FormatError, INDENT } from './sim/code-format.js';
+import { coachSteps, readingText } from './sim/code-coach.js';
+import { checkPredictions } from './quests/weather-quests.js';
+import { neededNow, situationReason } from './quests/situation.js';
+import { boundaryScenarios } from './quests/quest-boundaries.js';
+import { conversationHTML } from './ui/conversation-view.js';
+import { predictionHTML } from './ui/prediction-view.js';
+import { declutterLabels } from './world/world-labels.js';
+import { attachAssist } from './sim/editor-assist.js';
+import { simulateDay, dayLogQuestions, dayLogCSV } from './sim/day-log.js';
+import { dayLogHTML } from './ui/day-log-view.js';
+import { securityCases, dashboardQuests } from './quests/challenges.js';
+import { dashboardHTML, dashboardLiveHTML } from './ui/dashboard-view.js';
+import { BoardLink, readingsToEnv, outputLine, boardProgram } from './sim/hardware.js';
+import { boardPanelHTML } from './ui/board-view.js';
 import {
   parseQuestFile,
   loadCustomQuests,
   customChallenge,
   QuestError,
   QUEST_LIMITS,
-} from './custom-quests.js';
-import { buildProgressReport, progressFileName } from './progress-report.js';
-import { understandingQuestions, answerQuestion, understandingScore } from './understanding.js';
-import { readPlayTarget, findPerson, besidePerson } from './editor-play.js';
-import { WORLDS, worldSummaries, worldUrl } from './custom-worlds.js';
+} from './quests/custom-quests.js';
+import { buildProgressReport, progressFileName } from './game/progress-report.js';
+import {
+  understandingQuestions,
+  answerQuestion,
+  understandingScore,
+} from './quests/understanding.js';
+import { readPlayTarget, findPerson, besidePerson } from './game/editor-play.js';
+import { WORLDS, worldSummaries, worldUrl } from './game/custom-worlds.js';
 const $ = (id) => document.getElementById(id);
 // The test copy at /dev/ (channel.js) saves separately so trying it never changes the main site's
 // progress. It starts from a copy of the main site's progress until it first saves.
@@ -2284,7 +2292,7 @@ function run() {
   renderHighlight();
   logs = ['Controller connected. Program started.'];
   simTime = 0;
-  worker = new Worker('sim-worker.js', { type: 'module' });
+  worker = new Worker('sim/sim-worker.js', { type: 'module' });
   // Each run starts with a fresh broker: no messages, network online, switches off.
   mqttMessages = [];
   brokerOnline = true;
@@ -5224,7 +5232,7 @@ if (
   !/[?&]renderer=webgl(&|$)/.test(globalThis.location?.search || '') &&
   globalThis.IOTQUEST_RENDERER !== 'webgl'
 )
-  import('./world-renderer-three.js').then(
+  import('./world/world-renderer-three.js').then(
     ({ ThreeWorldRenderer }) =>
       startWorld((canvas) => {
         try {

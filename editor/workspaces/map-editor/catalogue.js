@@ -1,8 +1,8 @@
 // The Object tool's catalogue: one item per kind of thing in the open destination (a sofa, a tree,
 // a shop), with a picture of it drawn by the game's own renderer.
-import { ThreeWorldRenderer } from '../../../public/world-renderer-three.js';
-import { multiply, perspective, lookAt } from '../../../public/world-math.js';
-import { groupTemplate } from '../../../public/world-layout.js';
+import { ThreeWorldRenderer } from '../../../public/world/world-renderer-three.js';
+import { multiply, perspective, lookAt } from '../../../public/world/world-math.js';
+import { groupTemplate } from '../../../public/world/world-layout.js';
 import { kindOf, nameOf } from './names.js';
 
 // The first group of each kind is the one copied when placing that kind.

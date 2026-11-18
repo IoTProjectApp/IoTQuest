@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { defaults } from '../public/missions.js';
-import { securityCases, dashboardQuests, GATE_CODE } from '../public/challenges.js';
+import { defaults } from '../public/quests/missions.js';
+import { securityCases, dashboardQuests, GATE_CODE } from '../public/quests/challenges.js';
 
 const passes = (results) => results.length > 0 && results.every((r) => r.pass);
 

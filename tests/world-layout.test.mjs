@@ -1,9 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createRegionalModel } from '../public/regions.js';
-import { addCommunityWorld } from '../public/community-world.js';
-import { locationById, locations } from '../public/locations.js';
-import { modelMatrix } from '../public/world-math.js';
+import { createRegionalModel } from '../public/world/regions.js';
+import { addCommunityWorld } from '../public/world/community-world.js';
+import { locationById, locations } from '../public/game/locations.js';
+import { modelMatrix } from '../public/world/world-math.js';
 import {
   applyWorldLayout,
   editGroups,
@@ -11,7 +11,7 @@ import {
   transformGroup,
   turnRotation,
   groupTemplate,
-} from '../public/world-layout.js';
+} from '../public/world/world-layout.js';
 import WORLD_LAYOUT from '../public/data/world-layout.js';
 
 const build = (id) => {

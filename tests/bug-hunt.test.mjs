@@ -1,10 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createBugHunt, scoreBugHunt, testsCatch } from '../public/bug-hunt.js';
-import { explainCode, removeExplanations, hasExplanations } from '../public/code-explain.js';
-import { missions, defaults, program, baseEnv } from '../public/missions.js';
-import { adaptMissions, locationById } from '../public/locations.js';
-import { Runtime } from '../public/runtime.js';
+import { createBugHunt, scoreBugHunt, testsCatch } from '../public/quests/bug-hunt.js';
+import { explainCode, removeExplanations, hasExplanations } from '../public/sim/code-explain.js';
+import { missions, defaults, program, baseEnv } from '../public/quests/missions.js';
+import { adaptMissions, locationById } from '../public/game/locations.js';
+import { Runtime } from '../public/sim/runtime.js';
 
 const wired = (ids, board) =>
   defaults(ids, board).map((d) => ({

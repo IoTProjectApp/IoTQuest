@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { Runtime } from '../public/runtime.js';
+import { Runtime } from '../public/sim/runtime.js';
 
 const led = [{ pin: 2, output: true, name: 'LED' }];
 const run = (code, language = 'cpp', ticks = 1, devices = led) => {

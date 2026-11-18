@@ -1,9 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createRegionalModel } from '../public/regions.js';
-import { locations } from '../public/locations.js';
-import { addCommunityWorld, updateCommunityWorld } from '../public/community-world.js';
-import { BUS_DWELL } from '../public/community-sim.js';
+import { createRegionalModel } from '../public/world/regions.js';
+import { locations } from '../public/game/locations.js';
+import { addCommunityWorld, updateCommunityWorld } from '../public/world/community-world.js';
+import { BUS_DWELL } from '../public/world/community-sim.js';
 
 const state = { env: { light: 70 }, devices: [], outputs: {}, running: false, paused: false };
 

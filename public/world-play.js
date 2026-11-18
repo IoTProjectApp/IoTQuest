@@ -3,21 +3,21 @@
 // to program them so each output switches as the world's own program does. Progress is kept for
 // each world, apart from the game's own; a play-test from the editor (&editor-play) saves nothing.
 import * as THREE from './vendor/three.module.min.js';
-import { ThreeWorldRenderer } from './world-renderer-three.js';
-import { multiply, perspective, lookAt } from './world-math.js';
-import { worldSunlight } from './world-materials.js';
-import { updateSky } from './sky.js';
-import { Runtime } from './runtime.js';
-import { validate } from './missions.js';
-import { programReading } from './signals.js';
-import { CLIPS, walkTime } from './character-clips.js';
-import { settingsFor, dressed } from './character-settings.js';
-import { knownModel } from './character-models.js';
-import { TECHNICIAN } from './people-cast.js';
-import { TECHNICIAN_OUTFIT } from './character-outfits.js';
+import { ThreeWorldRenderer } from './world/world-renderer-three.js';
+import { multiply, perspective, lookAt } from './world/world-math.js';
+import { worldSunlight } from './world/world-materials.js';
+import { updateSky } from './world/sky.js';
+import { Runtime } from './sim/runtime.js';
+import { validate } from './quests/missions.js';
+import { programReading } from './sim/signals.js';
+import { CLIPS, walkTime } from './people/character-clips.js';
+import { settingsFor, dressed } from './people/character-settings.js';
+import { knownModel } from './people/character-models.js';
+import { TECHNICIAN } from './people/people-cast.js';
+import { TECHNICIAN_OUTFIT } from './people/character-outfits.js';
 import { GLTFLoader } from './vendor/three-addons/GLTFLoader.js';
-import { esc } from './html.js';
-import { worldById, WORLD_ID } from './custom-worlds.js';
+import { esc } from './game/html.js';
+import { worldById, WORLD_ID } from './game/custom-worlds.js';
 import {
   worldDevices,
   worldAgents,

@@ -10,8 +10,8 @@ import {
   modelFile,
   modelHeight,
   knownModel,
-} from '../public/character-models.js';
-import { WOMEN, MEN } from '../public/people-cast.js';
+} from '../public/people/character-models.js';
+import { WOMEN, MEN } from '../public/people/people-cast.js';
 import {
   fitModel,
   rigName,
@@ -255,10 +255,10 @@ test('pieces get the game’s material; untextured ones keep their colour', () =
 
 test('the renderer and the editor shell handle imported models safely', async () => {
   const read = (path) => readFile(new URL(path, import.meta.url), 'utf8');
-  const renderer = await read('../public/three-characters.js');
+  const renderer = await read('../public/people/three-characters.js');
   assert.match(renderer, /file = modelFile\(state\.model, low\)/);
   assert.match(renderer, /if \(!m\.userData\.keepColour\) m\.color\.set/);
-  const world = await read('../public/world3d.js');
+  const world = await read('../public/world/world3d.js');
   assert.equal((world.match(/knownModel\(set\.model\)/g) || []).length, 2);
   const shell = await read('../editor/main.mjs');
   // Only names like the clips' (no path), only binary glTF, written whole.

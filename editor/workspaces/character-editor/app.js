@@ -1,8 +1,8 @@
 // The Character Editor workspace: everyone in the game, their looks and movement, a live preview,
 // undo and saving to public/data/characters.js.
-import { CLIPS, IMPORTED_CLIPS } from '../../../public/character-clips.js';
-import { WOMEN, MEN } from '../../../public/people-cast.js';
-import { dressed } from '../../../public/character-settings.js';
+import { CLIPS, IMPORTED_CLIPS } from '../../../public/people/character-clips.js';
+import { WOMEN, MEN } from '../../../public/people/people-cast.js';
+import { dressed } from '../../../public/people/character-settings.js';
 import { findPeople, GROUPS, walksAlone, movesLocked } from './people.js';
 import { CharacterSession, DEFAULTS } from './session.js';
 import { Stage } from './stage.js';
@@ -19,7 +19,7 @@ import {
 } from './clip-import.js';
 import { PoseEditor, POSING } from './pose-editor.js';
 import { createModelImport } from './model-panel.js';
-import { knownModel } from '../../../public/character-models.js';
+import { knownModel } from '../../../public/people/character-models.js';
 import { icon } from '../../ui/icons.js';
 import { appearanceSection, bindAppearance } from './look-panel.js';
 import { wardrobeSection, bindWardrobe } from './wardrobe-panel.js';

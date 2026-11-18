@@ -1,23 +1,23 @@
-// Quests written in the Quest Editor: public/authored-quests.js (the game's side) and the
+// Quests written in the Quest Editor: public/quests/authored-quests.js (the game's side) and the
 // workspace's model and check (editor/workspaces/quest-editor/session.js).
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { components, missions } from '../public/missions.js';
+import { components, missions } from '../public/quests/missions.js';
 import {
   applyQuestEdits,
   isRuleQuest,
   isTimedQuest,
   sequencesData,
   ORIGINALS,
-} from '../public/authored-quests.js';
-import { defaults, program } from '../public/missions.js';
-import { timelineResults, normalise } from '../public/quest-timeline.js';
+} from '../public/quests/authored-quests.js';
+import { defaults, program } from '../public/quests/missions.js';
+import { timelineResults, normalise } from '../public/quests/quest-timeline.js';
 import {
   buildAuthoredQuest,
   authoredQuests,
   AuthoredQuestError,
   conditionSignals,
-} from '../public/authored-quests.js';
+} from '../public/quests/authored-quests.js';
 import {
   QuestSession,
   checkQuest,

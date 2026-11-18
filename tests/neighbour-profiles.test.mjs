@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { neighbourProfiles, migrateNeighbourAreas } from '../public/neighbour-profiles.js';
+import { neighbourProfiles, migrateNeighbourAreas } from '../public/people/neighbour-profiles.js';
 
 test('saved neighbour installations retain wiring and follow their renamed homes', () => {
   const original = { id: 'led', area: 'Neighbour home 1', pin: 7, wired: true };

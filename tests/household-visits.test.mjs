@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { visitRequest, visitEntry, stepToward } from '../public/household-visits.js';
-import { clearPath } from '../public/world-math.js';
+import { visitRequest, visitEntry, stepToward } from '../public/people/household-visits.js';
+import { clearPath } from '../public/world/world-math.js';
 
 const quests = [
   { area: 'Kitchen', title: 'Extractor' },

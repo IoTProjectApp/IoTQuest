@@ -5,11 +5,11 @@ import {
   Signals,
   overlaps,
   createCommunity,
-} from '../public/community-sim.js';
-import { Runtime } from '../public/runtime.js';
-import { communityDevices, communityStarter } from '../public/community-missions.js';
-import { locations } from '../public/locations.js';
-import { streetLayoutFor } from '../public/street-network.js';
+} from '../public/world/community-sim.js';
+import { Runtime } from '../public/sim/runtime.js';
+import { communityDevices, communityStarter } from '../public/quests/community-missions.js';
+import { locations } from '../public/game/locations.js';
+import { streetLayoutFor } from '../public/world/street-network.js';
 const empty = () => {
   const s = new CommunitySimulation({ iso: 'AUS' });
   s.density = 0;
@@ -220,7 +220,7 @@ test('parking controller barrier stops entry and permits a routed parking visit 
 });
 
 test('native code maintains its requested traffic phase across full cycles and releases it on stop', async () => {
-  const { applyNativeCommunityOutputs } = await import('../public/community-quests.js');
+  const { applyNativeCommunityOutputs } = await import('../public/quests/community-quests.js');
   const s = empty(),
     devices = [{ id: 'trafficEW', output: true, pin: 2 }];
   const phases = new Set();
@@ -244,7 +244,7 @@ test('native code maintains its requested traffic phase across full cycles and r
 });
 
 test('only town infrastructure devices drive the shared town outputs', async () => {
-  const { applyNativeCommunityOutputs } = await import('../public/community-quests.js');
+  const { applyNativeCommunityOutputs } = await import('../public/quests/community-quests.js');
   const s = empty();
   for (const [area, lit] of [
     ['Shop floor', 1],

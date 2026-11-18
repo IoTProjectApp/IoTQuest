@@ -1,8 +1,8 @@
 // Climate & Soundscape Studio model: manages city practice climate profiles, extreme weather
 // presets, 24-hour diurnal solar & temperature curves, and procedural WebAudio soundscape synth
 // parameters (saved in public/data/climate.js). Free of the DOM so it runs under Node in tests.
-import { locations, locationById } from '../../../public/locations.js';
-import { calculateSky } from '../../../public/astronomy.js';
+import { locations, locationById } from '../../../public/game/locations.js';
+import { calculateSky } from '../../../public/world/astronomy.js';
 
 export { locations, locationById };
 

@@ -1,9 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createWorldModel } from '../public/world-model.js';
-import { createRegionalModel } from '../public/regions.js';
-import { locations } from '../public/locations.js';
-import { addLandscape, updateLandscape, riverCurve } from '../public/landscape.js';
+import { createWorldModel } from '../public/world/world-model.js';
+import { createRegionalModel } from '../public/world/regions.js';
+import { locations } from '../public/game/locations.js';
+import { addLandscape, updateLandscape, riverCurve } from '../public/world/landscape.js';
 
 test('curved rivers retain endpoints and have continuous, gradual bends', () => {
   const points = [
@@ -21,7 +21,7 @@ test('curved rivers retain endpoints and have continuous, gradual bends', () => 
     assert.ok(curve[i][1] > curve[i - 1][1], 'The river cannot double back at a join');
   }
 });
-import { collides, findFree, toWorld } from '../public/world-math.js';
+import { collides, findFree, toWorld } from '../public/world/world-math.js';
 
 test('every destination has mountains, a river valley, a lake, wildlife and flying birds', () => {
   const signatures = new Set();

@@ -9,9 +9,9 @@ import {
   lengthOf,
   TRIGGERS,
   FADE,
-} from '../public/character-reactions.js';
-import { CHARACTER_SETTINGS } from '../public/character-settings.js';
-import { CLIPS } from '../public/character-clips.js';
+} from '../public/people/character-reactions.js';
+import { CHARACTER_SETTINGS } from '../public/people/character-settings.js';
+import { CLIPS } from '../public/people/character-clips.js';
 import { CharacterSession } from '../editor/workspaces/character-editor/session.js';
 import { reactionClips } from '../editor/workspaces/character-editor/reactions-panel.js';
 
@@ -199,7 +199,7 @@ test('the Character Editor saves reactions with the other settings and offers on
 });
 
 test('the game plays reactions and sets them off', async () => {
-  const world = await readFile(new URL('../public/world3d.js', import.meta.url), 'utf8');
+  const world = await readFile(new URL('../public/world/world3d.js', import.meta.url), 'utf8');
   assert.match(world, /this\.animate\(s, t, dt\);\n\s+this\.react\(s\);/);
   const game = await readFile(new URL('../public/game.js', import.meta.url), 'utf8');
   assert.match(game, /residentReacts\(m\.resident, 'thanks'\)/);

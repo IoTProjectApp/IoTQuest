@@ -1,13 +1,13 @@
 // Curriculum & Code Coach Editor model: manages programming techniques & patterns
-// (public/quest-techniques.js), Check Your Understanding questions (public/technique-questions.js),
+// (public/quests/quest-techniques.js), Check Your Understanding questions (public/quests/technique-questions.js),
 // custom Code Coach diagnostic rules, and live Code Coach sandbox evaluation against any quest.
 // Saved in public/data/curriculum.js. Free of the DOM so it runs under Node in tests.
-import { missions, defaults } from '../../../public/missions.js';
-import { TECHNIQUES as BUILTIN_TECHNIQUES } from '../../../public/quest-techniques.js';
-import { TECHNIQUE_QUESTIONS as BUILTIN_QUESTIONS } from '../../../public/technique-questions.js';
-import { coachSteps, guidedStarter } from '../../../public/code-coach.js';
-import { diagnose } from '../../../public/diagnostics.js';
-import { understandingQuestions } from '../../../public/understanding.js';
+import { missions, defaults } from '../../../public/quests/missions.js';
+import { TECHNIQUES as BUILTIN_TECHNIQUES } from '../../../public/quests/quest-techniques.js';
+import { TECHNIQUE_QUESTIONS as BUILTIN_QUESTIONS } from '../../../public/quests/technique-questions.js';
+import { coachSteps, guidedStarter } from '../../../public/sim/code-coach.js';
+import { diagnose } from '../../../public/sim/diagnostics.js';
+import { understandingQuestions } from '../../../public/quests/understanding.js';
 
 export { missions };
 

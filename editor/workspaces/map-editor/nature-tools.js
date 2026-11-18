@@ -1,7 +1,7 @@
 // The Map Editor's nature tools: Terrain (hills and painted ground), Trees, Grass (long grass and
 // flowers) and Water (ponds, streams, pools, and the lake and river the city is built with). Each
 // brush stroke, drag or drawn shape is one undo step; while it goes on the world shows it without
-// recording it. What they make is saved as the city's `nature` (see public/world-nature.js).
+// recording it. What they make is saved as the city's `nature` (see public/world/world-nature.js).
 import * as THREE from '../../../public/vendor/three.module.min.js';
 import {
   GROUND,
@@ -16,9 +16,9 @@ import {
   regionalTreeStyle,
   roundOutline,
   roundCourse,
-} from '../../../public/world-nature.js';
-import { surfaceForMesh, SURFACE } from '../../../public/world-materials.js';
-import { scaleOf } from '../../../public/world-layout.js';
+} from '../../../public/world/world-nature.js';
+import { surfaceForMesh, SURFACE } from '../../../public/world/world-materials.js';
+import { scaleOf } from '../../../public/world/world-layout.js';
 import { icon } from '../../ui/icons.js';
 
 export const NATURE_TOOLS = {

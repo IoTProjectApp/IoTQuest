@@ -1,13 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { residentsForSections, createGreetingTracker } from '../public/section-residents.js';
-import { createRegionalModel } from '../public/regions.js';
-import { locations, adaptMissions } from '../public/locations.js';
-import { missions, defaults, validate, program, baseEnv } from '../public/missions.js';
-import { collides } from '../public/world-math.js';
-import { createConversation } from '../public/conversations.js';
-import { HOME_AREAS } from '../public/home-areas.js';
-import { Runtime } from '../public/runtime.js';
+import { residentsForSections, createGreetingTracker } from '../public/people/section-residents.js';
+import { createRegionalModel } from '../public/world/regions.js';
+import { locations, adaptMissions } from '../public/game/locations.js';
+import { missions, defaults, validate, program, baseEnv } from '../public/quests/missions.js';
+import { collides } from '../public/world/world-math.js';
+import { createConversation } from '../public/people/conversations.js';
+import { HOME_AREAS } from '../public/world/home-areas.js';
+import { Runtime } from '../public/sim/runtime.js';
 
 for (const location of [null, ...locations]) {
   test(`${location?.id || 'legacy'}: a household of five gives every room's requests`, () => {

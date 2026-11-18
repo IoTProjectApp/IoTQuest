@@ -7,12 +7,12 @@ import {
   program,
   baseEnv,
   missionBudget,
-} from '../public/missions.js';
-import { Runtime } from '../public/runtime.js';
-import { createLabState, updateResources } from '../public/lab.js';
-import { HOME_AREAS } from '../public/home-areas.js';
-import { logicQuests } from '../public/logic-quests.js';
-import { componentQuests } from '../public/component-quests.js';
+} from '../public/quests/missions.js';
+import { Runtime } from '../public/sim/runtime.js';
+import { createLabState, updateResources } from '../public/sim/lab.js';
+import { HOME_AREAS } from '../public/world/home-areas.js';
+import { logicQuests } from '../public/quests/logic-quests.js';
+import { componentQuests } from '../public/quests/component-quests.js';
 
 const byTitle = (title) => logicQuests.find((q) => q.title === title);
 // Runs `code` through a quest's scenarios and returns each scenario's outputs as 0/1.

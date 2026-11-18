@@ -7,7 +7,7 @@ import http from 'node:http';
 import { readFile, writeFile, rename, stat, mkdir, unlink } from 'node:fs/promises';
 import { basename, extname, join, normalize, sep } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { playTargetUrl } from '../public/editor-play.js';
+import { playTargetUrl } from '../public/game/editor-play.js';
 import { storeText } from './store-format.mjs';
 import { publishPlan, publish } from './publish.mjs';
 import { execFile } from 'node:child_process';
@@ -251,7 +251,7 @@ function createEditor() {
     if (choice === 0) event.preventDefault();
   });
 }
-// Opens the game at a play-test target (see public/editor-play.js): what the workspace is editing,
+// Opens the game at a play-test target (see public/game/editor-play.js): what the workspace is editing,
 // or the beginning with none. Either way it saves nothing.
 function openGame(target = null) {
   const game = new BrowserWindow({

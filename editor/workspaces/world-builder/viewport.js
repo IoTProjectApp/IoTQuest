@@ -6,11 +6,11 @@ import * as THREE from '../../../public/vendor/three.module.min.js';
 import { TransformControls } from '/editor/three/TransformControls.js';
 import { OrbitControls } from '/editor/three/OrbitControls.js';
 import { GLTFLoader } from '/editor/three/loaders/GLTFLoader.js';
-import { ThreeWorldRenderer } from '../../../public/world-renderer-three.js';
-import { worldSunlight } from '../../../public/world-materials.js';
-import { updateSky } from '../../../public/sky.js';
-import { multiply, perspective, lookAt, screenRay } from '../../../public/world-math.js';
-import { partBounds } from '../../../public/world-layout.js';
+import { ThreeWorldRenderer } from '../../../public/world/world-renderer-three.js';
+import { worldSunlight } from '../../../public/world/world-materials.js';
+import { updateSky } from '../../../public/world/sky.js';
+import { multiply, perspective, lookAt, screenRay } from '../../../public/world/world-math.js';
+import { partBounds } from '../../../public/world/world-layout.js';
 import { terrainHeightAt, terrainSurface } from '../../../public/world-builder/terrain.js';
 
 const FOV = 0.82;

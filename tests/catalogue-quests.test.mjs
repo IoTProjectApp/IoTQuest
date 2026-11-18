@@ -8,18 +8,18 @@ import {
   program,
   baseEnv,
   missionBudget,
-} from '../public/missions.js';
-import { Runtime } from '../public/runtime.js';
-import { createLabState, updateResources } from '../public/lab.js';
-import { HOME_AREAS } from '../public/home-areas.js';
-import { locations, adaptMissions } from '../public/locations.js';
-import { communityQuests } from '../public/community-quests.js';
-import { catalogueQuests } from '../public/catalogue-quests.js';
-import { boundaryScenarios } from '../public/quest-boundaries.js';
-import { timelineResults } from '../public/quest-timeline.js';
-import { coachSteps } from '../public/code-coach.js';
-import { expeditionResults, questThemes } from '../public/expedition.js';
-import { createBugHunt } from '../public/bug-hunt.js';
+} from '../public/quests/missions.js';
+import { Runtime } from '../public/sim/runtime.js';
+import { createLabState, updateResources } from '../public/sim/lab.js';
+import { HOME_AREAS } from '../public/world/home-areas.js';
+import { locations, adaptMissions } from '../public/game/locations.js';
+import { communityQuests } from '../public/quests/community-quests.js';
+import { catalogueQuests } from '../public/quests/catalogue-quests.js';
+import { boundaryScenarios } from '../public/quests/quest-boundaries.js';
+import { timelineResults } from '../public/quests/quest-timeline.js';
+import { coachSteps } from '../public/sim/code-coach.js';
+import { expeditionResults, questThemes } from '../public/quests/expedition.js';
+import { createBugHunt } from '../public/quests/bug-hunt.js';
 
 const byNumber = (n) => catalogueQuests.find((q) => q.catalogue === n);
 const advancedOf = (q) => ({ ...q, ...q.advanced });
@@ -273,9 +273,9 @@ for (const [number, level, find, replace, why] of timelineMistakes)
 
 // The device-spot tests cover each quest's beginner devices; advanced levels often add more.
 test('advanced levels also give every device its own spot at every destination', async () => {
-  const { addCommunityWorld } = await import('../public/community-world.js'),
-    { createRegionalModel } = await import('../public/regions.js'),
-    { deviceSpots, collides, DEVICE_GAP } = await import('../public/world-math.js');
+  const { addCommunityWorld } = await import('../public/world/community-world.js'),
+    { createRegionalModel } = await import('../public/world/regions.js'),
+    { deviceSpots, collides, DEVICE_GAP } = await import('../public/world/world-math.js');
   for (const id of ['legacy', ...locations.map((l) => l.id)]) {
     const model = createRegionalModel(id),
       location = locations.find((l) => l.id === id);
@@ -304,8 +304,8 @@ test('advanced levels also give every device its own spot at every destination',
 });
 
 test('timed levels name their patterns, and a timed prediction matches the worked program', async () => {
-  const { understandingQuestions } = await import('../public/understanding.js'),
-    { runSequence, normalise } = await import('../public/quest-timeline.js');
+  const { understandingQuestions } = await import('../public/quests/understanding.js'),
+    { runSequence, normalise } = await import('../public/quests/quest-timeline.js');
   for (const [level, m] of levels.filter(([, m]) => m.sequences?.length)) {
     assert.ok(m.techniques?.length, name(level, m) + ': no patterns for the Guide');
     const qs = understandingQuestions(m, 'cpp', defaults(m.ids, 'ESP32'), 'ESP32'),

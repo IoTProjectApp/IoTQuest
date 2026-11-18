@@ -1,10 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createRegionalModel } from '../public/regions.js';
-import { addCommunityWorld, updateCommunityWorld } from '../public/community-world.js';
-import { CommunitySimulation } from '../public/community-sim.js';
-import { locations } from '../public/locations.js';
-import { modelMatrix } from '../public/world-math.js';
+import { createRegionalModel } from '../public/world/regions.js';
+import { addCommunityWorld, updateCommunityWorld } from '../public/world/community-world.js';
+import { CommunitySimulation } from '../public/world/community-sim.js';
+import { locations } from '../public/game/locations.js';
+import { modelMatrix } from '../public/world/world-math.js';
 
 test('expanded town junctions have a correctly facing head for each actual incoming lane', () => {
   for (const location of [undefined, ...locations]) {

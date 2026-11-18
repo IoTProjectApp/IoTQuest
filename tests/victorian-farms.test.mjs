@@ -1,11 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { victorianFarms } from '../public/farms.js';
-import { createRegionalModel } from '../public/regions.js';
-import { addCommunityWorld } from '../public/community-world.js';
-import { updateAnimals } from '../public/animals.js';
-import { updateFarm } from '../public/farm-assets.js';
-import { overlaps } from '../public/community-sim.js';
+import { victorianFarms } from '../public/world/farms.js';
+import { createRegionalModel } from '../public/world/regions.js';
+import { addCommunityWorld } from '../public/world/community-world.js';
+import { updateAnimals } from '../public/world/animals.js';
+import { updateFarm } from '../public/world/farm-assets.js';
+import { overlaps } from '../public/world/community-sim.js';
 
 test('each Victorian farm has a routed driveway, a controlled crossing and three correctly facing lights', () => {
   for (const f of victorianFarms) {

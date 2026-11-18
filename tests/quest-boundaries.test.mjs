@@ -1,9 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { missions, program, defaults, baseEnv } from '../public/missions.js';
-import { locations, adaptMissions } from '../public/locations.js';
-import { Runtime } from '../public/runtime.js';
-import { boundaryScenarios } from '../public/quest-boundaries.js';
+import { missions, program, defaults, baseEnv } from '../public/quests/missions.js';
+import { locations, adaptMissions } from '../public/game/locations.js';
+import { Runtime } from '../public/sim/runtime.js';
+import { boundaryScenarios } from '../public/quests/quest-boundaries.js';
 
 // Runs a program through scenarios the way the Test button does; returns the failing names.
 function failures(quest, code, language, board, scenarios) {

@@ -1,12 +1,12 @@
 // The Quest Editor workspace: your quests and the built-in ones, the quest form (story, devices,
 // rules and tests, or a timed quest's sequences and worked program), the live check, and saving to
 // public/data/quests.js.
-import { components, defaults, missions } from '../../../public/missions.js';
-import { isRuleQuest, isTimedQuest } from '../../../public/authored-quests.js';
-import { HOME_AREAS } from '../../../public/home-areas.js';
-import { PEOPLE_SETTINGS } from '../../../public/people-settings.js';
-import { readingRange } from '../../../public/diagnostics.js';
-import { coachSteps } from '../../../public/code-coach.js';
+import { components, defaults, missions } from '../../../public/quests/missions.js';
+import { isRuleQuest, isTimedQuest } from '../../../public/quests/authored-quests.js';
+import { HOME_AREAS } from '../../../public/world/home-areas.js';
+import { PEOPLE_SETTINGS } from '../../../public/people/people-settings.js';
+import { readingRange } from '../../../public/sim/diagnostics.js';
+import { coachSteps } from '../../../public/sim/code-coach.js';
 import {
   QuestSession,
   checkQuest,

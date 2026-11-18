@@ -1,9 +1,14 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { missions } from '../public/missions.js';
-import { evaluateCondition, situationReason, neededNow, CALM_DAY } from '../public/situation.js';
-import { createConversation } from '../public/conversations.js';
-import { buildCustomQuest } from '../public/custom-quests.js';
+import { missions } from '../public/quests/missions.js';
+import {
+  evaluateCondition,
+  situationReason,
+  neededNow,
+  CALM_DAY,
+} from '../public/quests/situation.js';
+import { createConversation } from '../public/people/conversations.js';
+import { buildCustomQuest } from '../public/quests/custom-quests.js';
 
 const titles = (env, done = () => false) =>
   neededNow(missions, { ...CALM_DAY, ...env }, done).map((n) => n.quest.title);

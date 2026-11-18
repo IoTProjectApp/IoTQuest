@@ -10,6 +10,7 @@ import { chromium } from 'playwright';
 let server, browser, origin;
 before(async () => {
   server = spawn(process.execPath, ['scripts/serve.mjs', '0'], {
+    env: { ...process.env, WEATHER: 'offline' },
     stdio: ['ignore', 'pipe', 'inherit'],
   });
   origin = await new Promise((resolve, reject) => {

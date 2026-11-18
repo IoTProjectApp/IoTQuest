@@ -6,9 +6,9 @@ export default {
     "legacy": {
       "edits": {
         "furniture/storage-shelf#1": {"pos": [0.9, 0.23, -9.512], "turn": 0, "scale": 1},
-        "furniture/toilet#1": {"pos": [-5.1, 0.23, -10.4], "turn": 0, "scale": 1},
-        "furniture/bathtub#1": {"pos": [-7.4, 0.238, -9.8], "turn": 0, "scale": 1},
-        "furniture/vanity#1": {"pos": [-4.3, 0.238, -9.679], "turn": 0, "scale": 1},
+        "furniture/toilet#1": {"pos": [-5.3, 0.23, -10.4], "turn": 0, "scale": 1},
+        "furniture/bathtub#1": {"pos": [-6.8, 0.238, -9.8], "turn": 0, "scale": 1},
+        "furniture/vanity#1": {"pos": [-4.2, 0.238, -10.5], "turn": 0, "scale": 1},
         "furniture/bathroom-mirror#1": {"pos": [-4.3, 1.41, -10.888], "turn": 0, "scale": 1},
         "garden/flowers#5": {"pos": [-10.7, 0.02, 2.9], "turn": 0, "scale": 1},
         "garden/path#1": {"pos": [0, -1.1, 5], "turn": 0, "scale": 1},
@@ -30,7 +30,20 @@ export default {
         "town/furniture/police:office-printer": {"pos": [94.4, 0.2, 36.935], "turn": -1.5708, "scale": 1},
         "town/furniture/section:policeParking": {"removed": true},
         "town/furniture/section:policeJail": {"removed": true},
-        "town/furniture/section:policeOffice": {"removed": true}
+        "town/furniture/section:policeOffice": {"removed": true},
+        "town/tree#1": {"pos": [-13.964, 0.4, -4.159], "turn": 0, "scale": [1.01, 1, 1]},
+        "town/detail#4": {"pos": [-14.125, 0.06, -4], "turn": 0, "scale": [0.896, 1, 1]},
+        "furniture/sofa#1": {"pos": [-11.2, 0.23, -3.5], "turn": 0, "scale": 1},
+        "furniture/coffee-table#1": {"pos": [-10.7, 0.23, -3.6], "turn": 0, "scale": 1},
+        "furniture/television#1": {"pos": [-8.6, 0.238, -5.1], "turn": -3.1416, "scale": 1},
+        "furniture/kitchen-cabinets#1": {"pos": [-6.25, 0.23, -5.4], "turn": 0, "scale": [0.913, 0.986, 0.986]},
+        "furniture/kitchen-sink#1": {"pos": [-7.1, 1.16, -5.315], "turn": 0, "scale": 1},
+        "furniture/cooktop#1": {"pos": [-5.3, 1.131, -5.281], "turn": 0, "scale": 1},
+        "furniture/refrigerator#1": {"pos": [-3.9, 0.235, -5.2], "turn": 0, "scale": 1},
+        "furniture/bed#1": {"pos": [-11.2, 0.23, -9], "turn": 0, "scale": 1},
+        "furniture/nightstand#1": {"pos": [-9.2, 0.23, -10.5], "turn": 0, "scale": 1},
+        "furniture/table-lamp#1": {"pos": [-9.2, 0.88, -10.4], "turn": 0, "scale": 1},
+        "furniture/laundry-machine#1": {"pos": [-1.7, 0.23, -9.8], "turn": 0, "scale": 1}
       },
       "added": [
         {
@@ -712,14 +725,654 @@ export default {
         "furniture/kitchen-cabinets#1": {"pos": [-6.3, 0.23, -5.298], "turn": 0, "scale": [0.876, 0.986, 0.986]},
         "furniture/cooktop#1": {"pos": [-5.3, 1.131, -5.281], "turn": 0, "scale": 1},
         "furniture/refrigerator#1": {"pos": [-4.1, 0.235, -5.3], "turn": 0, "scale": 1},
-        "furniture/bathroom-mirror#1": {"pos": [-4.1, 1.41, -10.6], "turn": 0, "scale": 1},
+        "furniture/bathroom-mirror#1": {"pos": [-4.1, 1.1, -10.6], "turn": 0, "scale": 1},
         "furniture/toilet#1": {"pos": [-5.6, 0.2, -10.3], "turn": 0, "scale": 1},
         "furniture/vanity#1": {"pos": [-4.1, 0.238, -10.2], "turn": 0, "scale": 1},
         "furniture/bathtub#1": {"pos": [-6.6, 0.7, -9.3], "turn": 0, "scale": 1},
         "house/lattice-screen#2": {"pos": [-6.7, 0.8, -10.7], "turn": 0, "scale": 1},
         "house/window#2": {"pos": [-6.7, 0.8, -10.836], "turn": 0, "scale": 1},
+        "furniture/storage-shelf#1": {"pos": [0.9, 0.23, -9.512], "turn": 0, "scale": 1},
+        "furniture/television#1": {"pos": [-8.7, 0.238, -4.9], "turn": -3.1416, "scale": 1},
+        "furniture/nightstand#1": {"pos": [-12.6, 0.2, -6.781], "turn": 0, "scale": 1},
+        "furniture/table-lamp#1": {"pos": [-12.6, 0.9, -6.8], "turn": 0, "scale": 1},
+        "furniture/bed#1": {"pos": [-11.3, 0.23, -8.65], "turn": 0, "scale": 1},
+        "garden/path#1": {"pos": [-0.5, -0.015, 3.9], "turn": 0, "scale": 1},
+        "furniture/sofa#1": {"pos": [-11.2, 0.1, -3.28], "turn": 0, "scale": 1},
+        "town/detail#4": {"pos": [-14.15, 0.06, -4], "turn": 0, "scale": [0.625, 1, 1]},
+        "furniture/coffee-table#1": {"pos": [-10.6, 0.23, -3.38], "turn": 0, "scale": 1}
+      },
+      "added": []
+    },
+    "fitzroy": {
+      "edits": {
+        "furniture/kitchen-cabinets#1": {"pos": [-6.1, 0.2, -5.5], "turn": 0, "scale": [0.901, 1, 1]},
+        "furniture/cooktop#1": {"pos": [-5, 1.131, -5.5], "turn": 0, "scale": 1},
+        "furniture/refrigerator#1": {"pos": [-4, 0.235, -5.4], "turn": 0, "scale": 1},
+        "furniture/kitchen-sink#1": {"pos": [-6.3, 1.16, -5.5], "turn": 0, "scale": 1},
+        "town/detail#4": {"pos": [-14.125, 0.06, -4], "turn": 0, "scale": [0.896, 1, 1]},
+        "furniture/sofa#1": {"pos": [-11.1, 0.23, -3.5], "turn": 0, "scale": 1},
+        "furniture/television#1": {"pos": [-8.625, 0.238, -5], "turn": -3.1416, "scale": 1},
+        "furniture/nightstand#1": {"pos": [-12.5, 0.23, -6.781], "turn": 0, "scale": 1},
+        "furniture/table-lamp#1": {"pos": [-12.5, 0.88, -6.8], "turn": 0, "scale": 1},
+        "furniture/bed#1": {"pos": [-11.3, 0.23, -8.65], "turn": 0, "scale": 1},
+        "furniture/bathroom-mirror#1": {"pos": [-4.3, 0.9, -10.8], "turn": 0, "scale": 1},
+        "furniture/vanity#1": {"pos": [-4.4, 0.238, -10], "turn": 0, "scale": 1},
+        "furniture/bathtub#1": {"pos": [-7, 0.238, -9.5], "turn": 0, "scale": 1},
+        "furniture/toilet#1": {"pos": [-5.5, 0.23, -10.5], "turn": 0, "scale": 1},
+        "house/window#2": {"pos": [-7, 0.675, -10.836], "turn": 0, "scale": 1},
+        "furniture/storage-shelf#1": {"pos": [0.8, 0.23, -9.512], "turn": 0, "scale": 1},
+        "furniture/coffee-table#1": {"pos": [-10.5, 0.23, -3.6], "turn": 0, "scale": 1},
+        "town/furniture/office:desk2": {"pos": [50, 0.201, 10], "turn": -3.1416, "scale": 1},
+        "town/furniture/office:desk3": {"pos": [54, 0.201, 10], "turn": -3.1416, "scale": 1},
+        "town/furniture/office:desk1": {"pos": [46, 0.201, 10], "turn": -3.1416, "scale": 1},
+        "town/furniture/office:desk0": {"pos": [42, 0.201, 10], "turn": -3.1416, "scale": 1},
+        "town/furniture/police:reception-seating": {"pos": [91.2, 0.4, 45.9], "turn": -3.1416, "scale": 1},
+        "town/police": {"pos": [95.7, 0, 40.37], "turn": 0, "scale": 1},
+        "town/furniture/section:policeOffice": {"removed": true},
+        "town/furniture/section:policeParking": {"removed": true},
+        "town/furniture/section:policeJail": {"removed": true},
+        "town/furniture/police:office-files": {"pos": [93.7, 0.2, 33.5], "turn": 0, "scale": 1}
+      },
+      "added": []
+    },
+    "yarravalley": {
+      "edits": {
+        "furniture/kitchen-cabinets#1": {"pos": [-6.3, 0.23, -5.298], "turn": 0, "scale": [0.889, 1, 1]},
+        "furniture/kitchen-sink#1": {"pos": [-6.7, 1.16, -5.315], "turn": 0, "scale": 1},
+        "furniture/cooktop#1": {"pos": [-5.2, 1.131, -5.281], "turn": 0, "scale": 1},
+        "furniture/refrigerator#1": {"pos": [-4, 0.235, -5.4], "turn": 0, "scale": 1},
+        "furniture/bathroom-mirror#1": {"pos": [-4.3, 1, -10.788], "turn": 0, "scale": 1},
+        "furniture/vanity#1": {"pos": [-4.3, 0.238, -10.3], "turn": 0, "scale": 1},
+        "furniture/toilet#1": {"pos": [-5.3, 0.23, -10.3], "turn": 0, "scale": 1},
+        "furniture/bathtub#1": {"pos": [-6.8, 0.238, -9.5], "turn": 0, "scale": 1},
+        "furniture/storage-shelf#1": {"pos": [0.9, 0.23, -9.512], "turn": 0, "scale": 1},
+        "furniture/sofa#1": {"pos": [-11.1, 0.23, -3.5], "turn": 0, "scale": 1},
+        "furniture/coffee-table#1": {"pos": [-10.4, 0.23, -3.6], "turn": 0, "scale": 1},
+        "furniture/television#1": {"pos": [-8.675, 0.238, -5], "turn": -3.1416, "scale": 1},
+        "house/window#2": {"pos": [-6.9, 0.675, -10.836], "turn": 0, "scale": 1},
+        "furniture/bed#1": {"pos": [-11.3, 0.23, -8.65], "turn": 0, "scale": 1},
+        "furniture/nightstand#1": {"pos": [-12.5, 0.23, -6.781], "turn": 0, "scale": 1},
+        "furniture/table-lamp#1": {"pos": [-12.5, 0.88, -6.8], "turn": 0, "scale": 1},
+        "house/window#3": {"pos": [-1.9, 0.8, -10.836], "turn": 0, "scale": 1},
+        "furniture/laundry-machine#1": {"pos": [-1.9, 0.23, -9.61], "turn": 0, "scale": 1},
+        "town/furniture/fire:staff-kitchen": {"pos": [160.7, 0.2, 49.6], "turn": 0, "scale": 1},
+        "town/fire": {"pos": [167.8, 0.6, 54.9], "turn": 0, "scale": 1}
+      },
+      "added": []
+    },
+    "macedon": {
+      "edits": {
+        "furniture/kitchen-cabinets#1": {"pos": [-6.2, 0.2, -5.298], "turn": 0, "scale": [0.889, 1, 1]},
+        "furniture/kitchen-sink#1": {"pos": [-6.9, 1.16, -5.315], "turn": 0, "scale": 1},
+        "furniture/cooktop#1": {"pos": [-5.3, 1.131, -5.281], "turn": 0, "scale": 1},
+        "furniture/refrigerator#1": {"pos": [-4.05, 0.235, -5.4], "turn": 0, "scale": 1},
+        "furniture/vanity#1": {"pos": [-4.2, 0.238, -10.3], "turn": 0, "scale": 1},
+        "furniture/toilet#1": {"pos": [-5.2, 0.23, -10.2], "turn": 0, "scale": 1},
+        "furniture/bathtub#1": {"pos": [-6.6, 0.238, -9.5], "turn": 0, "scale": 1},
+        "furniture/bed#1": {"pos": [-10.925, 0.23, -8.548], "turn": -1.5708, "scale": 1},
+        "furniture/nightstand#1": {"pos": [-12.5, 0.23, -6.7], "turn": 0, "scale": 1},
+        "furniture/table-lamp#1": {"pos": [-12.5, 0.9, -6.7], "turn": 0, "scale": 1},
+        "furniture/storage-shelf#1": {"pos": [0.9, 0.23, -9.512], "turn": 0, "scale": 1},
+        "furniture/television#1": {"pos": [-8.625, 0.238, -5.1], "turn": -3.1416, "scale": 1},
+        "furniture/sofa#1": {"pos": [-11, 0.23, -3.5], "turn": 0, "scale": 1},
+        "furniture/coffee-table#1": {"pos": [-10.3, 0.23, -3.6], "turn": 0, "scale": 1}
+      },
+      "added": []
+    },
+    "westerndistrict": {
+      "edits": {
+        "furniture/kitchen-cabinets#1": {"pos": [-6.2, 0.23, -5.5], "turn": 0, "scale": [0.913, 1, 1]},
+        "furniture/kitchen-sink#1": {"pos": [-6.8, 1.16, -5.315], "turn": 0, "scale": 1},
+        "furniture/cooktop#1": {"pos": [-5.2, 1.131, -5.281], "turn": 0, "scale": 1},
+        "furniture/refrigerator#1": {"pos": [-4, 0.235, -5.4], "turn": 0, "scale": 1},
+        "furniture/vanity#1": {"pos": [-4.2, 0.238, -10.1], "turn": 0, "scale": 1},
+        "furniture/bathroom-mirror#1": {"pos": [-4.3, 0.9, -10.788], "turn": 0, "scale": 1},
+        "furniture/toilet#1": {"pos": [-5.3, 0.23, -10.1], "turn": 0, "scale": 1},
+        "furniture/bathtub#1": {"pos": [-6.6, 0.238, -9.5], "turn": 0, "scale": 1},
         "furniture/storage-shelf#1": {"pos": [0.7, 0.23, -9.512], "turn": 0, "scale": 1},
+        "furniture/television#1": {"pos": [-8.6, 0.238, -5.02], "turn": -3.1416, "scale": 1},
+        "furniture/bed#1": {"pos": [-11.3, 0.23, -8.548], "turn": -1.5708, "scale": 1},
+        "furniture/nightstand#1": {"pos": [-12.5, 0.23, -6.7], "turn": 1.5708, "scale": 1},
+        "furniture/table-lamp#1": {"pos": [-12.4, 0.9, -6.7], "turn": 0, "scale": 1},
+        "furniture/sofa#1": {"pos": [-11.1, 0.23, -3.72], "turn": 0, "scale": 1},
+        "furniture/coffee-table#1": {"pos": [-10.7, 0.23, -3.82], "turn": 0, "scale": 1},
+        "house/window#3": {"pos": [-1.9, 0.8, -10.836], "turn": 0, "scale": 1},
+        "house/window#2": {"pos": [-6.7, 0.8, -10.836], "turn": 0, "scale": 1}
+      },
+      "added": []
+    },
+    "gippsland": {
+      "edits": {
+        "furniture/kitchen-cabinets#1": {"pos": [-6.3, 0.23, -5.298], "turn": 0, "scale": [0.876, 1, 1]},
+        "furniture/kitchen-sink#1": {"pos": [-7.1, 1.16, -5.315], "turn": 0, "scale": 1},
+        "furniture/cooktop#1": {"pos": [-5.3, 1.131, -5.281], "turn": 0, "scale": 1},
+        "furniture/refrigerator#1": {"pos": [-4.1, 0.235, -5.4], "turn": 0, "scale": 1},
+        "furniture/sofa#1": {"pos": [-11.2, 0.23, -3.72], "turn": 0, "scale": 1},
+        "furniture/bed#1": {"pos": [-11.3, 0.23, -8.65], "turn": 0, "scale": 1},
+        "furniture/nightstand#1": {"pos": [-12.6, 0.23, -6.781], "turn": 1.5708, "scale": 1},
+        "furniture/table-lamp#1": {"pos": [-12.6, 0.88, -6.8], "turn": 0, "scale": 1},
+        "furniture/vanity#1": {"pos": [-4.2, 0.238, -10.4], "turn": 0, "scale": 1},
+        "furniture/toilet#1": {"pos": [-5.2, 0.23, -10.4], "turn": 0, "scale": 1},
+        "furniture/bathtub#1": {"pos": [-6.6, 0.238, -9.6], "turn": 0, "scale": 1},
+        "house/window#2": {"pos": [-6.7, 0.8, -10.836], "turn": 0, "scale": 1},
+        "furniture/storage-shelf#1": {"pos": [0.9, 0.23, -9.512], "turn": 0, "scale": 1},
+        "furniture/coffee-table#1": {"pos": [-10.5, 0.23, -3.82], "turn": 0, "scale": 1},
+        "furniture/bathroom-mirror#1": {"pos": [-4.3, 1.2, -10.788], "turn": 0, "scale": 1},
+        "furniture/blinds#1": {"pos": [-11.5, 0.9, -10.74], "turn": 0, "scale": 1}
+      },
+      "added": []
+    },
+    "frankston": {
+      "edits": {
+        "furniture/kitchen-cabinets#1": {"pos": [-6.3, 0.23, -5.298], "turn": 0, "scale": [0.84, 1, 1]},
+        "furniture/kitchen-sink#1": {"pos": [-7, 1.16, -5.315], "turn": 0, "scale": 1},
+        "furniture/cooktop#1": {"pos": [-5.4, 1.131, -5.281], "turn": 0, "scale": 1},
+        "furniture/refrigerator#1": {"pos": [-4.05, 0.235, -5.3], "turn": 0, "scale": 1},
+        "furniture/vanity#1": {"pos": [-4.2, 0.238, -10.3], "turn": 0, "scale": 1},
+        "furniture/bathroom-mirror#1": {"pos": [-4.3, 1.1, -10.788], "turn": 0, "scale": 1},
+        "furniture/bathtub#1": {"pos": [-6.7, 0.238, -9.5], "turn": 0, "scale": 1},
+        "house/window#2": {"pos": [-6.8, 0.8, -10.836], "turn": 0, "scale": 1},
+        "furniture/toilet#1": {"pos": [-5.2, 0.23, -10.4], "turn": 0, "scale": 1},
+        "furniture/storage-shelf#1": {"pos": [0.8, 0.23, -9.512], "turn": 0, "scale": 1},
+        "furniture/bed#1": {"pos": [-11.1, 0.23, -8.7], "turn": -1.5708, "scale": 1},
+        "furniture/nightstand#1": {"pos": [-12.5, 0.23, -6.9], "turn": 1.5708, "scale": 1},
+        "furniture/table-lamp#1": {"pos": [-12.5, 0.88, -6.9], "turn": 0, "scale": 1},
+        "furniture/television#1": {"pos": [-8.7, 0.238, -5], "turn": -3.1416, "scale": 1},
+        "town/detail#4": {"pos": [-14.25, 0.06, -4], "turn": 0, "scale": [0.792, 1, 1]},
+        "furniture/sofa#1": {"pos": [-11.1, 0.23, -3.28], "turn": 0, "scale": 1},
+        "furniture/coffee-table#1": {"pos": [-10.6, 0.23, -3.38], "turn": 0, "scale": 1},
+        "furniture/laundry-machine#1": {"pos": [-1.7, 0.23, -9.9], "turn": 0, "scale": 1}
+      },
+      "added": []
+    },
+    "broadmeadows": {
+      "edits": {
+        "furniture/bed#1": {"pos": [-11.2, 0.23, -8.7], "turn": -1.5708, "scale": 1},
+        "furniture/nightstand#1": {"pos": [-12.5, 0.23, -6.8], "turn": 1.5708, "scale": 1},
+        "furniture/table-lamp#1": {"pos": [-12.5, 0.88, -6.8], "turn": 0, "scale": 1},
+        "house/window#2": {"pos": [-6.9, 0.675, -10.836], "turn": 0, "scale": 1},
+        "furniture/bathtub#1": {"pos": [-6.8, 0.238, -9.6], "turn": 0, "scale": 1},
+        "furniture/bathroom-mirror#1": {"pos": [-4.2, 1.2, -10.788], "turn": 0, "scale": 1},
+        "furniture/vanity#1": {"pos": [-4.2, 0.238, -10.4], "turn": 0, "scale": 1},
+        "furniture/toilet#1": {"pos": [-5.3, 0.23, -10.4], "turn": 0, "scale": 1},
+        "furniture/storage-shelf#1": {"pos": [0.8, 0.23, -9.512], "turn": 0, "scale": 1},
+        "house/window#3": {"pos": [-1.9, 0.8, -10.836], "turn": 0, "scale": 1},
+        "furniture/kitchen-cabinets#1": {"pos": [-6.3, 0.23, -5.298], "turn": 0, "scale": [0.852, 1, 1]},
+        "furniture/cooktop#1": {"pos": [-5.4, 1.131, -5.281], "turn": 0, "scale": 1},
+        "furniture/kitchen-sink#1": {"pos": [-7.1, 1.16, -5.315], "turn": 0, "scale": 1},
+        "furniture/refrigerator#1": {"pos": [-4.05, 0.235, -5.2], "turn": 0, "scale": 1},
+        "town/detail#4": {"pos": [-14.275, 0.06, -4], "turn": 0, "scale": [0.771, 1, 1]},
+        "furniture/sofa#1": {"pos": [-11.2, 0.23, -3.5], "turn": 0, "scale": 1},
+        "furniture/coffee-table#1": {"pos": [-10.5, 0.23, -3.6], "turn": 0, "scale": 1},
+        "furniture/television#1": {"pos": [-8.675, 0.238, -4.9], "turn": -3.1416, "scale": 1},
+        "town/detail#5": {"pos": [4.2, 0.06, -7], "turn": 0, "scale": 1},
+        "town/tree#2": {"pos": [4.1, 0.2, -6.9], "turn": 0, "scale": 1},
+        "garden/path#5": {"pos": [9.8, -0.015, -4.9], "turn": 0, "scale": 1},
+        "garden/tree#11": {"pos": [-8.9, -0.1, 10.1], "turn": 0, "scale": 1}
+      },
+      "added": []
+    },
+    "stkilda": {
+      "edits": {
+        "furniture/bed#1": {"pos": [-11.2, 0.23, -8.6], "turn": 0, "scale": 1},
+        "furniture/kitchen-cabinets#1": {"pos": [-6.3, 0.23, -5.5], "turn": 0, "scale": [0.864, 1, 1]},
+        "furniture/kitchen-sink#1": {"pos": [-7.1, 1.16, -5.315], "turn": 0, "scale": 1},
+        "furniture/cooktop#1": {"pos": [-5.2, 1.131, -5.281], "turn": 0, "scale": 1},
+        "furniture/refrigerator#1": {"pos": [-4.05, 0.235, -5.4], "turn": 0, "scale": 1},
+        "furniture/vanity#1": {"pos": [-4.2, 0.238, -10.4], "turn": 0, "scale": 1},
+        "furniture/toilet#1": {"pos": [-5.2, 0.23, -10.4], "turn": 0, "scale": 1},
+        "furniture/bathtub#1": {"pos": [-6.7, 0.238, -9.7], "turn": 0, "scale": 1},
+        "house/window#2": {"pos": [-6.7, 0.9, -10.836], "turn": 0, "scale": 1},
+        "garden/tree#10": {"pos": [-3.321, 0, -12.223], "turn": 0, "scale": 1},
+        "furniture/bathroom-mirror#1": {"pos": [-4.2, 1.3, -10.788], "turn": 0, "scale": 1},
+        "town/detail#4": {"pos": [-14.125, 0.06, -4], "turn": 0, "scale": [0.896, 1, 1]},
+        "furniture/sofa#1": {"pos": [-11.2, 0.23, -3.5], "turn": 0, "scale": 1},
+        "furniture/coffee-table#1": {"pos": [-10.7, 0.23, -3.6], "turn": 0, "scale": 1},
+        "furniture/television#1": {"pos": [-8.65, 0.238, -5], "turn": -3.1416, "scale": 1},
+        "furniture/storage-shelf#1": {"pos": [0.9, 0.23, -9.512], "turn": 0, "scale": [1, 0.87, 1]},
+        "furniture/workbench#1": {"pos": [0.8, 0.23, -4.95], "turn": 0, "scale": [1, 0.891, 0.85]}
+      },
+      "added": []
+    },
+    "boxhill": {
+      "edits": {
+        "furniture/nightstand#1": {"pos": [-12.4, 0.23, -10.3], "turn": 0, "scale": 1},
+        "furniture/table-lamp#1": {"pos": [-12.4, 0.9, -10.1], "turn": 0, "scale": 1},
+        "furniture/bed#1": {"pos": [-10.4, 0.23, -9.1], "turn": -1.5708, "scale": 1},
+        "furniture/blinds#1": {"pos": [-10.5, 0.6, -10.9], "turn": 0, "scale": 1},
+        "house/window#1": {"pos": [-10.5, 0.8, -10.836], "turn": 0, "scale": 1},
+        "house/window#2": {"pos": [-6.9, 0.8, -10.836], "turn": 0, "scale": 1},
+        "furniture/bathtub#1": {"pos": [-6.8, 0.238, -9.7], "turn": 0, "scale": 1},
+        "furniture/toilet#1": {"pos": [-5.4, 0.23, -10.5], "turn": 0, "scale": 1},
+        "furniture/bathroom-mirror#1": {"pos": [-4.1, 1.1, -10.788], "turn": 0, "scale": 1},
+        "furniture/vanity#1": {"pos": [-4.2, 0.238, -10.3], "turn": 0, "scale": 1},
+        "furniture/storage-shelf#1": {"pos": [0.9, 0.3, -9.512], "turn": 0, "scale": 1},
+        "house/window#3": {"pos": [-1.9, 0.8, -10.836], "turn": 0, "scale": 1},
+        "furniture/kitchen-cabinets#1": {"pos": [-6.3, 0.23, -5.298], "turn": 0, "scale": [0.828, 1, 1]},
+        "furniture/kitchen-sink#1": {"pos": [-7.1, 1.16, -5.315], "turn": 0, "scale": 1},
+        "furniture/cooktop#1": {"pos": [-5.6, 1.131, -5.281], "turn": 0, "scale": 1},
+        "furniture/refrigerator#1": {"pos": [-4.1, 0.235, -5.4], "turn": 0, "scale": 1},
+        "furniture/television#1": {"pos": [-8.6, 0.238, -4.9], "turn": -3.1416, "scale": 1},
+        "town/detail#4": {"pos": [-14.15, 0.06, -4], "turn": 0, "scale": [0.875, 1, 1]},
+        "furniture/sofa#1": {"pos": [-11.1, 0.23, -3.28], "turn": 0, "scale": 1}
+      },
+      "added": []
+    },
+    "richmond": {
+      "edits": {
+        "furniture/bed#1": {"pos": [-11.4, 0.23, -8.8], "turn": 0, "scale": 1},
+        "furniture/nightstand#1": {"pos": [-9.5, 0.23, -10.3], "turn": 0, "scale": 1},
+        "furniture/table-lamp#1": {"pos": [-9.5, 0.9, -10.3], "turn": 0, "scale": 1},
+        "town/detail#4": {"pos": [-14.125, 0.06, -4], "turn": 0, "scale": [0.896, 1, 1]},
+        "furniture/sofa#1": {"pos": [-11.1, 0.23, -3.5], "turn": 0, "scale": 1},
+        "furniture/coffee-table#1": {"pos": [-10.6, 0.23, -3.6], "turn": 0, "scale": 1},
+        "furniture/television#1": {"pos": [-8.6, 0.238, -5], "turn": -3.1416, "scale": 1},
+        "furniture/kitchen-cabinets#1": {"pos": [-6.2, 0.23, -5.5], "turn": 0, "scale": [0.852, 1, 1]},
+        "furniture/kitchen-sink#1": {"pos": [-6.8, 1.16, -5.315], "turn": 0, "scale": 1},
+        "furniture/cooktop#1": {"pos": [-5.2, 1.131, -5.281], "turn": 0, "scale": 1},
+        "furniture/refrigerator#1": {"pos": [-4, 0.235, -5.4], "turn": 0, "scale": 1},
+        "furniture/bathtub#1": {"pos": [-6.6, 0.238, -9.7], "turn": 0, "scale": 1},
+        "furniture/vanity#1": {"pos": [-4.1, 0.238, -10.3], "turn": 0, "scale": 1},
+        "furniture/bathroom-mirror#1": {"pos": [-4.1, 1.2, -10.788], "turn": 0, "scale": 1},
+        "furniture/toilet#1": {"pos": [-5.2, 0.2, -10.4], "turn": 0, "scale": 1},
+        "furniture/storage-shelf#1": {"pos": [0.7, 0.23, -9.512], "turn": 0, "scale": 1}
+      },
+      "added": []
+    },
+    "brunswick": {
+      "edits": {
+        "furniture/kitchen-cabinets#1": {"pos": [-6.2, 0.23, -5.4], "turn": 0, "scale": [0.925, 1, 1]},
+        "furniture/kitchen-sink#1": {"pos": [-6.6, 1.16, -5.315], "turn": 0, "scale": 1},
+        "furniture/cooktop#1": {"pos": [-5.4, 1.131, -5.3], "turn": 0, "scale": 1},
+        "furniture/refrigerator#1": {"pos": [-4, 0.235, -5.4], "turn": 0, "scale": 1},
+        "furniture/vanity#1": {"pos": [-4.3, 0.238, -10.3], "turn": 0, "scale": 1},
+        "furniture/toilet#1": {"pos": [-5.2, 0.23, -10.5], "turn": 0, "scale": 1},
+        "furniture/bathtub#1": {"pos": [-6.6, 0.238, -9.6], "turn": 0, "scale": 1},
+        "furniture/bed#1": {"pos": [-11.3, 0.23, -9], "turn": -3.1416, "scale": 1},
+        "furniture/nightstand#1": {"pos": [-9.3, 0.3, -10.4], "turn": 0, "scale": 1},
+        "furniture/table-lamp#1": {"pos": [-9.3, 1, -10.3], "turn": 0, "scale": 1},
+        "furniture/television#1": {"pos": [-8.6, 0.238, -4.9], "turn": -3.1416, "scale": 1},
+        "town/detail#4": {"pos": [-14.15, 0.06, -4], "turn": 0, "scale": [0.875, 1, 1]},
+        "furniture/sofa#1": {"pos": [-11, 0.23, -3.5], "turn": 0, "scale": 1},
+        "furniture/coffee-table#1": {"pos": [-10.6, 0.23, -3.6], "turn": 0, "scale": 1},
+        "furniture/workbench#1": {"pos": [0.8, 0.23, -4.8], "turn": 0, "scale": 1},
+        "furniture/storage-shelf#1": {"pos": [0.9, 0.23, -9.512], "turn": 0, "scale": 1}
+      },
+      "added": []
+    },
+    "auckland": {
+      "edits": {
+        "furniture/bed#1": {"pos": [-11.2, 0.23, -8.65], "turn": 0, "scale": 1},
+        "furniture/nightstand#1": {"pos": [-12.4, 0.23, -6.781], "turn": 1.5708, "scale": 1},
+        "furniture/table-lamp#1": {"pos": [-12.4, 0.88, -6.8], "turn": 0, "scale": 1},
+        "furniture/television#1": {"pos": [-8.7, 0.238, -4.9], "turn": -3.1416, "scale": 1},
+        "furniture/bathtub#1": {"pos": [-6.6, 0.238, -9.7], "turn": 0, "scale": 1},
+        "furniture/toilet#1": {"pos": [-5.1, 0.23, -10.3], "turn": 0, "scale": 1},
+        "furniture/vanity#1": {"pos": [-4.2, 0.238, -10.4], "turn": 0, "scale": 1},
+        "furniture/kitchen-cabinets#1": {"pos": [-6.3, 0.23, -5.5], "turn": 0, "scale": [0.852, 1, 1]},
+        "furniture/kitchen-sink#1": {"pos": [-7, 1.16, -5.315], "turn": 0, "scale": 1},
+        "furniture/cooktop#1": {"pos": [-5.4, 1.131, -5.281], "turn": 0, "scale": 1},
+        "furniture/refrigerator#1": {"pos": [-4.05, 0.235, -5.4], "turn": 0, "scale": 1},
+        "town/detail#4": {"pos": [-14.125, 0.06, -4], "turn": 0, "scale": [0.896, 1, 1]},
+        "furniture/sofa#1": {"pos": [-11, 0.23, -3.28], "turn": 0, "scale": 1},
+        "furniture/coffee-table#1": {"pos": [-10.4, 0.23, -3.38], "turn": 0, "scale": 1},
+        "furniture/storage-shelf#1": {"pos": [0.8, 0.23, -9.512], "turn": 0, "scale": 1},
+        "furniture/bathroom-mirror#1": {"pos": [-4.2, 1.41, -10.788], "turn": 0, "scale": 1},
+        "house/window#3": {"pos": [-1.9, 0.9, -10.836], "turn": 0, "scale": 1},
+        "furniture/blinds#1": {"pos": [-11.5, 0.9, -10.74], "turn": 0, "scale": 1}
+      },
+      "added": []
+    },
+    "brisbane": {
+      "edits": {
+        "furniture/nightstand#1": {"pos": [-12.6, 0.91, -6.781], "turn": 1.5708, "scale": 1},
+        "furniture/bed#1": {"pos": [-11.3, 0.91, -8.65], "turn": 0, "scale": 1},
+        "furniture/table-lamp#1": {"pos": [-12.7, 1.56, -6.8], "turn": 0, "scale": 1},
+        "furniture/bathtub#1": {"pos": [-6.6, 0.918, -9.6], "turn": 0, "scale": 1},
+        "furniture/vanity#1": {"pos": [-4.3, 0.918, -10.4], "turn": 0, "scale": 1},
+        "furniture/toilet#1": {"pos": [-5.1, 0.91, -10.4], "turn": 0, "scale": 1},
+        "furniture/kitchen-cabinets#1": {"pos": [-6.3, 0.91, -5.5], "turn": 0, "scale": [0.876, 1, 1]},
+        "furniture/kitchen-sink#1": {"pos": [-7.1, 1.84, -5.315], "turn": 0, "scale": 1},
+        "furniture/cooktop#1": {"pos": [-5.4, 1.811, -5.281], "turn": 0, "scale": 1},
+        "furniture/refrigerator#1": {"pos": [-4.05, 0.915, -5.4], "turn": 0, "scale": 1},
+        "furniture/sofa#1": {"pos": [-11.1, 0.91, -3.28], "turn": 0, "scale": 1},
+        "furniture/coffee-table#1": {"pos": [-10.4, 0.91, -3.38], "turn": 0, "scale": 1},
+        "furniture/television#1": {"pos": [-8.7, 0.918, -4.9], "turn": -3.1416, "scale": 1},
+        "furniture/storage-shelf#1": {"pos": [0.7, 0.91, -9.512], "turn": 0, "scale": 1}
+      },
+      "added": []
+    },
+    "paraty": {
+      "edits": {
+        "furniture/bed#1": {"pos": [-11.2, 0.23, -9], "turn": 0, "scale": 1},
+        "furniture/blinds#1": {"pos": [-11.2, 0.9, -10.74], "turn": 0, "scale": 1},
+        "furniture/nightstand#1": {"pos": [-9.2, 0.23, -10.3], "turn": 0, "scale": 1},
+        "furniture/table-lamp#1": {"pos": [-9.2, 0.88, -10.3], "turn": 0, "scale": 1},
+        "furniture/bathtub#1": {"pos": [-6.7, 0.238, -9.5], "turn": 0, "scale": 1},
+        "furniture/toilet#1": {"pos": [-5.4, 0.23, -10.4], "turn": 0, "scale": 1},
+        "furniture/vanity#1": {"pos": [-4.3, 0.238, -10.4], "turn": 0, "scale": 1},
+        "town/detail#4": {"pos": [-14.125, 0.06, -4], "turn": 0, "scale": [0.896, 1, 1]},
+        "furniture/kitchen-cabinets#1": {"pos": [-6.275, 0.23, -5.4], "turn": 0, "scale": [0.864, 1, 1]},
+        "furniture/kitchen-sink#1": {"pos": [-6.7, 1.16, -5.315], "turn": 0, "scale": 1},
+        "furniture/cooktop#1": {"pos": [-5.4, 1.131, -5.3], "turn": 0, "scale": 1},
+        "furniture/refrigerator#1": {"pos": [-4.05, 0.235, -5.4], "turn": 0, "scale": 1},
+        "furniture/sofa#1": {"pos": [-10.9, 0.23, -3.72], "turn": 0, "scale": 1},
+        "furniture/coffee-table#1": {"pos": [-10.1, 0.23, -3.82], "turn": 0, "scale": 1},
+        "furniture/television#1": {"pos": [-8.6, 0.238, -5.1], "turn": -3.1416, "scale": 1},
+        "furniture/storage-shelf#1": {"pos": [0.6, 0.23, -9.512], "turn": 0, "scale": 1},
+        "furniture/workbench#1": {"pos": [0.7, 0.23, -4.8], "turn": 0, "scale": [1, 0.891, 1]},
+        "house/window#1": {"pos": [-11.3, 0.675, -10.836], "turn": 0, "scale": 1}
+      },
+      "added": []
+    },
+    "cusco": {
+      "edits": {
+        "furniture/bed#1": {"pos": [-11.3, 0.23, -8.9], "turn": -3.1416, "scale": 1},
+        "furniture/table-lamp#1": {"pos": [-9.5, 0.88, -10.5], "turn": 0, "scale": 1},
+        "furniture/nightstand#1": {"pos": [-9.5, 0.23, -10.5], "turn": 0, "scale": 1},
+        "furniture/bathtub#1": {"pos": [-6.6, 0.238, -9.7], "turn": 0, "scale": 1},
+        "furniture/vanity#1": {"pos": [-4.3, 0.238, -10.2], "turn": 0, "scale": 1},
+        "furniture/toilet#1": {"pos": [-5.2, 0.23, -10.3], "turn": 0, "scale": 1},
+        "furniture/kitchen-cabinets#1": {"pos": [-6.3, 0.23, -5.5], "turn": 0, "scale": [0.864, 1, 1]},
+        "furniture/kitchen-sink#1": {"pos": [-7.1, 1.16, -5.6], "turn": 0, "scale": 1},
+        "furniture/cooktop#1": {"pos": [-5.4, 1.131, -5.5], "turn": 0, "scale": 1},
+        "furniture/refrigerator#1": {"pos": [-4.05, 0.235, -5.4], "turn": 0, "scale": 1},
+        "furniture/laundry-machine#1": {"pos": [-1.7, 0.23, -9.9], "turn": 0, "scale": 1},
+        "town/detail#4": {"pos": [-14.075, 0.06, -4], "turn": 0, "scale": [0.938, 1, 1]},
+        "furniture/sofa#1": {"pos": [-11.2, 0.23, -3.28], "turn": 0, "scale": 1},
+        "furniture/television#1": {"pos": [-8.7, 0.238, -4.9], "turn": -3.1416, "scale": 1},
+        "furniture/coffee-table#1": {"pos": [-10.3, 0.23, -3.38], "turn": 0, "scale": 1}
+      },
+      "added": []
+    },
+    "merida": {
+      "edits": {
+        "town/detail#4": {"pos": [-14.15, 0.06, -4], "turn": 0, "scale": [0.875, 1, 1]},
+        "furniture/sofa#1": {"pos": [-11.2, 0.23, -3.5], "turn": 0, "scale": 1},
+        "furniture/coffee-table#1": {"pos": [-10.5, 0.23, -3.6], "turn": 0, "scale": 1},
+        "furniture/bed#1": {"pos": [-11.4, 0.23, -8.65], "turn": 0, "scale": 1},
+        "furniture/nightstand#1": {"pos": [-12.6, 0.23, -6.781], "turn": 1.5708, "scale": 1},
+        "furniture/table-lamp#1": {"pos": [-12.6, 0.88, -6.8], "turn": 0, "scale": 1},
+        "furniture/television#1": {"pos": [-8.675, 0.238, -5], "turn": -3.1416, "scale": 1},
+        "furniture/laundry-machine#1": {"pos": [-1.8, 0.23, -9.8], "turn": 0, "scale": 1},
+        "garden/feature#1": {"pos": [4, 0.105, -7.21], "turn": 0, "scale": 1}
+      },
+      "added": []
+    },
+    "bergen": {
+      "edits": {
+        "garden/tree#1": {"pos": [-14.324, -0.026, -10.109], "turn": 0, "scale": [0.797, 1, 1]},
+        "furniture/bed#1": {"pos": [-11.3, 0.23, -9], "turn": 0, "scale": 1},
+        "furniture/nightstand#1": {"pos": [-8.95, 0.23, -10.4], "turn": 0, "scale": 1},
+        "furniture/table-lamp#1": {"pos": [-8.95, 0.88, -10.5], "turn": 0, "scale": 1},
+        "furniture/bathtub#1": {"pos": [-6.7, 0.238, -9.5], "turn": 0, "scale": 1},
+        "furniture/toilet#1": {"pos": [-5.1, 0.23, -10.4], "turn": 0, "scale": 1},
+        "furniture/vanity#1": {"pos": [-4.3, 0.238, -10.4], "turn": 0, "scale": 1},
+        "furniture/laundry-machine#1": {"pos": [-1.7, 0.23, -10], "turn": 0, "scale": 1},
+        "furniture/kitchen-cabinets#1": {"pos": [-6.2, 0.23, -5.5], "turn": 0, "scale": [0.852, 1, 1]},
+        "furniture/cooktop#1": {"pos": [-5.1, 1.131, -5.5], "turn": 0, "scale": 1},
+        "furniture/kitchen-sink#1": {"pos": [-6.4, 1.16, -5.5], "turn": 0, "scale": 1},
+        "furniture/refrigerator#1": {"pos": [-4, 0.235, -5.5], "turn": 0, "scale": 1},
+        "furniture/television#1": {"pos": [-8.6, 0.238, -5], "turn": -3.1416, "scale": 1},
+        "town/detail#4": {"pos": [-14.2, 0.06, -4], "turn": 0, "scale": [0.833, 1, 1]},
+        "garden/tree#2": {"pos": [-14.21, -0.023, -4.912], "turn": 0, "scale": [0.808, 1, 1]},
+        "furniture/sofa#1": {"pos": [-11.2, 0.23, -3.72], "turn": 0, "scale": 1},
+        "furniture/storage-shelf#1": {"pos": [0.9, 0.23, -9.512], "turn": 0, "scale": 1}
+      },
+      "added": []
+    },
+    "falmouth": {
+      "edits": {
+        "town/tree#1": {"pos": [-13.964, 0.4, -4.159], "turn": 0, "scale": [1.01, 1, 1]},
+        "garden/tree#1": {"pos": [-14.195, -0.024, -5.139], "turn": 0, "scale": [0.864, 1, 1]},
+        "town/detail#4": {"pos": [-14.175, 0.06, -4], "turn": 0, "scale": [0.854, 1, 1]},
+        "furniture/sofa#1": {"pos": [-11.1, 0.23, -3.5], "turn": 0, "scale": 1},
+        "furniture/coffee-table#1": {"pos": [-10.5, 0.23, -3.6], "turn": 0, "scale": 1},
+        "furniture/bed#1": {"pos": [-11.3, 0.23, -8.9], "turn": -3.1416, "scale": 1},
+        "furniture/nightstand#1": {"pos": [-8.95, 0.23, -10.5], "turn": 0, "scale": 1},
+        "furniture/table-lamp#1": {"pos": [-8.95, 0.88, -10.5], "turn": 0, "scale": 1},
+        "furniture/vanity#1": {"pos": [-4.3, 0.238, -10.4], "turn": 0, "scale": 1},
+        "furniture/toilet#1": {"pos": [-5.1, 0.23, -10.4], "turn": 0, "scale": 1},
+        "furniture/bathtub#1": {"pos": [-6.7, 0.238, -9.5], "turn": 0, "scale": 1},
+        "furniture/kitchen-cabinets#1": {"pos": [-6.25, 0.23, -5.5], "turn": 0, "scale": [0.889, 1, 1]},
+        "furniture/kitchen-sink#1": {"pos": [-7, 1.16, -5.5], "turn": 0, "scale": 1},
+        "furniture/cooktop#1": {"pos": [-5.2, 1.131, -5.5], "turn": 0, "scale": 1},
+        "furniture/refrigerator#1": {"pos": [-4, 0.235, -5.4], "turn": 0, "scale": 1},
+        "furniture/storage-shelf#1": {"pos": [0.8, 0.23, -9.512], "turn": 0, "scale": 1}
+      },
+      "added": []
+    },
+    "cordoba": {
+      "edits": {
+        "furniture/bed#1": {"pos": [-11.2, 0.23, -8.7], "turn": -3.1416, "scale": 1},
+        "furniture/nightstand#1": {"pos": [-8.95, 0.23, -10.4], "turn": 0, "scale": 1},
+        "furniture/table-lamp#1": {"pos": [-8.95, 0.88, -10.3], "turn": 0, "scale": 1},
+        "furniture/television#1": {"pos": [-8.625, 0.238, -5], "turn": -3.1416, "scale": 1},
+        "town/detail#4": {"pos": [-14.125, 0.06, -4], "turn": 0, "scale": [0.896, 1, 1]},
+        "furniture/sofa#1": {"pos": [-11.1, 0.23, -3.5], "turn": 0, "scale": 1},
+        "furniture/coffee-table#1": {"pos": [-10.5, 0.23, -3.6], "turn": 0, "scale": 1},
+        "furniture/storage-shelf#1": {"pos": [0.7, 0.23, -9.512], "turn": 0, "scale": 1}
+      },
+      "added": []
+    },
+    "pontremoli": {
+      "edits": {
+        "town/detail#4": {"pos": [-14.15, 0.06, -4], "turn": 0, "scale": [0.875, 1, 1]},
+        "furniture/sofa#1": {"pos": [-11.1, 0.3, -3.5], "turn": 0, "scale": 1},
+        "furniture/coffee-table#1": {"pos": [-10.3, 0.23, -3.6], "turn": 0, "scale": 1},
+        "furniture/television#1": {"pos": [-8.75, 0.238, -4.8], "turn": -3.1416, "scale": 1},
+        "furniture/bed#1": {"pos": [-11, 0.23, -8.65], "turn": -1.5708, "scale": 1},
+        "furniture/table-lamp#1": {"pos": [-9.1, 0.88, -10], "turn": 0, "scale": 1},
+        "furniture/nightstand#1": {"pos": [-9.1, 0.2, -10.1], "turn": 0, "scale": 1},
+        "furniture/bathtub#1": {"pos": [-6.6, 0.238, -9.3], "turn": 0, "scale": 1},
+        "furniture/toilet#1": {"pos": [-5.2, 0.23, -10], "turn": 0, "scale": 1},
+        "furniture/vanity#1": {"pos": [-4.2, 0.238, -9.9], "turn": 0, "scale": 1},
+        "furniture/storage-shelf#1": {"pos": [0.6, 0.23, -9.512], "turn": 0, "scale": 1},
+        "furniture/kitchen-cabinets#1": {"pos": [-6.3, 0.23, -5.5], "turn": 0, "scale": [0.864, 1, 1]},
+        "furniture/kitchen-sink#1": {"pos": [-6.9, 1.16, -5.315], "turn": 0, "scale": 1},
+        "furniture/cooktop#1": {"pos": [-5.2, 1.131, -5.281], "turn": 0, "scale": 1},
+        "furniture/refrigerator#1": {"pos": [-4.05, 0.235, -5.4], "turn": 0, "scale": 1}
+      },
+      "added": []
+    },
+    "diriyah": {
+      "edits": {
+        "furniture/bed#1": {"pos": [-11.1, 0.23, -9], "turn": -3.1416, "scale": 1},
+        "furniture/television#1": {"pos": [-8.8, 0.238, -4.8], "turn": -3.1416, "scale": 1},
+        "town/detail#4": {"pos": [-14.175, 0.06, -4], "turn": 0, "scale": [0.854, 1, 1]},
+        "furniture/sofa#1": {"pos": [-11.1, 0.23, -3.5], "turn": 0, "scale": 1},
+        "furniture/nightstand#1": {"pos": [-8.9, 0.23, -10.4], "turn": 0, "scale": 1},
+        "furniture/table-lamp#1": {"pos": [-8.95, 0.88, -10.4], "turn": 0, "scale": 1},
+        "furniture/laundry-machine#1": {"pos": [-1.7, 0.23, -9.9], "turn": 0, "scale": 1},
+        "furniture/coffee-table#1": {"pos": [-10.5, 0.23, -3.6], "turn": 0, "scale": 1},
+        "furniture/workbench#1": {"pos": [0.7, 0.2, -4.8], "turn": 0, "scale": 1}
+      },
+      "added": []
+    },
+    "safranbolu": {
+      "edits": {
+        "furniture/bed#1": {"pos": [-11.4, 0.23, -8.9], "turn": -3.1416, "scale": 1},
+        "furniture/television#1": {"pos": [-8.675, 0.238, -5.1], "turn": -3.1416, "scale": 1},
+        "furniture/nightstand#1": {"pos": [-8.95, 0.23, -10.3], "turn": 0, "scale": 1},
+        "furniture/table-lamp#1": {"pos": [-8.95, 0.88, -10.3], "turn": 0, "scale": 1},
+        "furniture/bathtub#1": {"pos": [-6.7, 0.238, -9.5], "turn": 0, "scale": 1},
+        "furniture/vanity#1": {"pos": [-4.3, 0.238, -10.3], "turn": 0, "scale": 1},
+        "furniture/toilet#1": {"pos": [-5.1, 0.23, -10.2], "turn": 0, "scale": 1},
+        "furniture/laundry-machine#1": {"pos": [-1.7, 0.23, -9.9], "turn": 0, "scale": 1},
+        "furniture/kitchen-cabinets#1": {"pos": [-6.325, 0.23, -5.6], "turn": 0, "scale": [0.864, 1, 1]},
+        "furniture/kitchen-sink#1": {"pos": [-6.9, 1.16, -5.7], "turn": 0, "scale": 1},
+        "furniture/cooktop#1": {"pos": [-5.3, 1.131, -5.6], "turn": 0, "scale": 1},
+        "furniture/refrigerator#1": {"pos": [-4.05, 0.235, -5.5], "turn": 0, "scale": 1},
+        "town/detail#4": {"pos": [-14.15, 0.06, -4], "turn": 0, "scale": [0.875, 1, 1]},
+        "furniture/sofa#1": {"pos": [-11.1, 0.23, -3.28], "turn": 0, "scale": 1},
+        "furniture/coffee-table#1": {"pos": [-10.3, 0.23, -3.38], "turn": 0, "scale": 1}
+      },
+      "added": []
+    },
+    "hue": {
+      "edits": {
+        "town/detail#4": {"pos": [-14.125, 0.06, -4], "turn": 0, "scale": [0.896, 1, 1]},
+        "furniture/kitchen-cabinets#1": {"pos": [-6.3, 0.23, -5.5], "turn": 0, "scale": [0.913, 1, 1]},
+        "furniture/kitchen-sink#1": {"pos": [-6.9, 1.16, -5.5], "turn": 0, "scale": 1},
+        "furniture/cooktop#1": {"pos": [-5.3, 1.131, -5.4], "turn": 0, "scale": 1},
+        "furniture/refrigerator#1": {"pos": [-4, 0.235, -5.4], "turn": 0, "scale": 1},
+        "furniture/sofa#1": {"pos": [-10.9, 0.23, -3.72], "turn": 0, "scale": 1},
+        "furniture/nightstand#1": {"pos": [-8.95, 0.23, -10.3], "turn": 0, "scale": 1},
+        "furniture/table-lamp#1": {"pos": [-8.95, 0.88, -10.3], "turn": 0, "scale": 1},
+        "furniture/bed#1": {"pos": [-11.3, 0.23, -8.8], "turn": 0, "scale": 1},
+        "furniture/bathtub#1": {"pos": [-6.6, 0.238, -9.6], "turn": 0, "scale": 1},
+        "furniture/vanity#1": {"pos": [-4.3, 0.238, -10.4], "turn": 0, "scale": 1},
+        "furniture/toilet#1": {"pos": [-5.2, 0.23, -10.4], "turn": 0, "scale": 1},
+        "furniture/laundry-machine#1": {"pos": [-1.7, 0.23, -9.7], "turn": 0, "scale": 1},
+        "furniture/storage-shelf#1": {"pos": [0.7, 0.23, -9.512], "turn": 0, "scale": 1},
+        "furniture/television#1": {"pos": [-8.675, 0.238, -5.1], "turn": -3.1416, "scale": 1},
+        "furniture/bathroom-mirror#1": {"pos": [-4.3, 1.3, -10.788], "turn": 0, "scale": 1}
+      },
+      "added": []
+    },
+    "yogyakarta": {
+      "edits": {
+        "furniture/bed#1": {"pos": [-11.4, 0.23, -8.8], "turn": 0, "scale": 1},
+        "furniture/nightstand#1": {"pos": [-9.3, 0.23, -10.4], "turn": 0, "scale": 1},
+        "furniture/table-lamp#1": {"pos": [-9.3, 0.88, -10.5], "turn": 0, "scale": 1},
+        "furniture/bathtub#1": {"pos": [-6.8, 0.238, -9.4], "turn": 0, "scale": 1},
+        "furniture/toilet#1": {"pos": [-5.1, 0.23, -10.4], "turn": 0, "scale": 1},
+        "furniture/vanity#1": {"pos": [-4.3, 0.238, -10.3], "turn": 0, "scale": 1},
+        "furniture/laundry-machine#1": {"pos": [-1.7, 0.23, -9.9], "turn": 0, "scale": 1},
+        "town/detail#4": {"pos": [-14.15, 0.06, -4], "turn": 0, "scale": [0.875, 1, 1]},
+        "furniture/sofa#1": {"pos": [-11.1, 0.23, -3.5], "turn": 0, "scale": 1},
+        "furniture/coffee-table#1": {"pos": [-10.5, 0.23, -3.6], "turn": 0, "scale": 1},
+        "furniture/kitchen-cabinets#1": {"pos": [-6.4, 0.23, -5.298], "turn": 0, "scale": [0.815, 1, 1]},
+        "furniture/cooktop#1": {"pos": [-5.7, 1.131, -5.281], "turn": 0, "scale": 1},
+        "furniture/kitchen-sink#1": {"pos": [-7.3, 1.16, -5.315], "turn": 0, "scale": 1},
+        "furniture/refrigerator#1": {"pos": [-4.05, 0.235, -5], "turn": 0, "scale": 1},
+        "furniture/storage-shelf#1": {"pos": [0.6, 0.23, -9.512], "turn": 0, "scale": 1},
+        "furniture/television#1": {"pos": [-8.7, 0.238, -4.8], "turn": 0, "scale": 1}
+      },
+      "added": []
+    },
+    "beijing": {
+      "edits": {
+        "furniture/bed#1": {"pos": [-11.3, 0.23, -8.8], "turn": 0, "scale": 1},
+        "furniture/nightstand#1": {"pos": [-9.1, 0.23, -10.3], "turn": 0, "scale": 1},
+        "furniture/table-lamp#1": {"pos": [-9.1, 0.88, -10.4], "turn": 0, "scale": 1},
+        "town/detail#4": {"pos": [-14.125, 0.06, -4], "turn": 0, "scale": [0.896, 1, 1]},
+        "furniture/sofa#1": {"pos": [-11.1, 0.23, -3.5], "turn": 0, "scale": 1},
+        "furniture/coffee-table#1": {"pos": [-10.5, 0.23, -3.6], "turn": 0, "scale": 1},
+        "furniture/television#1": {"pos": [-8.65, 0.238, -4.9], "turn": -3.1416, "scale": 1}
+      },
+      "added": []
+    },
+    "shimla": {
+      "edits": {
+        "furniture/bathtub#1": {"pos": [-6.6, 0.3, -9.3], "turn": 0, "scale": 1},
+        "furniture/vanity#1": {"pos": [-4.3, 0.238, -10.2], "turn": 0, "scale": 1},
+        "furniture/bathroom-mirror#1": {"pos": [-4.3, 1.41, -10.7], "turn": 0, "scale": 1},
+        "furniture/toilet#1": {"pos": [-5.2, 0.3, -9.9], "turn": 0, "scale": 1},
+        "furniture/kitchen-cabinets#1": {"pos": [-6.2, 0.23, -5.4], "turn": 0, "scale": [0.876, 1, 1]},
+        "furniture/kitchen-sink#1": {"pos": [-6.6, 1.16, -5.4], "turn": 0, "scale": 1},
+        "furniture/cooktop#1": {"pos": [-5.2, 1.131, -5.4], "turn": 0, "scale": 1},
+        "furniture/refrigerator#1": {"pos": [-4, 0.235, -5.4], "turn": 0, "scale": 1},
+        "town/detail#4": {"pos": [-14.125, 0.06, -4], "turn": 0, "scale": [0.896, 1, 1]},
+        "furniture/sofa#1": {"pos": [-11, 0.23, -3.28], "turn": 0, "scale": 1},
+        "furniture/coffee-table#1": {"pos": [-10.5, 0.23, -3.38], "turn": 0, "scale": 1},
+        "furniture/television#1": {"pos": [-8.7, 0.238, -4.9], "turn": -3.1416, "scale": 1},
+        "furniture/storage-shelf#1": {"pos": [0.8, 0.23, -9.2], "turn": 0, "scale": 1}
+      },
+      "added": []
+    },
+    "mandawa": {
+      "edits": {
+        "town/detail#4": {"pos": [-14.125, 0.06, -4], "turn": 0, "scale": [0.896, 1, 1]},
+        "furniture/sofa#1": {"pos": [-11, 0.23, -3.5], "turn": 0, "scale": 1},
+        "furniture/coffee-table#1": {"pos": [-10.3, 0.23, -3.4], "turn": 0, "scale": 1},
+        "furniture/bed#1": {"pos": [-11.1, 0.23, -9.1], "turn": 0, "scale": 1},
+        "furniture/nightstand#1": {"pos": [-9.1, 0.23, -10.3], "turn": 0, "scale": 1},
+        "furniture/table-lamp#1": {"pos": [-9.1, 0.88, -10.3], "turn": 0, "scale": 1},
+        "furniture/laundry-machine#1": {"pos": [-1.7, 0.23, -9.8], "turn": 0, "scale": 1},
+        "furniture/storage-shelf#1": {"pos": [0.6, 0.23, -9.512], "turn": 0, "scale": 1},
         "furniture/television#1": {"pos": [-8.7, 0.238, -4.9], "turn": -3.1416, "scale": 1}
+      },
+      "added": []
+    },
+    "chendamangalam": {
+      "edits": {
+        "furniture/bed#1": {"pos": [-11.3, 0.23, -8.9], "turn": -3.1416, "scale": 1},
+        "furniture/nightstand#1": {"pos": [-9.1, 0.23, -10.4], "turn": 0, "scale": 1},
+        "furniture/table-lamp#1": {"pos": [-9.1, 0.88, -10.5], "turn": 0, "scale": 1},
+        "furniture/television#1": {"pos": [-8.6, 0.238, -4.9], "turn": -3.1416, "scale": 1},
+        "furniture/laundry-machine#1": {"pos": [-2, 0.23, -9.8], "turn": 0, "scale": 1},
+        "town/detail#4": {"pos": [-14.15, 0.06, -4], "turn": 0, "scale": [0.875, 1, 1]},
+        "furniture/sofa#1": {"pos": [-11.2, 0.23, -3.28], "turn": 0, "scale": 1},
+        "furniture/coffee-table#1": {"pos": [-10.8, 0.23, -3.38], "turn": 0, "scale": 1}
+      },
+      "added": []
+    },
+    "aswan": {
+      "edits": {
+        "furniture/nightstand#1": {"pos": [-8.95, 0.23, -10.3], "turn": 0, "scale": 1},
+        "furniture/table-lamp#1": {"pos": [-8.95, 0.88, -10.3], "turn": 0, "scale": 1},
+        "furniture/bed#1": {"pos": [-11.075, 0.23, -8.9], "turn": 0, "scale": 1},
+        "furniture/laundry-machine#1": {"pos": [-1.7, 0.23, -9.7], "turn": 0, "scale": 1},
+        "town/detail#4": {"pos": [-14.125, 0.06, -4], "turn": 0, "scale": [0.896, 1, 1]},
+        "furniture/sofa#1": {"pos": [-11, 0.23, -3.28], "turn": 0, "scale": 1},
+        "furniture/coffee-table#1": {"pos": [-10.4, 0.23, -3.38], "turn": 0, "scale": 1},
+        "furniture/television#1": {"pos": [-8.775, 0.238, -5], "turn": -3.1416, "scale": 1}
+      },
+      "added": []
+    },
+    "stellenbosch": {
+      "edits": {
+        "furniture/bed#1": {"pos": [-11.4, 0.23, -9], "turn": -3.1416, "scale": 1},
+        "furniture/television#1": {"pos": [-8.625, 0.238, -4.9], "turn": -3.1416, "scale": 1},
+        "furniture/nightstand#1": {"pos": [-9.5, 0.23, -10.5], "turn": 0, "scale": 1},
+        "furniture/table-lamp#1": {"pos": [-9.5, 0.88, -10.6], "turn": 0, "scale": 1},
+        "town/detail#4": {"pos": [-14.2, 0.06, -4], "turn": 0, "scale": [0.833, 1, 1]},
+        "furniture/sofa#1": {"pos": [-10.9, 0.23, -3.28], "turn": 0, "scale": 1},
+        "furniture/coffee-table#1": {"pos": [-10.3, 0.23, -3.38], "turn": 0, "scale": 1},
+        "furniture/toilet#1": {"pos": [-5.1, 0.23, -10.2], "turn": 0, "scale": 1},
+        "furniture/vanity#1": {"pos": [-4.3, 0.238, -10.3], "turn": 0, "scale": 1},
+        "furniture/bathtub#1": {"pos": [-6.6, 0.238, -9.6], "turn": 0, "scale": 1},
+        "furniture/laundry-machine#1": {"pos": [-1.7, 0.23, -9.8], "turn": 0, "scale": 1},
+        "furniture/storage-shelf#1": {"pos": [0.6, 0.23, -9.512], "turn": 0, "scale": 1},
+        "furniture/kitchen-cabinets#1": {"pos": [-6.35, 0.23, -5.298], "turn": 0, "scale": [0.889, 1, 1]},
+        "furniture/kitchen-sink#1": {"pos": [-7, 1.16, -5.315], "turn": 0, "scale": 1},
+        "furniture/cooktop#1": {"pos": [-5.2, 1.131, -5.281], "turn": 0, "scale": 1},
+        "furniture/refrigerator#1": {"pos": [-4.05, 0.235, -5.4], "turn": 0, "scale": 1}
+      },
+      "added": []
+    },
+    "lamu": {
+      "edits": {
+        "furniture/bed#1": {"pos": [-11.3, 0.23, -9], "turn": -3.1416, "scale": 1},
+        "furniture/television#1": {"pos": [-8.675, 0.238, -4.9], "turn": -3.1416, "scale": 1},
+        "furniture/nightstand#1": {"pos": [-9.4, 0.23, -10.4], "turn": 0, "scale": 1},
+        "furniture/table-lamp#1": {"pos": [-9.3, 0.88, -10.4], "turn": 0, "scale": 1},
+        "town/detail#4": {"pos": [-14.15, 0.06, -4], "turn": 0, "scale": [0.875, 1, 1]},
+        "furniture/sofa#1": {"pos": [-11.2, 0.23, -3.28], "turn": 0, "scale": 1},
+        "furniture/coffee-table#1": {"pos": [-10.5, 0.23, -3.38], "turn": 0, "scale": 1},
+        "furniture/storage-shelf#1": {"pos": [0.8, 0.23, -9.512], "turn": 0, "scale": 1},
+        "furniture/laundry-machine#1": {"pos": [-1.7, 0.23, -9.9], "turn": 0, "scale": 1}
+      },
+      "added": []
+    },
+    "marrakech": {
+      "edits": {
+        "furniture/bed#1": {"pos": [-11.025, 0.23, -8.548], "turn": -3.1416, "scale": 1},
+        "furniture/television#1": {"pos": [-8.7, 0.238, -5.1], "turn": -3.1416, "scale": 1},
+        "furniture/nightstand#1": {"pos": [-9.1, 0.23, -10.3], "turn": 0, "scale": 1},
+        "furniture/table-lamp#1": {"pos": [-9.1, 0.88, -10.3], "turn": 0, "scale": 1},
+        "furniture/vanity#1": {"pos": [-4.2, 0.238, -10.4], "turn": 0, "scale": 1},
+        "furniture/toilet#1": {"pos": [-5.2, 0.23, -10.4], "turn": 0, "scale": 1},
+        "furniture/bathtub#1": {"pos": [-6.6, 0.238, -9.6], "turn": 0, "scale": 1},
+        "furniture/laundry-machine#1": {"pos": [-1.7, 0.23, -10], "turn": 0, "scale": 1},
+        "furniture/kitchen-cabinets#1": {"pos": [-6.329, 0.23, -5.298], "turn": 0, "scale": [0.889, 1, 1]},
+        "furniture/kitchen-sink#1": {"pos": [-7.2, 1.16, -5.315], "turn": 0, "scale": 1},
+        "furniture/cooktop#1": {"pos": [-5.4, 1.131, -5.281], "turn": 0, "scale": 1},
+        "furniture/refrigerator#1": {"pos": [-4, 0.235, -5.4], "turn": 0, "scale": 1},
+        "town/detail#4": {"pos": [-14.15, 0.06, -4], "turn": 0, "scale": [0.875, 1, 1]},
+        "furniture/sofa#1": {"pos": [-10.9, 0.23, -3.5], "turn": 0, "scale": 1},
+        "furniture/coffee-table#1": {"pos": [-10.2, 0.23, -3.6], "turn": 0, "scale": 1}
       },
       "added": []
     }

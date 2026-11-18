@@ -19,7 +19,15 @@ const mime = {
   '.svg': 'image/svg+xml',
   '.json': 'application/json',
 };
-const weatherProxy = createWeatherProxy(Object.fromEntries(locations.map((l) => [l.id, l])));
+// WEATHER=offline (set by the browser tests): the proxy answers at once as if Open-Meteo were
+// unreachable, so pages get practice weather straight away. Otherwise a slow real request
+// re-draws the destination panel seconds later, replacing buttons a test is about to click.
+const weatherProxy = createWeatherProxy(
+  Object.fromEntries(locations.map((l) => [l.id, l])),
+  process.env.WEATHER === 'offline'
+    ? { fetchImpl: () => Promise.reject(Error('Weather is offline for tests.')) }
+    : {},
+);
 const server = http.createServer(async (req, res) => {
   try {
     const proxy = await weatherProxy(

@@ -6,7 +6,15 @@ import { victorianFarms } from '../../public/farms.js';
 import { missions, defaults, program } from '../../public/missions.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { startGame, browser, openHome, settle, visitChat, modalOpen } from './game-harness.mjs';
+import {
+  startGame,
+  browser,
+  openHome,
+  settle,
+  visitChat,
+  modalOpen,
+  enterDestination,
+} from './game-harness.mjs';
 
 startGame();
 
@@ -17,7 +25,7 @@ test('Victorian farms render and retain homestead and connected town navigation'
     await page.locator('#continentSelect').selectOption('Oceania');
     await page.locator('#countrySelect').selectOption('AUS');
     await page.locator(`[data-location="${farm.id}"]`).click();
-    await page.locator('#enterLocation').click();
+    await enterDestination(page);
     await page.locator('.layout-switch [data-layout="world"]').click();
     await page.locator('[data-view="landscape"]').click();
     await settle(page);
@@ -205,7 +213,7 @@ test('formerly unlabeled Melbourne houses have accessible individual sections', 
   await page.locator('#continentSelect').selectOption('Oceania');
   await page.locator('#countrySelect').selectOption('AUS');
   await page.locator('[data-location="fitzroy"]').click();
-  await page.locator('#enterLocation').click();
+  await enterDestination(page);
   for (const i of [1, 9, 18]) {
     await page.locator('#exploreCommunity').click();
     await settle(page);

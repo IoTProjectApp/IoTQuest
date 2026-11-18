@@ -1,4 +1,4 @@
-import { locations } from '../public/locations.js';
+import { locations } from '../public/game/locations.js';
 import { mkdir, cp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { execFileSync } from 'node:child_process';
@@ -16,7 +16,10 @@ async function listFiles(dir, prefix = '') {
 const channel = (process.argv.find((a) => a.startsWith('--channel=')) || '').slice(10);
 if (!/^[a-z0-9]*$/.test(channel)) throw Error('Channel names use a-z and 0-9 only: ' + channel);
 process.chdir(fileURLToPath(new URL('..', import.meta.url)));
-for (const file of (await readdir('public')).filter((f) => f.endsWith('.js')))
+// The game's own modules, in public/ and its folders (not the vendored three.js or saved data).
+for (const file of (await readdir('public', { recursive: true })).filter(
+  (f) => f.endsWith('.js') && !/^(vendor|data|models)\//.test(f),
+))
   execFileSync(process.execPath, ['--check', 'public/' + file]);
 await rm('dist', { recursive: true, force: true });
 await mkdir('dist/client', { recursive: true });

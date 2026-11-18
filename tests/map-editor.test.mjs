@@ -3,9 +3,9 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { WorldSession } from '../editor/workspaces/map-editor/session.js';
 import { nameOf, categoryOf, kindOf } from '../editor/workspaces/map-editor/names.js';
-import { applyWorldLayout, editGroups } from '../public/world-layout.js';
-import { createRegionalModel } from '../public/regions.js';
-import { addCommunityWorld } from '../public/community-world.js';
+import { applyWorldLayout, editGroups } from '../public/world/world-layout.js';
+import { createRegionalModel } from '../public/world/regions.js';
+import { addCommunityWorld } from '../public/world/community-world.js';
 
 test('group ids read as names and catalogue categories', () => {
   assert.equal(nameOf('furniture/dining-chair#2'), 'Dining chair 2');

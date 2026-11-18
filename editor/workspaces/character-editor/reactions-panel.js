@@ -1,9 +1,9 @@
 // The Character Editor's Reactions section: for each thing that can happen (the technician comes
 // near, a chat, a quest passing or failing, the weather, night), the clip a person plays, for how
 // long, how soon it can play again and whether they turn to the technician; with "Try it" to play
-// it on the stage. The format is in public/character-reactions.js.
-import { CLIPS } from '../../../public/character-clips.js';
-import { TRIGGERS } from '../../../public/character-reactions.js';
+// it on the stage. The format is in public/people/character-reactions.js.
+import { CLIPS } from '../../../public/people/character-clips.js';
+import { TRIGGERS } from '../../../public/people/character-reactions.js';
 import { icon } from '../../ui/icons.js';
 
 const escape = (s) =>

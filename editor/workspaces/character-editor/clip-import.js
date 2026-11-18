@@ -4,7 +4,7 @@
 // the clip. The file reading and export take three's loaders and exporter as arguments, so the
 // rest runs under Node in the tests.
 import * as THREE from '../../../public/vendor/three.module.min.js';
-import { CLIPS, CLIP_NAME } from '../../../public/character-clips.js';
+import { CLIPS, CLIP_NAME } from '../../../public/people/character-clips.js';
 
 export class ClipError extends Error {}
 

@@ -15,10 +15,10 @@ import {
   plan,
   baseOf,
   changes,
-} from '../public/character-wardrobe.js';
-import { Wardrobe, fillGeometry, measureJoints } from '../public/three-wardrobe.js';
-import { settingsFor } from '../public/character-settings.js';
-import { ThreeCharacters } from '../public/three-characters.js';
+} from '../public/people/character-wardrobe.js';
+import { Wardrobe, fillGeometry, measureJoints } from '../public/people/three-wardrobe.js';
+import { settingsFor } from '../public/people/character-settings.js';
+import { ThreeCharacters } from '../public/people/three-characters.js';
 import { CharacterSession } from '../editor/workspaces/character-editor/session.js';
 import { wardrobeSection } from '../editor/workspaces/character-editor/wardrobe-panel.js';
 
@@ -184,7 +184,10 @@ test('people wait for the models they borrow from, and one that fails lends noth
 });
 
 test('the judo class keep their gi; the editor offers the wardrobe and undoes it', async () => {
-  const judo = await readFile(new URL('../public/judo-characters.js', import.meta.url), 'utf8');
+  const judo = await readFile(
+    new URL('../public/people/judo-characters.js', import.meta.url),
+    'utf8',
+  );
   assert.match(judo, /dressed\(JUDO_GI, withoutWardrobe\(/);
   const look = { model: 'Kate', outfit: {} };
   assert.match(wardrobeSection({}, look), /Their own \(shirt\)/);

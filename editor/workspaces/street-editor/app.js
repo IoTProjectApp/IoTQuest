@@ -1,11 +1,11 @@
 // The Street Editor workspace: the plan, its tools, the inspector, running traffic, the 3D preview,
 // choosing which layout to edit, and saving.
-import { locations, locationById, continents } from '../../../public/locations.js';
-import { CommunitySimulation } from '../../../public/community-sim.js';
-import { createRegionalModel } from '../../../public/regions.js';
-import { addCommunityWorld } from '../../../public/community-world.js';
-import { prepareWorldMaterials } from '../../../public/world-materials.js';
-import { LOCKED, lockedRoad, lineLength } from '../../../public/street-network.js';
+import { locations, locationById, continents } from '../../../public/game/locations.js';
+import { CommunitySimulation } from '../../../public/world/community-sim.js';
+import { createRegionalModel } from '../../../public/world/regions.js';
+import { addCommunityWorld } from '../../../public/world/community-world.js';
+import { prepareWorldMaterials } from '../../../public/world/world-materials.js';
+import { LOCKED, lockedRoad, lineLength } from '../../../public/world/street-network.js';
 import { StreetSession } from './session.js';
 import { PlanView, bendHandle } from './plan.js';
 import { icon } from '../../ui/icons.js';

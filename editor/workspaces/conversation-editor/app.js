@@ -5,7 +5,7 @@ import {
   questionsFor,
   chooseRequest,
   sendConversationMessage,
-} from '../../../public/conversations.js';
+} from '../../../public/people/conversations.js';
 import {
   ConversationSession,
   EVERYONE,

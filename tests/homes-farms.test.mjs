@@ -1,15 +1,15 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { locations, adaptMissions, isLocationUnlocked } from '../public/locations.js';
-import { missions } from '../public/missions.js';
-import { homeVariant, VARIANT_OPTIONS } from '../public/home-variants.js';
-import { createRegionalModel } from '../public/regions.js';
-import { victorianFarms } from '../public/farms.js';
-import { updateAnimals } from '../public/animals.js';
-import { resolveMove, toWorld, findFree, collides } from '../public/world-math.js';
-import { houseDesign } from '../public/house-design.js';
-import { updateFarm } from '../public/farm-assets.js';
-import { advanceEnvironment } from '../public/weather.js';
+import { locations, adaptMissions, isLocationUnlocked } from '../public/game/locations.js';
+import { missions } from '../public/quests/missions.js';
+import { homeVariant, VARIANT_OPTIONS } from '../public/world/home-variants.js';
+import { createRegionalModel } from '../public/world/regions.js';
+import { victorianFarms } from '../public/world/farms.js';
+import { updateAnimals } from '../public/world/animals.js';
+import { resolveMove, toWorld, findFree, collides } from '../public/world/world-math.js';
+import { houseDesign } from '../public/world/house-design.js';
+import { updateFarm } from '../public/world/farm-assets.js';
+import { advanceEnvironment } from '../public/game/weather.js';
 
 const signature = (v) =>
   Object.keys(VARIANT_OPTIONS)
@@ -157,7 +157,7 @@ test('mirrored homes draw flipped and keep movement matching the screen', async 
   // On a mirrored home, "left" moves the technician the opposite way in model space.
   const start = { x: 48, y: 77 },
     model = createRegionalModel(mirrored.id),
-    { World3D } = await import('../public/world3d.js');
+    { World3D } = await import('../public/world/world3d.js');
   const left = World3D.prototype.move.call({ model, yaw: 0 }, start, 'left', 3),
     unmirroredLeft = resolveMove(start, 'left', 3, 0, model.colliders);
   assert.ok(toWorld(left)[0] > toWorld(start)[0]);
@@ -246,8 +246,8 @@ test('quest names name their destination, and farms use farm quests', () => {
 });
 
 test('each farm has a signature quest that passes with its worked example at both levels', async () => {
-  const { defaults, program, baseEnv } = await import('../public/missions.js');
-  const { Runtime } = await import('../public/runtime.js');
+  const { defaults, program, baseEnv } = await import('../public/quests/missions.js');
+  const { Runtime } = await import('../public/sim/runtime.js');
   const expected = {
     orchard: 'Hen-House Door at Dusk',
     sheep: 'Fill the Stock Trough',
@@ -362,8 +362,8 @@ test('horses shelter on hot days and misting runs only when the valve is on', ()
 });
 
 test('every farm has an automatic feed and water station quest that passes at both levels', async () => {
-  const { defaults, program, baseEnv } = await import('../public/missions.js');
-  const { Runtime } = await import('../public/runtime.js');
+  const { defaults, program, baseEnv } = await import('../public/quests/missions.js');
+  const { Runtime } = await import('../public/sim/runtime.js');
   for (const farm of victorianFarms) {
     assert.ok(createRegionalModel(farm.id).farm.feedStation, farm.id);
     for (const difficulty of ['beginner', 'advanced']) {

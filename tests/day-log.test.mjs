@@ -1,13 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { missions, defaults, program } from '../public/missions.js';
+import { missions, defaults, program } from '../public/quests/missions.js';
 import {
   simulateDay,
   dayLogQuestions,
   dayLogCSV,
   dayEnvironment,
   DAY_SAMPLE_MINUTES,
-} from '../public/day-log.js';
+} from '../public/sim/day-log.js';
 
 const run = (index, scenario = 'normal', language = 'cpp') => {
   const devices = defaults(missions[index].ids, 'ESP32');

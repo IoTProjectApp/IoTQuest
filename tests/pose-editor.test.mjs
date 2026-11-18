@@ -19,7 +19,7 @@ import {
   checkMade,
   tidyMade,
 } from '../editor/workspaces/character-editor/keyframes.js';
-import { validClip, importedClips } from '../public/character-clips.js';
+import { validClip, importedClips } from '../public/people/character-clips.js';
 import { clipEntry } from '../editor/workspaces/character-editor/clip-import.js';
 
 const turn = (axis, degrees) =>

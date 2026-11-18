@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { Runtime, pythonToC } from '../public/runtime.js';
-import { defaults, baseEnv, missions, program } from '../public/missions.js';
+import { Runtime, pythonToC } from '../public/sim/runtime.js';
+import { defaults, baseEnv, missions, program } from '../public/quests/missions.js';
 import {
   createLabState,
   simulateBatch,
@@ -9,10 +9,10 @@ import {
   circuitSnapshot,
   residentRoutine,
   samplePractice,
-} from '../public/lab.js';
-import { projectFiles, zipFiles } from '../public/project-package.js';
-import { SimulatedBroker } from '../public/mqtt.js';
-import { isLocationUnlocked, locations, adaptMissions } from '../public/locations.js';
+} from '../public/sim/lab.js';
+import { projectFiles, zipFiles } from '../public/game/project-package.js';
+import { SimulatedBroker } from '../public/sim/mqtt.js';
+import { isLocationUnlocked, locations, adaptMissions } from '../public/game/locations.js';
 test('a daily cycle that starts at midnight stays dark rather than falling back to 08:00', () => {
   const lab = createLabState();
   lab.startHour = 0;
@@ -253,8 +253,10 @@ for (const l of locations)
     });
 test('the ADC signal list and scale are defined once, in signals.js', async () => {
   const { readdir, readFile } = await import('node:fs/promises');
-  for (const file of (await readdir('public')).filter((f) => f.endsWith('.js'))) {
-    if (file === 'signals.js') continue;
+  for (const file of (await readdir('public', { recursive: true })).filter(
+    (f) => f.endsWith('.js') && !f.startsWith('vendor/'),
+  )) {
+    if (file === 'sim/signals.js') continue;
     const source = await readFile('public/' + file, 'utf8');
     assert.doesNotMatch(source, /\['light', 'soil', 'tank', 'rain', 'pot', 'pond'\]/, file);
     assert.doesNotMatch(source, /\*\s*40\.95/, file);

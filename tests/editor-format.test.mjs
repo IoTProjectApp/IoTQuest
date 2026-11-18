@@ -1,10 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { formatCode, FormatError } from '../public/code-format.js';
-import { highlight } from '../public/syntax-highlight.js';
-import { tokenize } from '../public/code-tokens.js';
-import { missions, defaults, program } from '../public/missions.js';
-import { Runtime } from '../public/runtime.js';
+import { formatCode, FormatError } from '../public/sim/code-format.js';
+import { highlight } from '../public/sim/syntax-highlight.js';
+import { tokenize } from '../public/sim/code-tokens.js';
+import { missions, defaults, program } from '../public/quests/missions.js';
+import { Runtime } from '../public/sim/runtime.js';
 
 test('tokenizer round-trips source exactly', () => {
   for (const [source, language] of [

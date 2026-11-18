@@ -8,7 +8,7 @@ import {
   worldById,
   worldSummaries,
   worldUrl,
-} from '../public/custom-worlds.js';
+} from '../public/game/custom-worlds.js';
 import {
   buildWorldScene,
   prepareWorldScene,
@@ -182,7 +182,7 @@ test('a hand-set reading reaches the program, and cars drive the road', () => {
     runtime: null,
     readings: { armed: 0 },
   };
-  return import('../public/runtime.js').then(({ Runtime }) => {
+  return import('../public/sim/runtime.js').then(({ Runtime }) => {
     sim.runtime = new Runtime(code, 'cpp', s.iotDevices(), 'ESP32');
     stepWorldSim(sim, w, 0.2);
     assert.ok(!sim.simOutputs[26]);

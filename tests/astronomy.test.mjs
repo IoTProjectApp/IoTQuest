@@ -1,6 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { calculateSky, skyTime, horizonDirection, localSkyDate } from '../public/astronomy.js';
+import {
+  calculateSky,
+  skyTime,
+  horizonDirection,
+  localSkyDate,
+} from '../public/world/astronomy.js';
 
 test('sky clocks use destination time zones, daylight saving and simulated date rollover', () => {
   const inputs = { mode: 'simulated', date: '2026-10-08', startHour: 8, elapsedMs: 1234 };

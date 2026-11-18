@@ -9,7 +9,7 @@ import {
   ROUNDABOUT,
   LANE_OFFSET,
   LANE_SPACING,
-} from '../../../public/street-network.js';
+} from '../../../public/world/street-network.js';
 
 const COLOURS = {
   ground: '#1d2228',

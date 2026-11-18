@@ -7,7 +7,7 @@ import {
   playTargetUrl,
   findPerson,
   besidePerson,
-} from '../public/editor-play.js';
+} from '../public/game/editor-play.js';
 
 const known = { locationIds: ['kyoto', 'brisbane'], questCount: 160 };
 

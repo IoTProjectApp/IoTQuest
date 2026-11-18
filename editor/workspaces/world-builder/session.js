@@ -3,9 +3,9 @@
 // undo/redo for terrain and object edits, multi-select, grouping, locking, hiding, layers,
 // reusable prefabs, favourites, GLB/GLTF import metadata, and Play Mode IoT simulation.
 // Free of the DOM so it can be tested directly under Node.
-import { Runtime } from '../../../public/runtime.js';
-import { defaults, validate } from '../../../public/missions.js';
-import { ADC_SCALE, programReading } from '../../../public/signals.js';
+import { Runtime } from '../../../public/sim/runtime.js';
+import { defaults, validate } from '../../../public/quests/missions.js';
+import { ADC_SCALE, programReading } from '../../../public/sim/signals.js';
 import {
   createTerrain,
   terrainHeightAt,

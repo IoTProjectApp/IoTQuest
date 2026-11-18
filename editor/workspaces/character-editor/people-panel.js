@@ -1,16 +1,16 @@
 // The Character Editor's new people and routines: a "New person" button over the list, a "Who they
 // are" and a "Routine" section under the name at the top of the inspector, and the routine map, drawn over the
 // preview: the city from above, with the stops to click, drag and time, played back as they walk.
-import { CLIPS } from '../../../public/character-clips.js';
-import { locations } from '../../../public/locations.js';
+import { CLIPS } from '../../../public/people/character-clips.js';
+import { locations } from '../../../public/game/locations.js';
 import {
   isOwn,
   routineLegs,
   routinePose,
   MAX_STAY,
   MAX_STOPS,
-} from '../../../public/people-settings.js';
-import { collides } from '../../../public/world-math.js';
+} from '../../../public/people/people-settings.js';
+import { collides } from '../../../public/world/world-math.js';
 import { PeopleSession, cityOf } from './people-session.js';
 import { cityWorld } from './city-world.js';
 import { ownEntry } from './people.js';

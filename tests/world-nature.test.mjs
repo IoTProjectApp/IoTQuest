@@ -1,12 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { buildWorldModel } from '../public/world3d.js';
-import { createRegionalModel } from '../public/regions.js';
-import { addCommunityWorld } from '../public/community-world.js';
-import { locationById } from '../public/locations.js';
-import { applyWorldLayout, editGroups } from '../public/world-layout.js';
-import { updateLandscape } from '../public/landscape.js';
+import { buildWorldModel } from '../public/world/world3d.js';
+import { createRegionalModel } from '../public/world/regions.js';
+import { addCommunityWorld } from '../public/world/community-world.js';
+import { locationById } from '../public/game/locations.js';
+import { applyWorldLayout, editGroups } from '../public/world/world-layout.js';
+import { updateLandscape } from '../public/world/landscape.js';
 import {
   applyNature,
   removeNature,
@@ -16,13 +16,13 @@ import {
   cellKey,
   HEIGHT_CELL,
   PAINT_CELL,
-} from '../public/world-nature.js';
+} from '../public/world/world-nature.js';
 import {
   registerGeometry,
   retireGeometry,
   retiredGeometry,
   geometry,
-} from '../public/world-geometry.js';
+} from '../public/world/world-geometry.js';
 import { WorldSession } from '../editor/workspaces/map-editor/session.js';
 
 // Everything drawn and walked into, for comparing worlds.

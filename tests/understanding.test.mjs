@@ -1,14 +1,14 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { missions, defaults, program, baseEnv } from '../public/missions.js';
-import { locations, adaptMissions } from '../public/locations.js';
-import { Runtime } from '../public/runtime.js';
+import { missions, defaults, program, baseEnv } from '../public/quests/missions.js';
+import { locations, adaptMissions } from '../public/game/locations.js';
+import { Runtime } from '../public/sim/runtime.js';
 import {
   understandingQuestions,
   answerQuestion,
   understandingScore,
   UNDERSTANDING_XP,
-} from '../public/understanding.js';
+} from '../public/quests/understanding.js';
 
 const everyQuest = () => {
   const all = missions.map((m) => [m, 'Willowbrook']);

@@ -6,7 +6,7 @@ import {
   sendConversationMessage,
   conversationQuestions,
   questionsFor,
-} from '../public/conversations.js';
+} from '../public/people/conversations.js';
 import {
   LINES,
   linesFor,
@@ -14,9 +14,9 @@ import {
   checkLines,
   ABOUT_QUESTION,
   CONVERSATION_SETTINGS,
-} from '../public/conversation-settings.js';
-import { missions } from '../public/missions.js';
-import { locationById, adaptMissions } from '../public/locations.js';
+} from '../public/people/conversation-settings.js';
+import { missions } from '../public/quests/missions.js';
+import { locationById, adaptMissions } from '../public/game/locations.js';
 import { ConversationSession, EVERYONE } from '../editor/workspaces/conversation-editor/session.js';
 
 const kyoto = locationById('kyoto');

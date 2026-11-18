@@ -1,8 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { victorianFarms } from '../public/farms.js';
-import { createRegionalModel } from '../public/regions.js';
-import { addCommunityWorld } from '../public/community-world.js';
+import { victorianFarms } from '../public/world/farms.js';
+import { createRegionalModel } from '../public/world/regions.js';
+import { addCommunityWorld } from '../public/world/community-world.js';
 
 // A deadlock anywhere in the network shows up as trips that stop finishing. Runs the real town at
 // rush-hour density, with pedestrians calling walk phases, for 20 simulated minutes. Congestion

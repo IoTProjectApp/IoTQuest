@@ -2,13 +2,13 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { existsSync, readdirSync } from 'node:fs';
-import { createRegionalModel } from '../public/regions.js';
-import { addCommunityWorld } from '../public/community-world.js';
-import { judoCharacters, CAST } from '../public/judo-characters.js';
+import { createRegionalModel } from '../public/world/regions.js';
+import { addCommunityWorld } from '../public/world/community-world.js';
+import { judoCharacters, CAST } from '../public/people/judo-characters.js';
 // The converted clips (imported ones live in their own files).
-import { BUILT_IN_CLIPS as CLIPS } from '../public/character-clips.js';
-import { World3D } from '../public/world3d.js';
-import { baseEnv } from '../public/missions.js';
+import { BUILT_IN_CLIPS as CLIPS } from '../public/people/character-clips.js';
+import { World3D } from '../public/world/world3d.js';
+import { baseEnv } from '../public/quests/missions.js';
 
 // The models come from a private repository (scripts/fetch-models.mjs); without them the tests
 // that read them are skipped.

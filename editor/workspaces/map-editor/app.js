@@ -1,5 +1,5 @@
 // The Map Editor workspace: tools, catalogue, inspector, saving and switching cities.
-import { locations, locationById, continents } from '../../../public/locations.js';
+import { locations, locationById, continents } from '../../../public/game/locations.js';
 import { WorldSession } from './session.js';
 import { Viewport, dimensions } from './viewport.js';
 import { catalogueItems, Thumbnails } from './catalogue.js';
@@ -7,9 +7,9 @@ import { NatureTools, NATURE_TOOLS, isNatureTool } from './nature-tools.js';
 import { CATEGORIES } from './names.js';
 import { lockedInspector } from './locked.js';
 import { WallTool, addedWallsSection, addedWallInspector, bindAddedWall } from './wall-tool.js';
-import { wallLine } from '../../../public/added-walls.js';
+import { wallLine } from '../../../public/world/added-walls.js';
 import { wallName } from './session.js';
-import { scaleOf } from '../../../public/world-layout.js';
+import { scaleOf } from '../../../public/world/world-layout.js';
 import {
   LINES,
   LOCKED_LINES,
@@ -18,7 +18,7 @@ import {
   LINE_NAMES,
   LIMITS,
   segments,
-} from '../../../public/house-shell.js';
+} from '../../../public/world/house-shell.js';
 import { icon } from '../../ui/icons.js';
 
 const shell = window.editorShell;

@@ -1,8 +1,8 @@
-// New walls in the House tool (saved as `walls` in the layout, see public/added-walls.js): drawing
+// New walls in the House tool (saved as `walls` in the layout, see public/world/added-walls.js): drawing
 // one by dragging across the ground, the two end handles that stretch or swing it, and its
 // inspector. The viewport's move arrow slides a whole wall (see attachWallGizmo in viewport.js).
 import * as THREE from '../../../public/vendor/three.module.min.js';
-import { WALL_DEFAULTS, WALL_LIMITS, wallLine } from '../../../public/added-walls.js';
+import { WALL_DEFAULTS, WALL_LIMITS, wallLine } from '../../../public/world/added-walls.js';
 import { wallName } from './session.js';
 
 const GRID = 0.05,

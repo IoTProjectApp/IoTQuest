@@ -7,10 +7,10 @@ import {
   importDevices,
   ImportError,
   PROJECT_FORMAT,
-} from '../public/project-import.js';
-import { projectFiles, zipFiles } from '../public/project-package.js';
-import { missions, defaults, program } from '../public/missions.js';
-import { locations, adaptMissions } from '../public/locations.js';
+} from '../public/game/project-import.js';
+import { projectFiles, zipFiles } from '../public/game/project-package.js';
+import { missions, defaults, program } from '../public/quests/missions.js';
+import { locations, adaptMissions } from '../public/game/locations.js';
 
 const wired = (ids, board) =>
   defaults(ids, board).map((d) => ({

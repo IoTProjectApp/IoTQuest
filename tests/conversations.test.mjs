@@ -7,9 +7,9 @@ import {
   sendConversationMessage,
   nearestCharacter,
   conversationQuestions,
-} from '../public/conversations.js';
-import { missions } from '../public/missions.js';
-import { locations, adaptMissions } from '../public/locations.js';
+} from '../public/people/conversations.js';
+import { missions } from '../public/quests/missions.js';
+import { locations, adaptMissions } from '../public/game/locations.js';
 
 for (const location of locations) {
   for (const level of ['beginner', 'advanced']) {
@@ -129,7 +129,7 @@ test('a resident thanks the technician once for each request passed since the la
 });
 
 test('chat markup escapes names and uses its own bubble classes, not the map sprite ones', async () => {
-  const { conversationHTML } = await import('../public/conversation-view.js');
+  const { conversationHTML } = await import('../public/ui/conversation-view.js');
   const quests = adaptMissions(missions, locations[0], 'beginner');
   const chat = createConversation({ key: 'k', resident: '<Nina>', quests, area: quests[0].area });
   sendConversationMessage(chat, 'What do you want?');

@@ -8,7 +8,7 @@ import {
   IMPORTED_CLIPS,
   importedClips,
   validClip,
-} from '../public/character-clips.js';
+} from '../public/people/character-clips.js';
 import {
   boneName,
   fitClip,

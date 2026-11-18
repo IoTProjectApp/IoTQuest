@@ -1,8 +1,8 @@
 // The parts of the world that stay put (roads, traffic lights, the house's walls and floors, hills
-// and water...; see public/world-detach.js): they can be clicked like anything else, and the
+// and water...; see public/world/world-detach.js): they can be clicked like anything else, and the
 // inspector says why they do not move and where they are changed instead.
-import { LOCKS, movedByTheGame } from '../../../public/world-detach.js';
-import { partBounds } from '../../../public/world-layout.js';
+import { LOCKS, movedByTheGame } from '../../../public/world/world-detach.js';
+import { partBounds } from '../../../public/world/world-layout.js';
 
 // What a click on a locked part selects: that part alone, outlined, with its reason.
 export function lockedTarget(part) {

@@ -1,9 +1,9 @@
 // The connected world in headless Chromium: farms, community buildings, staff and sections (see
 // game-harness.mjs). Run with `npm run test:browser`.
-import { neighbourProfiles } from '../../public/neighbour-profiles.js';
-import { civicLots } from '../../public/community-civic.js';
-import { victorianFarms } from '../../public/farms.js';
-import { missions, defaults, program } from '../../public/missions.js';
+import { neighbourProfiles } from '../../public/people/neighbour-profiles.js';
+import { civicLots } from '../../public/world/community-civic.js';
+import { victorianFarms } from '../../public/world/farms.js';
+import { missions, defaults, program } from '../../public/quests/missions.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {

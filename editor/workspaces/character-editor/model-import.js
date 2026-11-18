@@ -8,7 +8,11 @@
 // The file reading and export take three's loaders and exporter as arguments, so the rest runs
 // under Node in the tests.
 import * as THREE from '../../../public/vendor/three.module.min.js';
-import { BUILT_IN_MODELS, IMPORTED_MODELS, MODEL_NAME } from '../../../public/character-models.js';
+import {
+  BUILT_IN_MODELS,
+  IMPORTED_MODELS,
+  MODEL_NAME,
+} from '../../../public/people/character-models.js';
 
 export class ModelError extends Error {}
 

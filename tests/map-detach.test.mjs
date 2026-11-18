@@ -1,22 +1,22 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createRegionalModel } from '../public/regions.js';
-import { addCommunityWorld } from '../public/community-world.js';
-import { locationById } from '../public/locations.js';
-import { LOCKS, movedByTheGame, tagLooseParts } from '../public/world-detach.js';
+import { createRegionalModel } from '../public/world/regions.js';
+import { addCommunityWorld } from '../public/world/community-world.js';
+import { locationById } from '../public/game/locations.js';
+import { LOCKS, movedByTheGame, tagLooseParts } from '../public/world/world-detach.js';
 import {
   applyAddedWalls,
   checkWalls,
   wallPieces,
   cutOff,
   WALL_DEFAULTS,
-} from '../public/added-walls.js';
+} from '../public/world/added-walls.js';
 import {
   applyWorldLayout,
   editGroups,
   snapshotGroup,
   transformGroup,
-} from '../public/world-layout.js';
+} from '../public/world/world-layout.js';
 import { WorldSession, tidyWall } from '../editor/workspaces/map-editor/session.js';
 
 const CITIES = ['legacy', 'kyoto', 'marrakech', 'brisbane', 'footscray', 'gippsland', 'lamu'];
@@ -230,10 +230,10 @@ test('the Map Editor draws, changes, undoes and saves added walls', () => {
 });
 
 test('the bathroom mirror moves on its own, not with the vanity', async () => {
-  const { createRegionalModel } = await import('../public/regions.js');
-  const { addCommunityWorld } = await import('../public/community-world.js');
-  const { locationById } = await import('../public/locations.js');
-  const { editGroups } = await import('../public/world-layout.js');
+  const { createRegionalModel } = await import('../public/world/regions.js');
+  const { addCommunityWorld } = await import('../public/world/community-world.js');
+  const { locationById } = await import('../public/game/locations.js');
+  const { editGroups } = await import('../public/world/world-layout.js');
   const model = createRegionalModel('legacy');
   addCommunityWorld(model, locationById('legacy'));
   const groups = editGroups(model),

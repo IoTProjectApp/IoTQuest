@@ -1,5 +1,5 @@
 import { createWeatherProxy } from './weather-proxy.mjs';
-import { locations } from '../public/locations.js';
+import { locations } from '../public/game/locations.js';
 import http from 'node:http';
 import { readFile, stat } from 'node:fs/promises';
 import { resolve, extname, sep } from 'node:path';

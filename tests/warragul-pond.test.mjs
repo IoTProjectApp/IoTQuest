@@ -1,9 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createRegionalModel } from '../public/regions.js';
-import { addCommunityWorld } from '../public/community-world.js';
-import { locationById } from '../public/locations.js';
-import { collides } from '../public/world-math.js';
+import { createRegionalModel } from '../public/world/regions.js';
+import { addCommunityWorld } from '../public/world/community-world.js';
+import { locationById } from '../public/game/locations.js';
+import { collides } from '../public/world/world-math.js';
 
 test('Warragul silage bales sit beside the dairy shed, outside the driveway', () => {
   const model = createRegionalModel('gippsland');

@@ -13,8 +13,8 @@ import {
   PAVEMENT_OFFSET,
   ROAD_SIZES,
   ROUNDABOUT,
-} from '../public/street-network.js';
-import { createCommunity, CommunitySimulation, Network } from '../public/community-sim.js';
+} from '../public/world/street-network.js';
+import { createCommunity, CommunitySimulation, Network } from '../public/world/community-sim.js';
 
 const grid = () => defaultStreetLayout();
 const build = (layout, handedness = -1) => {

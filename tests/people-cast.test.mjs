@@ -1,12 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { existsSync, readFileSync } from 'node:fs';
-import { castFor, isWoman, WOMEN, MEN } from '../public/people-cast.js';
-import { createRegionalModel } from '../public/regions.js';
-import { addCommunityWorld } from '../public/community-world.js';
-import { locations } from '../public/locations.js';
-import { World3D } from '../public/world3d.js';
-import { baseEnv } from '../public/missions.js';
+import { castFor, isWoman, WOMEN, MEN } from '../public/people/people-cast.js';
+import { createRegionalModel } from '../public/world/regions.js';
+import { addCommunityWorld } from '../public/world/community-world.js';
+import { locations } from '../public/game/locations.js';
+import { World3D } from '../public/world/world3d.js';
+import { baseEnv } from '../public/quests/missions.js';
 
 test('the household of five is played by five different characters', () => {
   const household = [

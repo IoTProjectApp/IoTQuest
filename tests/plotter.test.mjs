@@ -1,9 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { parsePlotLine, findThresholds, buildLanes, plotCSV } from '../public/plotter.js';
-import { condenseTrace, simulateBatch, createLabState } from '../public/lab.js';
-import { Runtime } from '../public/runtime.js';
-import { missions, defaults, program, baseEnv } from '../public/missions.js';
+import { parsePlotLine, findThresholds, buildLanes, plotCSV } from '../public/sim/plotter.js';
+import { condenseTrace, simulateBatch, createLabState } from '../public/sim/lab.js';
+import { Runtime } from '../public/sim/runtime.js';
+import { missions, defaults, program, baseEnv } from '../public/quests/missions.js';
 
 test('plot lines follow the Arduino Serial Plotter format', () => {
   assert.deepEqual(parsePlotLine('light:1234 temp:22.5'), [

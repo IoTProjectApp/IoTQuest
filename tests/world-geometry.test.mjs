@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { geometry, roundedObject, LOW_DETAIL_SHAPES } from '../public/world-geometry.js';
+import { geometry, roundedObject, LOW_DETAIL_SHAPES } from '../public/world/world-geometry.js';
 
 test('smooth meshes stay within their unit bounds and have valid outward triangles', () => {
   for (const shape of [

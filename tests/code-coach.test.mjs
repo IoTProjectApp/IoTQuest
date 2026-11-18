@@ -1,10 +1,10 @@
 import test from 'node:test';
-import { ADC_SIGNALS } from '../public/signals.js';
+import { ADC_SIGNALS } from '../public/sim/signals.js';
 import assert from 'node:assert/strict';
-import { missions, defaults, program, baseEnv } from '../public/missions.js';
-import { locations, adaptMissions } from '../public/locations.js';
-import { Runtime } from '../public/runtime.js';
-import { coachSteps, describeCondition, suggestedName } from '../public/code-coach.js';
+import { missions, defaults, program, baseEnv } from '../public/quests/missions.js';
+import { locations, adaptMissions } from '../public/game/locations.js';
+import { Runtime } from '../public/sim/runtime.js';
+import { coachSteps, describeCondition, suggestedName } from '../public/sim/code-coach.js';
 
 const everyQuest = () => {
   const all = missions.map((m) => [m, 'Willowbrook']);
@@ -223,7 +223,7 @@ test('conditions are explained in plain English', () => {
 });
 
 test('regressions: install order, extra devices, timing and other ways of writing correct code', async () => {
-  const { understandingQuestions } = await import('../public/understanding.js');
+  const { understandingQuestions } = await import('../public/quests/understanding.js');
   // Smart Greenhouse installed in a different order, plus a device the quest does not use.
   const m = missions[6],
     planned = defaults(m.ids, 'ESP32'),

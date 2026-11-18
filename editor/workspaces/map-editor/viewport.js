@@ -4,18 +4,18 @@
 import * as THREE from '../../../public/vendor/three.module.min.js';
 import { TransformControls } from '/editor/three/TransformControls.js';
 import { OrbitControls } from '/editor/three/OrbitControls.js';
-import { ThreeWorldRenderer } from '../../../public/world-renderer-three.js';
-import { worldSunlight } from '../../../public/world-materials.js';
-import { updateSky } from '../../../public/sky.js';
-import { multiply, perspective, lookAt, screenRay } from '../../../public/world-math.js';
+import { ThreeWorldRenderer } from '../../../public/world/world-renderer-three.js';
+import { worldSunlight } from '../../../public/world/world-materials.js';
+import { updateSky } from '../../../public/world/sky.js';
+import { multiply, perspective, lookAt, screenRay } from '../../../public/world/world-math.js';
 import {
   snapshotGroup,
   transformGroup,
   groupTemplate,
   scaleOf,
   partBounds,
-} from '../../../public/world-layout.js';
-import { LOCKED_LINES } from '../../../public/house-shell.js';
+} from '../../../public/world/world-layout.js';
+import { LOCKED_LINES } from '../../../public/world/house-shell.js';
 import { lockedParts, lockedTarget } from './locked.js';
 
 const FOV = 0.82;

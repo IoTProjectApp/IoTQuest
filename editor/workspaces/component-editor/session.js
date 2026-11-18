@@ -2,10 +2,10 @@
 // (saved in public/data/components.js), breadboard & GPIO pinout previews for ESP32 and
 // Raspberry Pi Pico, live signal-to-ADC waveform calculation, and validation checks.
 // Free of the DOM so it runs under Node in tests.
-import { components as builtinComponents, defaults } from '../../../public/missions.js';
-import { ADC_SIGNALS, ADC_SCALE, programReading } from '../../../public/signals.js';
-import { readingRange } from '../../../public/diagnostics.js';
-import { boardProgram } from '../../../public/hardware.js';
+import { components as builtinComponents, defaults } from '../../../public/quests/missions.js';
+import { ADC_SIGNALS, ADC_SCALE, programReading } from '../../../public/sim/signals.js';
+import { readingRange } from '../../../public/sim/diagnostics.js';
+import { boardProgram } from '../../../public/sim/hardware.js';
 
 export const BOARDS = ['ESP32', 'Raspberry Pi Pico'];
 export const AREAS = [

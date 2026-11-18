@@ -1,12 +1,12 @@
-import { recreationLots } from '../public/community-recreation.js';
-import { neighbourProfiles, migrateNeighbourAreas } from '../public/neighbour-profiles.js';
-import { civicLots } from '../public/community-civic.js';
-import { residentialLots } from '../public/community-residences.js';
-import { communityStations, COMMUNITY_ORIGIN } from '../public/community-world.js';
-import { boundaryScenarios } from '../public/quest-boundaries.js';
-import { World3D } from '../public/world3d.js';
-import { homeVariant } from '../public/home-variants.js';
-import { collides } from '../public/world-math.js';
+import { recreationLots } from '../public/world/community-recreation.js';
+import { neighbourProfiles, migrateNeighbourAreas } from '../public/people/neighbour-profiles.js';
+import { civicLots } from '../public/world/community-civic.js';
+import { residentialLots } from '../public/world/community-residences.js';
+import { communityStations, COMMUNITY_ORIGIN } from '../public/world/community-world.js';
+import { boundaryScenarios } from '../public/quests/quest-boundaries.js';
+import { World3D } from '../public/world/world3d.js';
+import { homeVariant } from '../public/world/home-variants.js';
+import { collides } from '../public/world/world-math.js';
 import {
   createConversation,
   selectedRequest,
@@ -14,47 +14,47 @@ import {
   sendConversationMessage,
   conversationQuestions,
   nearestCharacter,
-} from '../public/conversations.js';
+} from '../public/people/conversations.js';
 import {
   residentsForSections,
   createGreetingTracker,
   isHousehold,
-} from '../public/section-residents.js';
-import { HOME_AREAS } from '../public/home-areas.js';
-import { toWorld, fromWorld } from '../public/world-math.js';
-import { visitRequest, visitEntry, stepToward } from '../public/household-visits.js';
-import { ADC_SIGNALS, ADC_SCALE, outputLevel } from '../public/signals.js';
-import { checkPredictions } from '../public/weather-quests.js';
-import { neededNow, situationReason } from '../public/situation.js';
-import { conversationHTML } from '../public/conversation-view.js';
-import { readPlayTarget, findPerson, besidePerson } from '../public/editor-play.js';
-import { WORLDS, worldSummaries, worldUrl } from '../public/custom-worlds.js';
-import { predictionHTML } from '../public/prediction-view.js';
-import { declutterLabels } from '../public/world-labels.js';
-import { attachAssist } from '../public/editor-assist.js';
-import { simulateDay, dayLogQuestions, dayLogCSV } from '../public/day-log.js';
-import { dayLogHTML } from '../public/day-log-view.js';
-import { securityCases, dashboardQuests } from '../public/challenges.js';
-import { dashboardHTML, dashboardLiveHTML } from '../public/dashboard-view.js';
+} from '../public/people/section-residents.js';
+import { HOME_AREAS } from '../public/world/home-areas.js';
+import { toWorld, fromWorld } from '../public/world/world-math.js';
+import { visitRequest, visitEntry, stepToward } from '../public/people/household-visits.js';
+import { ADC_SIGNALS, ADC_SCALE, outputLevel } from '../public/sim/signals.js';
+import { checkPredictions } from '../public/quests/weather-quests.js';
+import { neededNow, situationReason } from '../public/quests/situation.js';
+import { conversationHTML } from '../public/ui/conversation-view.js';
+import { readPlayTarget, findPerson, besidePerson } from '../public/game/editor-play.js';
+import { WORLDS, worldSummaries, worldUrl } from '../public/game/custom-worlds.js';
+import { predictionHTML } from '../public/ui/prediction-view.js';
+import { declutterLabels } from '../public/world/world-labels.js';
+import { attachAssist } from '../public/sim/editor-assist.js';
+import { simulateDay, dayLogQuestions, dayLogCSV } from '../public/sim/day-log.js';
+import { dayLogHTML } from '../public/ui/day-log-view.js';
+import { securityCases, dashboardQuests } from '../public/quests/challenges.js';
+import { dashboardHTML, dashboardLiveHTML } from '../public/ui/dashboard-view.js';
 import {
   parseQuestFile,
   loadCustomQuests,
   customChallenge,
   QuestError,
   QUEST_LIMITS,
-} from '../public/custom-quests.js';
-import { BoardLink, readingsToEnv, outputLine, boardProgram } from '../public/hardware.js';
-import { boardPanelHTML } from '../public/board-view.js';
-import { catalogueEnvMeta, catalogueToggles } from '../public/catalogue-devices.js';
-import { timelineResults } from '../public/quest-timeline.js';
-import { expeditionResults } from '../public/expedition.js';
+} from '../public/quests/custom-quests.js';
+import { BoardLink, readingsToEnv, outputLine, boardProgram } from '../public/sim/hardware.js';
+import { boardPanelHTML } from '../public/ui/board-view.js';
+import { catalogueEnvMeta, catalogueToggles } from '../public/quests/catalogue-devices.js';
+import { timelineResults } from '../public/quests/quest-timeline.js';
+import { expeditionResults } from '../public/quests/expedition.js';
 import test from 'node:test';
-import { localSkyDate, DEFAULT_OBSERVER } from '../public/astronomy.js';
+import { localSkyDate, DEFAULT_OBSERVER } from '../public/world/astronomy.js';
 import assert from 'node:assert/strict';
 import vm from 'node:vm';
 import { readFile, access } from 'node:fs/promises';
 import { execFileSync } from 'node:child_process';
-import { Runtime } from '../public/runtime.js';
+import { Runtime } from '../public/sim/runtime.js';
 import {
   components,
   missions,
@@ -63,19 +63,19 @@ import {
   validate,
   program,
   missionBudget,
-} from '../public/missions.js';
+} from '../public/quests/missions.js';
 import {
   locations,
   locationById,
   adaptMissions,
   progressForLocation,
-} from '../public/locations.js';
+} from '../public/game/locations.js';
 import {
   WeatherService,
   advanceEnvironment,
   fallbackWeather,
   servoLevel,
-} from '../public/weather.js';
+} from '../public/game/weather.js';
 import {
   createLabState,
   simulateBatch,
@@ -83,38 +83,38 @@ import {
   updateResources,
   faultCases,
   scenarios,
-} from '../public/lab.js';
+} from '../public/sim/lab.js';
 import {
   renderLabPanel,
   updateCircuit,
   updateResourcesPanel,
   scenarioOptions,
-} from '../public/lab-panels.js';
-import { projectFiles, zipFiles } from '../public/project-package.js';
-import { isLocationUnlocked, completedQuestCount } from '../public/locations.js';
-import { advancedMenu } from '../public/advanced-tools.js';
-import { weatherHTML } from '../public/travel.js';
-import { esc, setHTML } from '../public/html.js';
-import { sanitizeSaved, sanitizeEvidence } from '../public/persistence.js';
-import { highlight } from '../public/syntax-highlight.js';
-import { SerialPlotter, findThresholds, PLOT_LIMIT } from '../public/plotter.js';
-import { diagnose } from '../public/diagnostics.js';
-import { createBugHunt, scoreBugHunt } from '../public/bug-hunt.js';
-import { explainCode, removeExplanations, hasExplanations } from '../public/code-explain.js';
+} from '../public/sim/lab-panels.js';
+import { projectFiles, zipFiles } from '../public/game/project-package.js';
+import { isLocationUnlocked, completedQuestCount } from '../public/game/locations.js';
+import { advancedMenu } from '../public/sim/advanced-tools.js';
+import { weatherHTML } from '../public/ui/travel.js';
+import { esc, setHTML } from '../public/game/html.js';
+import { sanitizeSaved, sanitizeEvidence } from '../public/game/persistence.js';
+import { highlight } from '../public/sim/syntax-highlight.js';
+import { SerialPlotter, findThresholds, PLOT_LIMIT } from '../public/sim/plotter.js';
+import { diagnose } from '../public/sim/diagnostics.js';
+import { createBugHunt, scoreBugHunt } from '../public/quests/bug-hunt.js';
+import { explainCode, removeExplanations, hasExplanations } from '../public/sim/code-explain.js';
 import {
   readProject,
   ImportError,
   IMPORT_LIMITS,
   PROJECT_FORMAT,
-} from '../public/project-import.js';
-import { formatCode as formatSource, FormatError, INDENT } from '../public/code-format.js';
-import { coachSteps, readingText } from '../public/code-coach.js';
-import { buildProgressReport, progressFileName } from '../public/progress-report.js';
+} from '../public/game/project-import.js';
+import { formatCode as formatSource, FormatError, INDENT } from '../public/sim/code-format.js';
+import { coachSteps, readingText } from '../public/sim/code-coach.js';
+import { buildProgressReport, progressFileName } from '../public/game/progress-report.js';
 import {
   understandingQuestions,
   answerQuestion,
   understandingScore,
-} from '../public/understanding.js';
+} from '../public/quests/understanding.js';
 const html = await readFile('public/game.html', 'utf8'),
   source = await readFile('public/game.js', 'utf8');
 class Element {
@@ -512,23 +512,23 @@ test('all referenced local assets exist and module scripts parse', async () => {
     'game.css',
     'game.js',
     'world.png',
-    'sim-worker.js',
-    'runtime.js',
-    'missions.js',
+    'sim/sim-worker.js',
+    'sim/runtime.js',
+    'quests/missions.js',
     'favicon.svg',
-    'world3d.js',
-    'world-model.js',
-    'world-math.js',
+    'world/world3d.js',
+    'world/world-model.js',
+    'world/world-math.js',
   ])
     await access('public/' + path);
   for (const path of [
     'game.js',
-    'sim-worker.js',
-    'runtime.js',
-    'missions.js',
-    'world3d.js',
-    'world-model.js',
-    'world-math.js',
+    'sim/sim-worker.js',
+    'sim/runtime.js',
+    'quests/missions.js',
+    'world/world3d.js',
+    'world/world-model.js',
+    'world/world-math.js',
   ])
     execFileSync(process.execPath, ['--check', 'public/' + path]);
   assert.ok(html.includes('aria-label="Student') === false);
@@ -911,7 +911,7 @@ test('the dashboard shows the running program’s messages and its switch contro
 });
 test('a student imports a teacher quest, writes it with the Guide and passes its tests', async () => {
   const h = harness();
-  const { buildCustomQuest, questFile } = await import('../public/custom-quests.js');
+  const { buildCustomQuest, questFile } = await import('../public/quests/custom-quests.js');
   const quest = buildCustomQuest({
     title: 'Frost guard',
     sensor: 'temp',
@@ -1749,7 +1749,9 @@ test('a rejected import explains why and leaves the project untouched', async ()
 
 test('pages load every asset by relative path so the site works under a sub-path', async () => {
   const { readdir } = await import('node:fs/promises');
-  for (const file of (await readdir('public')).filter((f) => /\.(html|js|css)$/.test(f))) {
+  for (const file of (await readdir('public', { recursive: true })).filter(
+    (f) => /\.(html|js|css)$/.test(f) && !f.startsWith('vendor/'),
+  )) {
     const text = await readFile('public/' + file, 'utf8');
     assert.doesNotMatch(
       text,
@@ -2637,7 +2639,7 @@ test('Spot the bugs opens only for a quest passed with the student’s own code'
   assert.equal(s.api.getActiveFault().kind, 'hunt');
 });
 test('a hunt during a teacher quest has its own slot and reward, and does not break the quest’s', async () => {
-  const { buildCustomQuest, questFile } = await import('../public/custom-quests.js');
+  const { buildCustomQuest, questFile } = await import('../public/quests/custom-quests.js');
   const h = harness();
   solveQuest(h, 0);
   const quest = buildCustomQuest({

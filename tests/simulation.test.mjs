@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { Runtime, pythonToC } from '../public/runtime.js';
-import { missions, defaults, validate, program, baseEnv } from '../public/missions.js';
+import { Runtime, pythonToC } from '../public/sim/runtime.js';
+import { missions, defaults, validate, program, baseEnv } from '../public/quests/missions.js';
 for (const board of ['ESP32', 'Raspberry Pi Pico'])
   for (const language of ['cpp', 'python'])
     for (const [index, mission] of missions.entries()) {

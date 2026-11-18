@@ -1,11 +1,11 @@
 // A World Builder world (editor/workspaces/world-builder, saved in data/worlds.js): its devices and
 // program, the IoT simulation that plays it, and the 3D scene it draws. Shared by the World
 // Builder's Play Mode and the game, which plays saved worlds (world.html). Free of the DOM.
-import { program, validate } from '../missions.js';
-import { Runtime } from '../runtime.js';
-import { baseEnv, ADC_SIGNALS } from '../signals.js';
-import { prepareWorldMaterials } from '../world-materials.js';
-import { addSky } from '../sky.js';
+import { program, validate } from '../quests/missions.js';
+import { Runtime } from '../sim/runtime.js';
+import { baseEnv, ADC_SIGNALS } from '../sim/signals.js';
+import { prepareWorldMaterials } from '../world/world-materials.js';
+import { addSky } from '../world/sky.js';
 import { createTerrain, terrainHeightAt, buildTerrainMeshes } from './terrain.js';
 import {
   getComponentSpec,

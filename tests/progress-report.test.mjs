@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { missions, defaults, program } from '../public/missions.js';
+import { missions, defaults, program } from '../public/quests/missions.js';
 import {
   buildProgressReport,
   parseProgressReport,
@@ -13,7 +13,7 @@ import {
   progressFileName,
   ProgressError,
   PROGRESS_LIMITS,
-} from '../public/progress-report.js';
+} from '../public/game/progress-report.js';
 import { cellSummary } from '../public/teacher.js';
 
 const devices = (i) => defaults(missions[i].ids, 'ESP32');

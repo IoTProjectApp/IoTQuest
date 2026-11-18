@@ -1,5 +1,5 @@
 // Readable names, catalogue categories and cautions for the world's edit groups. Group ids come
-// from the world's builders (see public/world-layout.js): 'furniture/sofa#1', 'house/window#2',
+// from the world's builders (see public/world/world-layout.js): 'furniture/sofa#1', 'house/window#2',
 // 'garden/tree#4',
 // 'town/shop', 'town/furniture/office:desk0', 'town/street-light#12', 'landscape/lake', 'added/3'.
 

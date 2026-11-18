@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { outfitFor, TECHNICIAN_OUTFIT, JUDO_GI } from '../public/character-outfits.js';
+import { outfitFor, TECHNICIAN_OUTFIT, JUDO_GI } from '../public/people/character-outfits.js';
 
 const COLOUR = /^#[0-9a-f]{6}$/;
 

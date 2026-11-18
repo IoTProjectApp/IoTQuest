@@ -1,9 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createRegionalModel } from '../public/regions.js';
-import { addCommunityWorld } from '../public/community-world.js';
-import { victorianFarms } from '../public/farms.js';
-import { overlaps } from '../public/community-sim.js';
+import { createRegionalModel } from '../public/world/regions.js';
+import { addCommunityWorld } from '../public/world/community-world.js';
+import { victorianFarms } from '../public/world/farms.js';
+import { overlaps } from '../public/world/community-sim.js';
 
 test('farm cars have a clear route through their private gate to the car park and main street', () => {
   for (const farm of victorianFarms) {

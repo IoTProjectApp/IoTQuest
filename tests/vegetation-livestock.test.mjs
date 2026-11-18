@@ -1,10 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createWorldModel } from '../public/world-model.js';
-import { buildCrop, buildTree } from '../public/vegetation.js';
-import { addAnimal, updateAnimals, setGoal } from '../public/animals.js';
-import { createRegionalModel } from '../public/regions.js';
-import { locations } from '../public/locations.js';
+import { createWorldModel } from '../public/world/world-model.js';
+import { buildCrop, buildTree } from '../public/world/vegetation.js';
+import { addAnimal, updateAnimals, setGoal } from '../public/world/animals.js';
+import { createRegionalModel } from '../public/world/regions.js';
+import { locations } from '../public/game/locations.js';
 
 test('crops have curved leaves and connected fruit clusters, with all parts available for raised beds', () => {
   const model = createWorldModel(),

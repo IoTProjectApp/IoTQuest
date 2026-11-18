@@ -2,12 +2,12 @@
 // name, a group for the list, and the model and outfit they have when nothing is set. Found the way
 // the game finds them, by building the world and reading one frame's characters with every
 // Character Editor setting set aside.
-import { World3D } from '../../../public/world3d.js';
-import { CHARACTER_SETTINGS } from '../../../public/character-settings.js';
-import { isHousehold } from '../../../public/section-residents.js';
-import { WOMEN, castFor } from '../../../public/people-cast.js';
-import { outfitFor } from '../../../public/character-outfits.js';
-import { isOwn } from '../../../public/people-settings.js';
+import { World3D } from '../../../public/world/world3d.js';
+import { CHARACTER_SETTINGS } from '../../../public/people/character-settings.js';
+import { isHousehold } from '../../../public/people/section-residents.js';
+import { WOMEN, castFor } from '../../../public/people/people-cast.js';
+import { outfitFor } from '../../../public/people/character-outfits.js';
+import { isOwn } from '../../../public/people/people-settings.js';
 
 // Clips that are walking or standing rather than an activity of their own.
 const EVERYDAY = new Set(['Idle', 'Talking', 'Walking', 'FemaleWalk', 'Jogging']);
@@ -132,7 +132,7 @@ export function findPeople(locationId = 'legacy') {
   const order = Object.fromEntries(GROUPS.map((g, i) => [g.id, i]));
   return people.sort((a, b) => order[a.group] - order[b.group] || a.name.localeCompare(b.name));
 }
-// Someone added in the Character Editor (see public/people-settings.js), as the list shows them:
+// Someone added in the Character Editor (see public/people/people-settings.js), as the list shows them:
 // played and dressed as the game would cast a person of that id and name.
 export function ownEntry(person) {
   const model = castFor(person.id, person.name);

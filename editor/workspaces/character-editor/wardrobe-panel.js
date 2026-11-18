@@ -1,6 +1,6 @@
 // The Character Editor's "Their own clothes" section: take a person's own top or bottom off, or
 // dress them in another model's, swap their shoes, and choose the plain base layer that goes on
-// where clothes come off (the `wardrobe` in their outfit, see public/character-wardrobe.js).
+// where clothes come off (the `wardrobe` in their outfit, see public/people/character-wardrobe.js).
 import {
   BASE,
   SLEEVES,
@@ -11,7 +11,7 @@ import {
   describe,
   donorsFor,
   MODEL_PIECES,
-} from '../../../public/character-wardrobe.js';
+} from '../../../public/people/character-wardrobe.js';
 import { icon } from '../../ui/icons.js';
 
 const escape = (s) =>

@@ -1,15 +1,15 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
-import { missions } from '../public/missions.js';
-import { locations, locationById, adaptMissions } from '../public/locations.js';
+import { missions } from '../public/quests/missions.js';
+import { locations, locationById, adaptMissions } from '../public/game/locations.js';
 import {
   CITY_SETTINGS,
   ORIGINAL_NAMES,
   applyCityNames,
   openRequest,
-} from '../public/city-settings.js';
-import { createConversation } from '../public/conversations.js';
+} from '../public/game/city-settings.js';
+import { createConversation } from '../public/people/conversations.js';
 import { CitySession } from '../editor/workspaces/city-editor/session.js';
 import { ConversationSession } from '../editor/workspaces/conversation-editor/session.js';
 

@@ -5,9 +5,9 @@ import {
   surfaceForMesh,
   worldSunlight,
   prepareWorldMaterials,
-} from '../public/world-materials.js';
-import { createRegionalModel } from '../public/regions.js';
-import { addCommunityWorld } from '../public/community-world.js';
+} from '../public/world/world-materials.js';
+import { createRegionalModel } from '../public/world/regions.js';
+import { addCommunityWorld } from '../public/world/community-world.js';
 
 test('world surfaces recognize explicit finishes, thick grass ground, water and terrain', () => {
   const mesh = (extra = {}) => ({

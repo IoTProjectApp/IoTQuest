@@ -1,19 +1,19 @@
 // The Conversation Editor's model: everyone's lines (saved in public/data/conversations.js, the
-// format is in public/conversation-settings.js), what each resident asks for (their quests'
+// format is in public/people/conversation-settings.js), what each resident asks for (their quests'
 // quotes, saved with the Quest Editor's changes in public/data/quests.js), undo history, the
 // check, and the chat as the game would play it. Free of the DOM so it runs under Node in the tests.
-import { missions } from '../../../public/missions.js';
-import { locations, locationById, adaptMissions } from '../../../public/locations.js';
-import { createConversation, chooseRequest } from '../../../public/conversations.js';
+import { missions } from '../../../public/quests/missions.js';
+import { locations, locationById, adaptMissions } from '../../../public/game/locations.js';
+import { createConversation, chooseRequest } from '../../../public/people/conversations.js';
 import {
   LINES,
   PLACEHOLDERS,
   MAX_LENGTH,
   checkLines,
   linesFor,
-} from '../../../public/conversation-settings.js';
+} from '../../../public/people/conversation-settings.js';
 import { QuestSession, builtInQuests } from '../quest-editor/session.js';
-import { PEOPLE_SETTINGS } from '../../../public/people-settings.js';
+import { PEOPLE_SETTINGS } from '../../../public/people/people-settings.js';
 
 export { LINES, PLACEHOLDERS, MAX_LENGTH, locations };
 // Where the lines for everyone are kept, among the people.

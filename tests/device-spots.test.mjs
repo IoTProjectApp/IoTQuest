@@ -1,10 +1,10 @@
-import { addCommunityWorld } from '../public/community-world.js';
+import { addCommunityWorld } from '../public/world/community-world.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createRegionalModel } from '../public/regions.js';
-import { locations } from '../public/locations.js';
-import { missions, components } from '../public/missions.js';
-import { HOME_AREAS } from '../public/home-areas.js';
+import { createRegionalModel } from '../public/world/regions.js';
+import { locations } from '../public/game/locations.js';
+import { missions, components } from '../public/quests/missions.js';
+import { HOME_AREAS } from '../public/world/home-areas.js';
 import {
   deviceSpots,
   toWorld,
@@ -13,7 +13,7 @@ import {
   findFree,
   roomHalf,
   DEVICE_GAP,
-} from '../public/world-math.js';
+} from '../public/world/world-math.js';
 
 const base = HOME_AREAS;
 const homes = ['legacy', ...locations.map((l) => l.id)].map((id) => {

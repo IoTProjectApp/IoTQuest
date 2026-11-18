@@ -1,4 +1,4 @@
-// Hand-set looks and movement (public/character-settings.js) and the game applying them.
+// Hand-set looks and movement (public/people/character-settings.js) and the game applying them.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { existsSync } from 'node:fs';
@@ -7,8 +7,8 @@ import {
   dressed,
   knownClip,
   CHARACTER_SETTINGS,
-} from '../public/character-settings.js';
-import { World3D } from '../public/world3d.js';
+} from '../public/people/character-settings.js';
+import { World3D } from '../public/world/world3d.js';
 
 test('a person’s own settings come before the defaults, and both before the code', () => {
   const settings = {

@@ -13,6 +13,7 @@ export const openPages = [];
 export function startGame() {
   before(async () => {
     server = spawn(process.execPath, ['scripts/serve.mjs', '0'], {
+      env: { ...process.env, WEATHER: 'offline' },
       stdio: ['ignore', 'pipe', 'inherit'],
     });
     origin = await new Promise((resolve, reject) => {
@@ -99,6 +100,12 @@ export async function settle(page) {
     if (now && now === last) return;
     last = now;
   }
+}
+// Enters the destination chosen on the globe. The panel is redrawn when its weather arrives, which
+// would replace the Enter button mid-click, so wait for the weather first.
+export async function enterDestination(page) {
+  await page.locator('#destinationWeatherRetry:not([disabled])').waitFor();
+  await page.locator('#enterLocation').click();
 }
 export const modalOpen = (page) => page.evaluate(() => document.getElementById('modal').open);
 

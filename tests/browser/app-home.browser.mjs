@@ -254,7 +254,7 @@ test('the system reduced-motion setting is honoured', async () => {
 test('the built game installs for offline use and still opens with no network', async () => {
   execFileSync(process.execPath, ['scripts/build.mjs']);
   const built = spawn(process.execPath, ['scripts/serve.mjs', '0'], {
-    env: { ...process.env, ROOT: 'dist/client' },
+    env: { ...process.env, ROOT: 'dist/client', WEATHER: 'offline' },
     stdio: ['ignore', 'pipe', 'inherit'],
   });
   const url = await new Promise((resolve) =>

@@ -15,7 +15,7 @@
     "format": "npx --yes prettier@3 --write .",
     "check": "npx --yes prettier@3 --check .",
     "prepare": "git config core.hooksPath .githooks || true",
-    "test:browser": "node --test \"tests/browser/*.browser.mjs\""
+    "test:browser": "node scripts/run-browser-tests.mjs tests/browser/*.browser.mjs"
   },
   "devDependencies": {
     "meshoptimizer": "1.2.0",

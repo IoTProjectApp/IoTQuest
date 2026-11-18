@@ -3,7 +3,7 @@
 // a tree, a lantern. The world editor (editor/, launched with scripts/world-editor.sh) saves what a
 // person moved, removed or added to data/world-layout.js, per destination:
 //   { version: 1, locations: { [locationId]: {
-//       edits: { [groupId]: { pos: [x, y, z], turn, scale } | { removed: true } },
+//       edits: { [groupId]: { pos: [x, y, z], turn, scale, from: [x, z] } | { removed: true, from } },
 //       added: [{ id, name, pos: [x, y, z], turn, scale, parts: [...], colliders: [...] }],
 //       house: { lines, walls, rooms },
 //       walls: [{ id, from: [x, z], to: [x, z], height, thickness, color, openings }],
@@ -14,6 +14,11 @@
 // objects carry their own parts, measured from a base centre at the origin. `house` changes the
 // walls and rooms themselves (see house-shell.js), `walls` are new walls, indoors or out (see
 // added-walls.js), and `nature` the hills, ground, grass, trees and water (see world-nature.js).
+// `from` is where the group's base centre stood as built when the edit was saved. Groups are named
+// by kind and count ("furniture/cabinet#2"), so if the world's code later builds one more cabinet
+// earlier on, that name can belong to a different cabinet: an edit whose group is no longer near its
+// `from` is left out with a warning (which tests/world-layout.test.mjs turns into a failure), rather
+// than moving the wrong thing.
 // An empty layout leaves the world exactly as built.
 import WORLD_LAYOUT from './data/world-layout.js';
 import { applyHouseShell } from './house-shell.js';
@@ -203,6 +208,9 @@ export function addPlaced(model, entry) {
 }
 // Applies a destination's saved changes to a freshly built model. Changes to groups the code no
 // longer builds are listed in model.layoutWarnings rather than failing.
+// How far a group may now be built from its saved `from` and still be taken as the same one.
+export const FROM_TOLERANCE = 1;
+const moved = ([x, , z], [fx, fz]) => Math.hypot(x - fx, z - fz) > FROM_TOLERANCE;
 export function applyWorldLayout(model, locationId, layout = WORLD_LAYOUT) {
   const changes = layout?.locations?.[locationId || 'legacy'];
   model.layoutWarnings = [];
@@ -219,8 +227,15 @@ export function applyWorldLayout(model, locationId, layout = WORLD_LAYOUT) {
       model.layoutWarnings.push(`${locationId}: no "${id}" to ${edit.removed ? 'remove' : 'move'}`);
       continue;
     }
+    const snapshot = snapshotGroup(group);
+    if (edit.from && moved(snapshot.pivot, edit.from)) {
+      model.layoutWarnings.push(
+        `${locationId}: "${id}" is now a different one (built at ${snapshot.pivot[0].toFixed(2)}, ${snapshot.pivot[2].toFixed(2)}, saved from ${edit.from.join(', ')}); open the city in the Map Editor and place it again`,
+      );
+      continue;
+    }
     if (edit.removed) removeParts(model, group.parts, group.colliders);
-    else transformGroup(group, snapshotGroup(group), edit);
+    else transformGroup(group, snapshot, edit);
   }
   for (const entry of changes.added || []) addPlaced(model, entry);
   // Nature last: hills give way around everything as it now stands.

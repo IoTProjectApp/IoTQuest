@@ -51,6 +51,16 @@ Each workspace:
 
 So a workspace imports the game's code with ordinary relative paths (`../../../public/regions.js`), and the same imports work in Node tests. Nothing is cached, so a reload always shows the files as they are on disk. Editor pages may run only their own scripts (a Content Security Policy is set).
 
+### Publish saved changes
+
+**File → Publish saved changes…** sends what the workspaces saved in `public/data/` for review, without the terminal (`editor/publish.mjs`). It asks first, listing the files, then:
+
+1. starts a branch named `editor/publish-…` if the repository is on `main` or `dev` (it never commits to those);
+2. runs the unit tests that read the changed files (`scripts/affected-tests.mjs`) and stops if any fails;
+3. commits only those files, pushes the branch and opens a pull request into `dev` (or adds to the branch's open one), and offers to open it.
+
+It needs the GitHub CLI (`gh`) signed in. Nothing goes live from the editor: the pull request is merged into `dev`, then `dev` into `main`, on GitHub. Pull requests that change only `public/data/` get CI's quick check (a few minutes, no browser tests).
+
 ### Play from here
 
 **Play-test** (`⌘P`) in any workspace saves first if it needs to, then opens the game in a new window straight at what you are editing:
@@ -195,9 +205,9 @@ export default {
   "locations": {
     "kyoto": {
       "edits": {
-        "furniture/sofa#1": {"pos": [-9.07, 0.23, -3.5], "turn": 1.5708, "scale": 1},
-        "furniture/dining-table#1": {"pos": [-5.98, 0.23, -2.5], "turn": 0, "scale": [1.145, 1, 1]},
-        "furniture/car#1": {"removed": true}
+        "furniture/sofa#1": {"pos": [-9.07, 0.23, -3.5], "turn": 1.5708, "scale": 1, "from": [-10.2, -3.5]},
+        "furniture/dining-table#1": {"pos": [-5.98, 0.23, -2.5], "turn": 0, "scale": [1.145, 1, 1], "from": [-6.1, -2.5]},
+        "furniture/car#1": {"removed": true, "from": [4.5, 6]}
       },
       "added": [
         {"id": "added/1", "name": "Tree", "kind": "garden/tree", "pos": [5, 0, 8], "turn": 0, "scale": 1, "parts": [...], "colliders": [...]}
@@ -232,6 +242,7 @@ export default {
 - `pos` is where the object's base centre goes: the middle of its footprint, at its lowest point, in metres. y is up.
 - `turn` is a turn about the vertical axis, in radians.
 - `scale` is the object's size: one factor (`1.25`) when it is resized evenly, or three (`[1.2, 1, 0.8]`) when it is stretched, for its width, height and depth along its own sides before it is turned.
+- `from` is where the object's base centre stood as built (`[x, z]`), recorded when the edit is saved. Objects are named by kind and count, so if the world's code later builds one more of a kind earlier on, a name can pass to a different object. The game then leaves the edit out (rather than moving the wrong object) when the object is now more than 1 m from `from`, and lists it in `model.layoutWarnings`; `tests/world-layout.test.mjs` fails on any such warning. Open the city in the Map Editor and place the object again.
 - Added objects carry their own parts, measured from their base centre, so they do not depend on the object they were copied from.
 - `nature` holds the hand-made land (`public/world-nature.js` describes it): hill heights on a 2 m grid (`"i,j"` is x = 2i, z = 2j, in metres up), painted ground and long grass and flowers on a half-metre grid (`"i,j"` is x = i / 2, z = j / 2, with a weight from 0.05 to 1; the edge is where it crosses one half), the long grass's height, colour and thickness, planted trees (`[kind, x, z, size]`), and water: a pond's outline, a stream's course and width, or a pool's two opposite corners, each with an optional `level` and `walk`. Nature is applied last, so hills give way around everything as it then stands. Something the game cannot take (an unknown tree kind, say) is left out and listed in `model.layoutWarnings`.
 - `house` holds changes to the house itself (`public/house-shell.js` describes them): where inner wall lines stand (`lines`, in metres on x or z), each wall's `height`, `color` and `openings` (doorways, by their middle and width), and each room floor's `color`. Only what differs is kept. The house is changed before objects are placed, so furniture stands where it was saved. If the house changes have a problem in a city (its code changed, say), the game leaves all of them out and lists why in `model.layoutWarnings`.

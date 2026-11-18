@@ -42,6 +42,39 @@ test('the saved layout only names groups the worlds still build', () => {
   }
 });
 
+// A group's name is its kind and count, so code that builds one more of a kind earlier on hands an
+// existing name to a different object. Each edit saves where its group stood (`from`): this fails
+// when a saved edit now names a different object, instead of the game quietly moving the wrong one.
+test('every saved edit still names the object it was made on', () => {
+  for (const [id, changes] of Object.entries(WORLD_LAYOUT.locations)) {
+    for (const [groupId, edit] of Object.entries(changes.edits || {}))
+      assert.ok(Array.isArray(edit.from), `${id}: ${groupId} records where it was built`);
+    const model = applyWorldLayout(build(id), id);
+    assert.deepEqual(model.layoutWarnings, [], id);
+  }
+});
+
+test('an edit whose name now belongs to a different object is left out with a warning', () => {
+  const sofa = (model) => editGroups(model).get('furniture/sofa#1');
+  const [x, , z] = snapshotGroup(sofa(build('legacy'))).pivot;
+  const layout = (from) => ({
+    version: 1,
+    locations: { legacy: { edits: { 'furniture/sofa#1': { pos: [0, 0, 0], from } }, added: [] } },
+  });
+  // Saved from where it stands: applied.
+  let model = applyWorldLayout(build('legacy'), 'legacy', layout([x + 0.5, z]));
+  assert.deepEqual(model.layoutWarnings, []);
+  near(snapshotGroup(sofa(model)).pivot, [0, 0, 0], 'moved');
+  // Saved from somewhere else: left as built.
+  model = applyWorldLayout(build('legacy'), 'legacy', layout([x + 3, z]));
+  assert.match(model.layoutWarnings[0], /furniture\/sofa#1" is now a different one/);
+  near(
+    snapshotGroup(sofa(model)).pivot,
+    [x, snapshotGroup(sofa(build('legacy'))).pivot[1], z],
+    'kept',
+  );
+});
+
 test('every destination tags its furniture, garden and town as edit groups', () => {
   for (const { id } of [{ id: 'legacy' }, ...locations]) {
     const groups = editGroups(build(id));

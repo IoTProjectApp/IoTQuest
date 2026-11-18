@@ -9,6 +9,8 @@ import { basename, extname, join, normalize, sep } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { playTargetUrl } from '../public/editor-play.js';
 import { storeText } from './store-format.mjs';
+import { publishPlan, publish } from './publish.mjs';
+import { execFile } from 'node:child_process';
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
 const PUBLIC = join(ROOT, 'public');
@@ -261,6 +263,67 @@ function openGame(target = null) {
   });
   game.loadURL(playTargetUrl(base + '/public/game.html', target));
 }
+// File → Publish saved changes (see publish.mjs): commits the saved data, tests it, pushes and opens
+// a pull request into dev, asking first and reporting each problem in a dialog.
+const run = (command, args) =>
+  new Promise((resolve, reject) =>
+    execFile(command, args, { cwd: ROOT, maxBuffer: 64 * MB }, (error, stdout, stderr) =>
+      error
+        ? reject(
+            Error((stderr || stdout || error.message).trim().split('\n').slice(-12).join('\n')),
+          )
+        : resolve(stdout),
+    ),
+  );
+let publishing = false;
+async function publishSaved() {
+  if (publishing || !editor) return;
+  const tell = (type, message, detail = '') =>
+    dialog.showMessageBox(editor, { type, message, detail, buttons: ['OK'] });
+  if (unsaved) return tell('warning', 'Save first', 'Publishing sends saved changes only.');
+  let plan;
+  try {
+    plan = publishPlan({
+      status: await run('git', ['status', '--porcelain', '--', 'public/data']),
+      branch: (await run('git', ['branch', '--show-current'])).trim(),
+    });
+  } catch (error) {
+    return tell('error', 'Could not read the repository', error.message);
+  }
+  if (plan.problem) return tell('info', plan.problem);
+  const { response } = await dialog.showMessageBox(editor, {
+    type: 'question',
+    buttons: ['Cancel', 'Publish'],
+    defaultId: 1,
+    cancelId: 0,
+    message: 'Publish saved changes for review?',
+    detail:
+      plan.files.join('\n') +
+      '\n\nThese are tested, committed on ' +
+      plan.branch +
+      (plan.newBranch ? ' (a new branch)' : '') +
+      ', pushed, and opened as a pull request into dev. Nothing goes live until it is merged into main.',
+  });
+  if (response !== 1) return;
+  publishing = true;
+  const title = editor.getTitle();
+  try {
+    const result = await publish(plan, run, (text) => editor?.setTitle(title + ' · ' + text + '…'));
+    const { response: open } = await dialog.showMessageBox(editor, {
+      type: 'info',
+      buttons: ['Open pull request', 'Close'],
+      defaultId: 0,
+      message: result.existing ? 'Added to the open pull request' : 'Pull request opened',
+      detail: result.url,
+    });
+    if (open === 0 && /^https:\/\/github\.com\//.test(result.url)) shell.openExternal(result.url);
+  } catch (error) {
+    tell('error', 'Publishing stopped', error.message);
+  } finally {
+    publishing = false;
+    editor?.setTitle(title);
+  }
+}
 const send = (channel) => () => editor?.webContents.send(channel);
 function buildMenu() {
   const mac = process.platform === 'darwin';
@@ -281,6 +344,8 @@ function buildMenu() {
             accelerator: 'Shift+CmdOrCtrl+P',
             click: send('menu:playstart'),
           },
+          { type: 'separator' },
+          { label: 'Publish saved changes…', click: publishSaved },
           { type: 'separator' },
           mac ? { role: 'close' } : { role: 'quit' },
         ],

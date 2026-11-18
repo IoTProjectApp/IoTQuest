@@ -45,29 +45,65 @@ if ('serviceWorker' in navigator) {
         registration.waiting &&
         registration.active &&
         navigator.serviceWorker.controller?.scriptURL === ownWorker;
-      const offer = () =>
-        ready() &&
-        showBar('A new version of IoT Quest is ready.', () => {
-          switching = true;
-          registration.waiting?.postMessage('skipWaiting');
-        });
+      const update = () => {
+        switching = true;
+        registration.waiting?.postMessage('skipWaiting');
+      };
+      // On the destination screen nothing is in progress (leaving a city saves), so the game
+      // switches by itself; inside a city it asks, so a student's open work is never interrupted.
+      const offer = () => {
+        if (!ready() || switching) return;
+        if (onDestinationScreen()) update();
+        else
+          showBar('A new version of IoT Quest is ready. Your progress is kept.', update, 'Update');
+      };
       offer();
       registration.addEventListener('updatefound', () =>
         registration.installing?.addEventListener('statechange', offer),
       );
+      // Returning to the globe with an update waiting takes it then.
+      const travel = document.getElementById('travelScreen');
+      if (travel) new MutationObserver(offer).observe(travel, { attributes: true });
+      // A class can keep the game open all day: look for a new deploy now and then, and whenever
+      // the tab comes back into view.
+      const check = () => registration.update().catch(() => {});
+      setInterval(check, UPDATE_CHECK_MS);
+      document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') check();
+      });
     })
     .catch(() => {});
 }
+const UPDATE_CHECK_MS = 30 * 60 * 1000;
+// The globe and destination list, with no dialog open.
+function onDestinationScreen() {
+  const travel = document.getElementById('travelScreen');
+  return !!travel && !travel.hidden && !document.getElementById('modal')?.open;
+}
+
+// The version this page runs (the build's content stamp, or "dev" unbuilt), for Settings.
+export function runningVersion() {
+  const worker = navigator.serviceWorker?.controller;
+  if (!worker) return Promise.resolve(null);
+  return new Promise((resolve) => {
+    const channel = new MessageChannel();
+    channel.port1.onmessage = (event) => resolve(event.data);
+    worker.postMessage('version', [channel.port2]);
+    setTimeout(() => resolve(null), 2000);
+  });
+}
+globalThis.iotQuestVersion = runningVersion;
 
 // A small bar with a Reload button (progress is saved locally, so reloading loses nothing).
-function showBar(message, onReload) {
+function showBar(message, onReload, label = 'Reload') {
   document.getElementById('updateBar')?.remove();
   const bar = document.createElement('div');
   bar.id = 'updateBar';
   bar.className = 'update-bar';
   bar.setAttribute('role', 'status');
-  bar.innerHTML = '<span></span><button type="button">Reload</button>';
+  bar.innerHTML = '<span></span><button type="button"></button>';
   bar.querySelector('span').textContent = message;
+  bar.querySelector('button').textContent = label;
   bar.querySelector('button').onclick = onReload;
   document.body.append(bar);
 }

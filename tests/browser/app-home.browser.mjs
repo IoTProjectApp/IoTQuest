@@ -364,8 +364,9 @@ test('typing in the editor offers suggestions, Enter inserts one and the hint sh
   await page.close();
 });
 
-// GitHub Pages lets browsers keep files for 10 minutes. This serves two releases the same way and
-// checks that a returning visitor gets each deploy whole, after choosing to reload.
+// GitHub Pages lets browsers keep files for 10 minutes. This serves three releases the same way and
+// checks that a returning visitor gets each deploy whole: inside a city after choosing to update,
+// and on the globe by itself.
 test('a returning visitor switches to a new deploy whole, never a mix of two releases', async () => {
   const { mkdtemp, cp, readFile, writeFile, appendFile } = await import('node:fs/promises');
   const { tmpdir } = await import('node:os');
@@ -374,16 +375,18 @@ test('a returning visitor switches to a new deploy whole, never a mix of two rel
   execFileSync(process.execPath, ['scripts/build.mjs']);
   const root = await mkdtemp(join(tmpdir(), 'iotquest-releases-'));
   await cp('dist/client', join(root, 'one'), { recursive: true });
-  await cp('dist/client', join(root, 'two'), { recursive: true });
-  await appendFile(join(root, 'two', 'game.js'), '\n// release two\n');
-  const sw = join(root, 'two', 'sw.js');
-  await writeFile(
-    sw,
-    (await readFile(sw, 'utf8')).replace(
-      /const VERSION = "[a-f0-9]+"/,
-      'const VERSION = "release-two"',
-    ),
-  );
+  for (const name of ['two', 'three']) {
+    await cp('dist/client', join(root, name), { recursive: true });
+    await appendFile(join(root, name, 'game.js'), '\n// release ' + name + '\n');
+    const sw = join(root, name, 'sw.js');
+    await writeFile(
+      sw,
+      (await readFile(sw, 'utf8')).replace(
+        /const VERSION = "[a-f0-9]+"/,
+        'const VERSION = "release-' + name + '"',
+      ),
+    );
+  }
   let release = 'one';
   const server = http.createServer(async (req, res) => {
     let path = decodeURIComponent(new URL(req.url, 'http://x').pathname);
@@ -410,12 +413,17 @@ test('a returning visitor switches to a new deploy whole, never a mix of two rel
     await page.goto(url);
     await page.evaluate(() => navigator.serviceWorker.ready);
     await page.reload();
+    // Inside a city, where an update must wait for the student.
+    await page.click('#resumeLegacy');
     release = 'two';
     let offered = false;
-    // The new worker installs in the background; on CI's slow machines that can take several
-    // reloads and many seconds, so allow up to six reloads of ten seconds each.
+    // The game looks for deploys while it stays open (as it does every half hour). The new worker
+    // installs in the background; on CI's slow machines that can take many seconds, so allow up
+    // to six checks of ten seconds each.
     for (let i = 0; i < 6 && !offered; i++) {
-      await page.reload();
+      await page.evaluate(() =>
+        navigator.serviceWorker.getRegistration().then((r) => r.update().catch(() => {})),
+      );
       offered = await page
         .locator('#updateBar')
         .waitFor({ timeout: 10000 })
@@ -437,7 +445,32 @@ test('a returning visitor switches to a new deploy whole, never a mix of two rel
     }));
     assert.deepEqual(after.caches, ['iotquest-release-two']);
     assert.match(after.game, /release two/);
+    // Every visit starts on the globe.
     assert.equal(await page.locator('#resumeLegacy').isVisible(), true);
+    assert.equal(await page.evaluate(() => globalThis.iotQuestVersion()), 'release-two');
+    // On the globe nothing is in progress, so the next deploy is taken without asking.
+    release = 'three';
+    let switched = false;
+    for (let i = 0; i < 6 && !switched; i++) {
+      await page.reload();
+      const deadline = Date.now() + 10000;
+      while (!switched && Date.now() < deadline) {
+        switched = await page
+          .evaluate(() => globalThis.iotQuestVersion?.())
+          .then(
+            (v) => v === 'release-three',
+            () => false,
+          );
+        if (!switched) await page.waitForTimeout(500);
+      }
+    }
+    assert.ok(switched, 'the globe moves to the new version by itself');
+    await page.waitForLoadState('load');
+    assert.equal(await page.locator('#updateBar').count(), 0, 'no update bar on the globe');
+    assert.match(
+      await page.evaluate(() => fetch('game.js').then((r) => r.text())),
+      /release three/,
+    );
   } finally {
     await context.close();
     server.close();

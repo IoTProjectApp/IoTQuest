@@ -17,7 +17,39 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # Changes that touch only saved editor data (public/data/, written by the world editor) are
+  # checked quickly: formatting, the unit tests that read the changed files
+  # (scripts/affected-tests.mjs) and the build, without the browser suite. Anything else, or a
+  # change whose base cannot be found, runs everything.
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      data-only: ${{ steps.diff.outputs.data-only }}
+      files: ${{ steps.diff.outputs.files }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - id: diff
+        env:
+          BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
+          HEAD: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+        run: |
+          files=""
+          if [ "${{ github.event_name }}" != workflow_dispatch ] && git cat-file -e "$BASE^{commit}" 2>/dev/null; then
+            files=$(git diff --name-only "$(git merge-base "$BASE" "$HEAD")" "$HEAD")
+          fi
+          # Plain names only: the list is passed on to a later command line.
+          if [ -n "$files" ] && ! echo "$files" | grep -qvE '^public/data/[A-Za-z0-9._/-]+$'; then
+            echo "data-only=true" >> "$GITHUB_OUTPUT"
+            echo "files=$(echo $files)" >> "$GITHUB_OUTPUT"
+            echo "Only saved editor data changed:"; echo "$files"
+          else
+            echo "data-only=false" >> "$GITHUB_OUTPUT"
+          fi
+
   test:
+    needs: changes
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -36,7 +68,14 @@ jobs:
         env:
           MODELS_TOKEN: ${{ secrets.MODELS_TOKEN }}
       - name: Run tests
+        if: needs.changes.outputs.data-only != 'true'
         run: npm test
+      - name: Run the tests that read the changed data
+        if: needs.changes.outputs.data-only == 'true'
+        run: |
+          tests=$(node scripts/affected-tests.mjs ${{ needs.changes.outputs.files }})
+          echo "$tests"
+          if [ -n "$tests" ]; then node --test $tests; fi
       - name: Build
         run: npm run build
 
@@ -46,6 +85,8 @@ jobs:
   # falls back to, ?renderer=webgl), each in two parts that run side by side.
   browser-part:
     name: browser part (${{ matrix.renderer }}, ${{ matrix.part }})
+    needs: changes
+    if: needs.changes.outputs.data-only != 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 50
     strategy:
@@ -69,8 +110,9 @@ jobs:
         run: node scripts/fetch-models.mjs
         env:
           MODELS_TOKEN: ${{ secrets.MODELS_TOKEN }}
+      # A failed test gets one more try; one that passes then is flagged as flaky, not failed.
       - name: Run browser tests
-        run: node --test ${{ matrix.files }}
+        run: node scripts/run-browser-tests.mjs ${{ matrix.files }}
         env:
           RENDERER: ${{ matrix.renderer }}
       # Screenshots and traces of failed tests, also when the job times out; open a trace with
@@ -85,14 +127,20 @@ jobs:
           if-no-files-found: ignore
 
   # The single "browser" check that branch protection requires: passes only when every part
-  # passed on both renderers.
+  # passed on both renderers, or when the change was saved editor data only.
   browser:
-    needs: browser-part
+    needs: [changes, browser-part]
     if: always()
     runs-on: ubuntu-latest
     steps:
       - name: Every browser part passed
-        run: test "${{ needs.browser-part.result }}" = success
+        run: |
+          test "${{ needs.changes.result }}" = success
+          if [ "${{ needs.changes.outputs.data-only }}" = true ]; then
+            echo "Saved editor data only: browser tests not needed."
+          else
+            test "${{ needs.browser-part.result }}" = success
+          fi
 
   # Pages holds one site, so every deploy rebuilds both branches from their latest commits (each
   # passed these checks before it could be merged). One deploy at a time, so a main deploy and a

@@ -48,6 +48,8 @@ self.addEventListener('install', (event) => {
 // The page asks for this when the student chooses to reload into the new version.
 self.addEventListener('message', (event) => {
   if (event.data === 'skipWaiting') self.skipWaiting();
+  // Settings shows which version the page runs.
+  if (event.data === 'version') event.ports[0]?.postMessage(VERSION);
 });
 
 self.addEventListener('activate', (event) => {

@@ -43,6 +43,9 @@ const same = (a, b) =>
   Math.abs((a.turn || 0) - (b.turn || 0)) <= 5e-5 + 1e-9 &&
   scaleOf(a.scale).every((v, i) => Math.abs(v - scaleOf(b.scale)[i]) <= 5e-4 + 1e-9);
 const clone = (value) => JSON.parse(JSON.stringify(value));
+// Where a group stood as built, saved with each edit as `from` (see public/world-layout.js), so the
+// game can tell when the group of that name has since become a different one.
+const originOf = (group) => [round(group.original.pos[0], 2), round(group.original.pos[2], 2)];
 const emptyChanges = () => ({ edits: {}, added: [] });
 // House changes without anything empty in them (a wall with no changes, no walls...), or null.
 export function tidyHouse(house) {
@@ -145,14 +148,14 @@ export class WorldSession {
       const added = changes.added.find((a) => a.id === id);
       if (added) Object.assign(added, tidied);
       else if (same(tidied, group.original)) delete changes.edits[id];
-      else changes.edits[id] = tidied;
+      else changes.edits[id] = { ...tidied, from: originOf(group) };
     });
   }
   remove(id) {
     const group = this.groups.get(id);
     this.commit('Remove ' + group.name, (changes) => {
       if (id.startsWith('added/')) changes.added = changes.added.filter((a) => a.id !== id);
-      else changes.edits[id] = { removed: true };
+      else changes.edits[id] = { removed: true, from: originOf(group) };
     });
   }
   // ---- The house's walls and rooms (see public/house-shell.js) ----
@@ -440,6 +443,11 @@ export class WorldSession {
     const { edits, added, house, walls, nature } = this.changes;
     if (!Object.keys(edits).length && !added.length && !house && !walls?.length && !nature)
       return null;
+    // Edits saved before `from` existed gain it the next time the city is saved.
+    for (const [id, edit] of Object.entries(edits)) {
+      const group = this.groups.get(id);
+      if (group && !edit.from) edits[id] = { ...edit, from: originOf(group) };
+    }
     return clone({
       edits,
       added,
